@@ -83,15 +83,16 @@ dependencies {
 
     // Android TV
     implementation(libs.androidx.tv.material)
+    implementation(libs.androidx.tv.foundation) // Opsional, jika butuh TvLazyRow/TvLazyColumn
 
-    // Media3 ExoPlayer (Wallpaper Engine Video)
+    // Media3 ExoPlayer
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
 
-    // Coil (App Icons & Images)
+    // Coil
     implementation(libs.coil.compose)
 
-    // Network (GitHub OTA & Cuaca)
+    // Network
     implementation(libs.retrofit)
     implementation(libs.converter.kotlinx.serialization)
     implementation(libs.kotlinx.serialization.json)
@@ -101,7 +102,7 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 
-    // DataStore (Settings)
+    // DataStore
     implementation(libs.androidx.datastore.preferences)
 
     // Debug
