@@ -7,12 +7,12 @@ plugins {
 
 android {
     namespace = "dev.andikune.homeio"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "dev.andikune.homeio"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
         buildConfigField("String", "VERSION_NAME", "\"1.0.0\"")
@@ -83,7 +83,7 @@ dependencies {
 
     // Android TV
     implementation(libs.androidx.tv.material)
-    implementation(libs.androidx.tv.foundation) // Opsional, jika butuh TvLazyRow/TvLazyColumn
+    implementation(libs.androidx.tv.foundation)
 
     // Media3 ExoPlayer
     implementation(libs.androidx.media3.exoplayer)
