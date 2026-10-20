@@ -54,6 +54,7 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:exported="true"
             android:launchMode="singleTask"
+            android:screenOrientation="sensorLandscape"
             android:theme="@style/Theme.HomeIo">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -68,6 +69,7 @@
         <activity
             android:name=".presentation.screensaver.ScreensaverActivity"
             android:exported="false"
+            android:screenOrientation="sensorLandscape"
             android:theme="@style/Theme.HomeIo" />
 
         <!-- OTA / Update FileProvider -->
