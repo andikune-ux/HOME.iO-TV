@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.andikune.homeio.util.ApkFileListSection // <-- IMPORT DITAMBAHKAN
 
 private val GLASS_BG = Color(0x0DFFFFFF)
 private val GLASS_BORDER = Color(0x1AFFFFFF)
@@ -63,13 +64,9 @@ fun SettingsScreen(
     var selectedCategory by remember { mutableStateOf(SettingsCategory.GENERAL) }
 
     Row(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color(0xFF0A0E1A))
+        modifier = modifier.fillMaxSize().background(Color(0xFF0A0E1A))
     ) {
-        // ============================================================
-        // PANE KIRI (SIDEBAR KATEGORI)
-        // ============================================================
+        // PANE KIRI (SIDEBAR)
         Column(
             modifier = Modifier
                 .weight(0.3f)
@@ -114,9 +111,7 @@ fun SettingsScreen(
             }
         }
 
-        // ============================================================
-        // PANE KANAN (ISI KONTEN)
-        // ============================================================
+        // PANE KANAN (KONTEN)
         Box(
             modifier = Modifier
                 .weight(0.7f)
@@ -146,7 +141,6 @@ private fun SidebarItem(
     onClick: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
-
     val bgColor = when {
         isSelected -> GOLD_ACCENT.copy(alpha = 0.15f)
         isFocused -> GLASS_FOCUS
