@@ -26,6 +26,15 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Verify Keystore Exists
+        run: |
+          if [ ! -f debug.keystore ]; then
+            echo "❌ debug.keystore TIDAK ADA di repo!"
+            echo "Jalankan dulu workflow 'Setup Keystore' dari tab Actions."
+            exit 1
+          fi
+          echo "✅ Keystore ditemukan: $(wc -c < debug.keystore) bytes"
+
       - name: Build Debug APK
         run: gradle assembleDebug --stacktrace --no-daemon --no-configuration-cache
 
