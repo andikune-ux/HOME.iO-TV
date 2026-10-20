@@ -178,9 +178,7 @@ class MainActivity : ComponentActivity() {
                         updateInfo = info
                         showUpdateDialog = true
                     }
-                } catch (_: Exception) {
-                    // Silent fail
-                }
+                } catch (_: Exception) { }
             }
 
             // ============================================================
@@ -261,14 +259,9 @@ class MainActivity : ComponentActivity() {
             } else if (!isSplashFinished) {
                 SplashScreen(onFinish = { isSplashFinished = true })
             } else if (isSettingsOpen) {
+                // PERBAIKAN: Hanya passing onBack karena SettingsScreen versi 2-Pane kita hanya menerima onBack
                 SettingsScreen(
-                    currentConfig = config,
-                    onSaveConfig = { updated ->
-                        scope.launch {
-                            appContainer.preferencesManager.updateSettings(updated)
-                        }
-                    },
-                    onClose = { isSettingsOpen = false }
+                    onBack = { isSettingsOpen = false }
                 )
             } else {
                 HomeScreen(
@@ -295,23 +288,21 @@ class MainActivity : ComponentActivity() {
                     isReady = downloadReady,
                     onUpdate = {
                         if (downloadReady) {
-                            // === MODE INSTALL ===
                             val prefs = context.getSharedPreferences(UpdateDownloadService.PREFS, Context.MODE_PRIVATE)
                             val path = prefs.getString(UpdateDownloadService.KEY_PATH, null)
                             if (path != null) {
                                 val ok = ApkDownloader.install(context, path)
                                 if (!ok) {
-                                    Toast.makeText(context, "Gagal membuka installer. Pastikan izin 'Install unknown apps' sudah diberikan.", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, "Gagal membuka installer. Pastikan izin diberikan.", Toast.LENGTH_LONG).show()
                                 }
                             } else {
-                                Toast.makeText(context, "File APK tidak ditemukan di /HomeiO/Pembaharuan/", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, "File tidak ditemukan", Toast.LENGTH_LONG).show()
                                 downloadReady = false
                             }
                         } else {
-                            // === MODE DOWNLOAD ===
                             val url = updateInfo!!.downloadUrl
                             if (url.isNullOrBlank()) {
-                                Toast.makeText(context, "URL download tidak tersedia di GitHub Release", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, "URL download tidak tersedia", Toast.LENGTH_LONG).show()
                                 return@UpdateDialog
                             }
                             isDownloading = true
@@ -324,7 +315,6 @@ class MainActivity : ComponentActivity() {
                     onLater = {
                         if (updateInfo!!.isForceUpdate) return@UpdateDialog
                         showUpdateDialog = false
-                        // Reset state untuk sesi berikutnya
                         isDownloading = false
                         downloadReady = false
                         downloadProgress = 0f
@@ -363,13 +353,9 @@ class MainActivity : ComponentActivity() {
                 KeyEvent.KEYCODE_DPAD_UP,
                 KeyEvent.KEYCODE_DPAD_DOWN,
                 KeyEvent.KEYCODE_DPAD_LEFT,
-                KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    SoundFeedback.playClick(this)
-                }
+                KeyEvent.KEYCODE_DPAD_RIGHT -> SoundFeedback.playClick(this)
                 KeyEvent.KEYCODE_DPAD_CENTER,
-                KeyEvent.KEYCODE_ENTER -> {
-                    SoundFeedback.playClick(this)
-                }
+                KeyEvent.KEYCODE_ENTER -> SoundFeedback.playClick(this)
             }
         }
         return super.dispatchKeyEvent(event)
@@ -384,51 +370,21 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun SplashScreen(onFinish: () -> Unit) {
     val alphaAnim = remember { Animatable(0f) }
-
     LaunchedEffect(Unit) {
         alphaAnim.animateTo(1f, animationSpec = tween(400))
         delay(600)
         alphaAnim.animateTo(0f, animationSpec = tween(400))
         onFinish()
     }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(GlassColors.DeepBackground),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.alpha(alphaAnim.value)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(110.dp)
-                    .liquidGlass(cornerRadius = 32.dp, isFocused = true),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Home,
-                    contentDescription = "Home.io Logo",
-                    tint = GlassColors.AccentGlow,
-                    modifier = Modifier.size(56.dp)
-                )
+    Box(modifier = Modifier.fillMaxSize().background(GlassColors.DeepBackground), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.alpha(alphaAnim.value)) {
+            Box(modifier = Modifier.size(110.dp).liquidGlass(cornerRadius = 32.dp, isFocused = true), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Home, "Home.io Logo", tint = GlassColors.AccentGlow, modifier = Modifier.size(56.dp))
             }
             Spacer(modifier = Modifier.height(20.dp))
-            Text(
-                text = "Home.io",
-                color = Color.White,
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
-            )
+            Text("Home.io", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
             Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = "Liquid Glass Launcher",
-                color = GlassColors.TextSecondary,
-                fontSize = 14.sp
-            )
+            Text("Liquid Glass Launcher", color = GlassColors.TextSecondary, fontSize = 14.sp)
         }
     }
 }
@@ -436,103 +392,44 @@ fun SplashScreen(onFinish: () -> Unit) {
 @Composable
 fun CrashLogScreen(crashLog: String, onClearAndReload: () -> Unit) {
     val context = LocalContext.current
-    val scrollState = rememberScrollState()
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(GlassColors.DeepBackground)
-            .padding(24.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .liquidGlass(cornerRadius = 24.dp)
-                .padding(24.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Warning,
-                    contentDescription = null,
-                    tint = GlassColors.AccentRed,
-                    modifier = Modifier.size(32.dp)
-                )
+    Box(modifier = Modifier.fillMaxSize().background(GlassColors.DeepBackground).padding(24.dp)) {
+        Column(modifier = Modifier.fillMaxSize().liquidGlass(cornerRadius = 24.dp).padding(24.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Warning, null, tint = GlassColors.AccentRed, modifier = Modifier.size(32.dp))
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.crash_detected_title),
-                        color = Color.White,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = stringResource(R.string.crash_detected_desc),
-                        color = GlassColors.TextSecondary,
-                        fontSize = 13.sp
-                    )
+                    Text(stringResource(R.string.crash_detected_title), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.crash_detected_desc), color = GlassColors.TextSecondary, fontSize = 13.sp)
                 }
             }
-
             Spacer(modifier = Modifier.height(16.dp))
-
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFF000000))
-                    .border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(16.dp))
-                    .padding(16.dp)
-                    .verticalScroll(scrollState)
-            ) {
-                Text(
-                    text = crashLog,
-                    color = Color(0xFFFF8080),
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace
-                )
+            Box(modifier = Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFF000000)).border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(16.dp)).padding(16.dp).verticalScroll(rememberScrollState())) {
+                Text(crashLog, color = Color(0xFFFF8080), fontSize = 12.sp, fontFamily = FontFamily.Monospace)
             }
-
             Spacer(modifier = Modifier.height(16.dp))
-
-            Row(
-                horizontalArrangement = Arrangement.End,
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                 Button(
                     onClick = {
                         SoundFeedback.playClick(context)
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("Home.io Crash Log", crashLog)
-                        clipboard.setPrimaryClip(clip)
-                        Toast.makeText(context, "Crash log copied to clipboard", Toast.LENGTH_SHORT).show()
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Crash Log", crashLog))
+                        Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = GlassColors.GlassTint),
-                    modifier = Modifier
-                        .testTag("copy_crash_log_button")
-                        .border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(20.dp))
+                    modifier = Modifier.border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(20.dp))
                 ) {
-                    Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, tint = Color.White)
+                    Icon(Icons.Default.ContentCopy, null, tint = Color.White)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = stringResource(R.string.btn_quick_copy), color = Color.White)
+                    Text(stringResource(R.string.btn_quick_copy), color = Color.White)
                 }
-
                 Spacer(modifier = Modifier.width(12.dp))
-
                 Button(
-                    onClick = {
-                        SoundFeedback.playClick(context)
-                        onClearAndReload()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = GlassColors.AccentGlow),
-                    modifier = Modifier.testTag("reload_launcher_button")
+                    onClick = { SoundFeedback.playClick(context); onClearAndReload() },
+                    colors = ButtonDefaults.buttonColors(containerColor = GlassColors.AccentGlow)
                 ) {
-                    Icon(imageVector = Icons.Default.Refresh, contentDescription = null, tint = Color.Black)
+                    Icon(Icons.Default.Refresh, null, tint = Color.Black)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = stringResource(R.string.btn_return_home), color = Color.Black, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.btn_return_home), color = Color.Black, fontWeight = FontWeight.Bold)
                 }
             }
         }
