@@ -1,0 +1,22 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path
+        android:fillColor="#0A0E1A"
+        android:pathData="M0,0h320v180h-320z" />
+    <!-- Subtle gradient-like decorative shapes -->
+    <path
+        android:fillColor="#1A243D"
+        android:pathData="M0,0h320v90h-320z" />
+    <path
+        android:fillColor="#22355E"
+        android:pathData="M40,30h240v120h-240z" />
+    <path
+        android:fillColor="#4DA3FF"
+        android:pathData="M140,65h40v40h-40z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M160,50 L125,82 L137,82 L137,118 L152,118 L152,98 L168,98 L168,118 L183,118 L183,82 L195,82 Z" />
+</vector>

@@ -1,0 +1,66 @@
+<resources>
+    <string name="app_name">Home.io</string>
+    <string name="search_hint">Search apps, media, or voice…</string>
+    <string name="nav_search">Search</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_system_utils">System &amp; Utils</string>
+    <string name="favorite_apps">Favorite Apps</string>
+    <string name="all_apps">All Apps</string>
+    <string name="sideloaded_apps">Sideloaded Apps</string>
+    <string name="ram_booster">RAM Booster</string>
+    <string name="file_manager">File Manager</string>
+    <string name="settings_title">Home.io Settings</string>
+    
+    <!-- Settings categories -->
+    <string name="cat_wallpaper">Wallpaper &amp; Scale</string>
+    <string name="cat_screensaver">OLED Screensaver</string>
+    <string name="cat_performance">STB Performance</string>
+    <string name="cat_general">Language &amp; General</string>
+    <string name="cat_about">App Info</string>
+    
+    <!-- Settings details -->
+    <string name="app_version_label">App Version</string>
+    <string name="package_id_label">Package ID</string>
+    <string name="btn_check_update">Check GitHub Update</string>
+    <string name="btn_create_backup">Create New Backup</string>
+    <string name="apk_updates_section">APK Updates</string>
+    <string name="backup_files_section">Backup Files (.json)</string>
+    <string name="btn_install">Install</string>
+    <string name="btn_delete">Delete</string>
+    <string name="btn_restore">Restore</string>
+    <string name="btn_quick_copy">Quick Copy</string>
+    <string name="btn_return_home">Return / Reload</string>
+    
+    <!-- Performance & Display -->
+    <string name="glass_blur_mode">Liquid Glass Blur (High Performance)</string>
+    <string name="solid_glass_mode">Solid Transparent (Low-End STB, 1GB RAM)</string>
+    <string name="auto_boost_ram">Auto-Boost RAM on Home</string>
+    <string name="ntp_time_check">NTP Internet Time Check</string>
+    <string name="screensaver_timer">Screensaver Timeout</string>
+    <string name="minutes_format">%1$d Minutes</string>
+    <string name="wallpaper_scale_mode">Scale Mode</string>
+    <string name="scale_fit">Fit</string>
+    <string name="scale_fill">Fill</string>
+    <string name="scale_zoom">Zoom</string>
+    <string name="scale_crop">Crop</string>
+    <string name="wallpaper_pick_gallery">Choose from System Gallery</string>
+    <string name="wallpaper_pick_internal">Internal File Manager</string>
+    
+    <!-- Context Menu -->
+    <string name="action_open">Open</string>
+    <string name="action_pin">Pin to Favorites</string>
+    <string name="action_unpin">Unpin from Favorites</string>
+    <string name="action_info">App Info</string>
+    <string name="action_uninstall">Uninstall</string>
+    
+    <!-- Crash Log -->
+    <string name="crash_detected_title">Application Crash Log</string>
+    <string name="crash_detected_desc">Home.io caught an unexpected error. You can copy the stack trace or restart the launcher.</string>
+    
+    <!-- Weather & Status -->
+    <string name="weather_loading">Fetching weather…</string>
+    <string name="ram_free_format">%1$d MB Free</string>
+    <string name="ram_total_format">%1$d MB Total</string>
+    <string name="ram_boosted">RAM successfully optimized!</string>
+    <string name="ntp_warning">Time is out of sync with internet time.</string>
+</resources>

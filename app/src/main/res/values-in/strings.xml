@@ -1,0 +1,66 @@
+<resources>
+    <string name="app_name">Home.io</string>
+    <string name="search_hint">Cari aplikasi, media, atau suara…</string>
+    <string name="nav_search">Pencarian</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_system_utils">Sistem &amp; Utilitas</string>
+    <string name="favorite_apps">Aplikasi Favorit</string>
+    <string name="all_apps">Semua Aplikasi</string>
+    <string name="sideloaded_apps">Aplikasi Sideload</string>
+    <string name="ram_booster">RAM Booster</string>
+    <string name="file_manager">File Manager</string>
+    <string name="settings_title">Pengaturan Home.io</string>
+    
+    <!-- Settings categories -->
+    <string name="cat_wallpaper">Wallpaper &amp; Skala</string>
+    <string name="cat_screensaver">Screensaver OLED</string>
+    <string name="cat_performance">Performa STB</string>
+    <string name="cat_general">Bahasa &amp; Umum</string>
+    <string name="cat_about">Info Aplikasi</string>
+    
+    <!-- Settings details -->
+    <string name="app_version_label">Versi Terinstal</string>
+    <string name="package_id_label">Package ID</string>
+    <string name="btn_check_update">Cek Update GitHub</string>
+    <string name="btn_create_backup">Buat Backup Baru</string>
+    <string name="apk_updates_section">Daftar File Pembaruan (.apk)</string>
+    <string name="backup_files_section">Daftar File Backup (.json)</string>
+    <string name="btn_install">Pasang</string>
+    <string name="btn_delete">Hapus</string>
+    <string name="btn_restore">Pulihkan</string>
+    <string name="btn_quick_copy">Salin Cepat</string>
+    <string name="btn_return_home">Kembali / Muat Ulang</string>
+    
+    <!-- Performance & Display -->
+    <string name="glass_blur_mode">Efek Kaca Blur (High Performance)</string>
+    <string name="solid_glass_mode">Efek Solid Transparan (Low-End STB, RAM 1GB)</string>
+    <string name="auto_boost_ram">Auto-Boost RAM on Home</string>
+    <string name="ntp_time_check">Pemeriksaan Waktu NTP Internet</string>
+    <string name="screensaver_timer">Waktu Tunggu Screensaver</string>
+    <string name="minutes_format">%1$d Menit</string>
+    <string name="wallpaper_scale_mode">Mode Skala</string>
+    <string name="scale_fit">Fit</string>
+    <string name="scale_fill">Scale / Fill</string>
+    <string name="scale_zoom">Zoom</string>
+    <string name="scale_crop">Crop</string>
+    <string name="wallpaper_pick_gallery">Pilih dari Galeri Sistem</string>
+    <string name="wallpaper_pick_internal">File Manager Internal</string>
+    
+    <!-- Context Menu -->
+    <string name="action_open">Buka</string>
+    <string name="action_pin">Pin ke Favorit</string>
+    <string name="action_unpin">Lepas dari Favorit</string>
+    <string name="action_info">Info Aplikasi</string>
+    <string name="action_uninstall">Uninstal</string>
+    
+    <!-- Crash Log -->
+    <string name="crash_detected_title">Layar Crash Log UI</string>
+    <string name="crash_detected_desc">Home.io mendeteksi penghentian tak terduga. Anda dapat menyalin stack trace atau memuat ulang launcher.</string>
+    
+    <!-- Weather & Status -->
+    <string name="weather_loading">Mengambil data cuaca…</string>
+    <string name="ram_free_format">%1$d MB Tersedia</string>
+    <string name="ram_total_format">%1$d MB Total</string>
+    <string name="ram_boosted">RAM berhasil dioptimalkan!</string>
+    <string name="ntp_warning">Waktu perangkat belum sinkron dengan jam internet.</string>
+</resources>

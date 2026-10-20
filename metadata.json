@@ -1,0 +1,6 @@
+{
+  "name": "Home.io",
+  "description": "Commercial Home Launcher for Android TV, Google TV, STB, and Touchscreen devices with iOS 26 Liquid Glass aesthetic.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
