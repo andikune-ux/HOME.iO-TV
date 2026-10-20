@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,9 +41,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// ============================================================
-// TEMA SEMENTARA (Akan diganti saat Theme Liquid Glass fix)
-// ============================================================
 private val GLASS_BG = Color(0x0DFFFFFF)
 private val GLASS_BORDER = Color(0x1AFFFFFF)
 private val GLASS_FOCUS = Color(0x33FFFFFF)
@@ -50,11 +48,9 @@ private val GOLD_ACCENT = Color(0xFFFFD700)
 private val TEXT_PRIMARY = Color(0xFFFFFFFF)
 private val TEXT_SECONDARY = Color(0xB3FFFFFF)
 
-// ============================================================
-// KATEGORI SETTINGS
-// ============================================================
 enum class SettingsCategory(val title: String, val icon: ImageVector) {
     GENERAL("Umum", Icons.Default.Settings),
+    UPDATER("Pembaruan Aplikasi", Icons.Default.SystemUpdate),
     BACKUP("Backup Aman", Icons.Default.Save),
     ABOUT("Tentang Aplikasi", Icons.Default.Info)
 }
@@ -69,7 +65,7 @@ fun SettingsScreen(
     Row(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF0A0E1A)) // Background dark navy fallback
+            .background(Color(0xFF0A0E1A))
     ) {
         // ============================================================
         // PANE KIRI (SIDEBAR KATEGORI)
@@ -83,7 +79,6 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Tombol Back
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -110,7 +105,6 @@ fun SettingsScreen(
                 modifier = Modifier.padding(start = 8.dp, bottom = 4.dp)
             )
 
-            // Daftar Kategori
             SettingsCategory.entries.forEach { category ->
                 SidebarItem(
                     category = category,
@@ -132,10 +126,11 @@ fun SettingsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState()) // Pane kanan BOLEH scroll
+                    .verticalScroll(rememberScrollState())
             ) {
                 when (selectedCategory) {
                     SettingsCategory.GENERAL -> GeneralSettingsPlaceholder()
+                    SettingsCategory.UPDATER -> ApkFileListSection()
                     SettingsCategory.BACKUP -> BackupSection()
                     SettingsCategory.ABOUT -> AboutPlaceholder()
                 }
@@ -144,9 +139,6 @@ fun SettingsScreen(
     }
 }
 
-// ============================================================
-// SIDEBAR ITEM
-// ============================================================
 @Composable
 private fun SidebarItem(
     category: SettingsCategory,
@@ -160,7 +152,6 @@ private fun SidebarItem(
         isFocused -> GLASS_FOCUS
         else -> GLASS_BG
     }
-
     val borderColor = when {
         isSelected -> GOLD_ACCENT
         isFocused -> Color.White
@@ -195,9 +186,6 @@ private fun SidebarItem(
     }
 }
 
-// ============================================================
-// PLACEHOLDER (Sementara, sampai diisi per fitur)
-// ============================================================
 @Composable
 private fun GeneralSettingsPlaceholder() {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -210,6 +198,6 @@ private fun GeneralSettingsPlaceholder() {
 private fun AboutPlaceholder() {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("ℹ️ TENTANG APLIKASI", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = GOLD_ACCENT)
-        Text("Home.io v1.0.0\nPackage: dev.andikune.homeio", color = TEXT_SECONDARY)
+        Text("Home.io\nPackage: dev.andikune.homeio", color = TEXT_SECONDARY)
     }
 }
