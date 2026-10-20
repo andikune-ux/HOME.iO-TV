@@ -72,11 +72,11 @@ import dev.andikune.homeio.presentation.components.liquidGlass
 import dev.andikune.homeio.presentation.home.HomeScreen
 import dev.andikune.homeio.presentation.screensaver.ScreensaverActivity
 import dev.andikune.homeio.presentation.settings.SettingsScreen
-import dev.andikune.homeio.presentation.settings.UpdateDialog
 import dev.andikune.homeio.service.UpdateDownloadService
 import dev.andikune.homeio.util.ApkDownloader
 import dev.andikune.homeio.util.CrashHandler
 import dev.andikune.homeio.util.SoundFeedback
+import dev.andikune.homeio.util.UpdateDialog
 import dev.andikune.homeio.util.UpdateManager
 import dev.andikune.homeio.util.UpdatePrefs
 import kotlinx.coroutines.delay
@@ -89,6 +89,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Strict landscape orientation enforcement for TV & Tablet 16:9 view
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         enableEdgeToEdge()
 
@@ -110,13 +112,13 @@ class MainActivity : ComponentActivity() {
             var downloadProgress by remember { mutableFloatStateOf(0f) }
             var isDownloading by remember { mutableStateOf(false) }
             var downloadReady by remember { mutableStateOf(false) }
-            var isInstalling by remember { mutableStateOf(false) }
 
             // Observe Settings
             val config by appContainer.preferencesManager.settingsFlow.collectAsState(
                 initial = SettingsConfig()
             )
 
+            // Update screensaver timeout
             screensaverTimeoutMs = (config.screensaverTimeoutMinutes * 60 * 1000L).coerceAtLeast(60000L)
 
             // Observe Installed Apps
@@ -124,13 +126,12 @@ class MainActivity : ComponentActivity() {
                 initial = emptyList()
             )
 
+            // Refresh apps on startup
             LaunchedEffect(Unit) {
                 appContainer.appRepository.refreshApps()
             }
 
-            // ============================================================
-            // REALTIME WEATHER (Open-Meteo)
-            // ============================================================
+            // Realtime Weather from Open-Meteo
             var weatherInfo by remember { mutableStateOf<WeatherInfo?>(null) }
             LaunchedEffect(Unit) {
                 try {
@@ -165,42 +166,51 @@ class MainActivity : ComponentActivity() {
             }
 
             // ============================================================
-            // CEK UPDATE — Hanya setelah Splash selesai (cooldown 6 jam)
+            // CEK UPDATE OTA — Hanya setelah Splash selesai
             // ============================================================
             LaunchedEffect(isSplashFinished) {
                 if (!isSplashFinished) return@LaunchedEffect
-                if (!UpdatePrefs.shouldCheckUpdate(context)) return@LaunchedEffect
+                if (!UpdatePrefs.shouldCheck(context)) return@LaunchedEffect
                 UpdatePrefs.markChecked(context)
                 try {
                     val info = UpdateManager.checkForUpdate()
-                    if (info.available && UpdatePrefs.shouldShowDialog(context, info.latestVersion, info.isForceUpdate)) {
+                    if (info.available && UpdatePrefs.shouldShow(context, info.latestVersion, info.isForceUpdate)) {
                         updateInfo = info
                         showUpdateDialog = true
                     }
                 } catch (_: Exception) {
-                    // silent fail — tidak ganggu user
+                    // Silent fail
                 }
             }
 
             // ============================================================
-            // BROADCAST RECEIVER — Progress download real-time
+            // BROADCAST RECEIVER — Progress download OTA real-time
             // ============================================================
             DisposableEffect(Unit) {
                 val receiver = object : BroadcastReceiver() {
                     override fun onReceive(ctx: Context?, intent: Intent?) {
                         if (intent?.action == UpdateDownloadService.ACTION_PROGRESS) {
-                            val state = UpdateDownloadService.readState(context)
-                            downloadProgress = state.progress
-                            when (state.status) {
-                                UpdateDownloadService.STATUS_COMPLETE -> {
+                            val prefs = context.getSharedPreferences(UpdateDownloadService.PREFS, Context.MODE_PRIVATE)
+                            val status = prefs.getString(UpdateDownloadService.KEY_STATUS, "IDLE") ?: "IDLE"
+                            val prog = prefs.getFloat(UpdateDownloadService.KEY_PROGRESS, 0f)
+                            val err = prefs.getString(UpdateDownloadService.KEY_ERROR, null)
+
+                            downloadProgress = prog
+                            when (status) {
+                                "DOWNLOADING" -> {
+                                    isDownloading = true
+                                    downloadReady = false
+                                }
+                                "COMPLETE" -> {
                                     isDownloading = false
                                     downloadReady = true
-                                    Toast.makeText(context, "Download selesai! Klik INSTALL.", Toast.LENGTH_SHORT).show()
+                                    downloadProgress = 1f
+                                    Toast.makeText(context, "Download selesai — klik INSTALL", Toast.LENGTH_SHORT).show()
                                 }
-                                UpdateDownloadService.STATUS_ERROR -> {
+                                "ERROR" -> {
                                     isDownloading = false
                                     downloadReady = false
-                                    Toast.makeText(context, "Download gagal: ${state.error}", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, "Download gagal: ${err ?: "unknown"}", Toast.LENGTH_LONG).show()
                                 }
                             }
                         }
@@ -216,9 +226,7 @@ class MainActivity : ComponentActivity() {
                 onDispose { context.unregisterReceiver(receiver) }
             }
 
-            // ============================================================
-            // INACTIVITY MONITOR (Screensaver OLED)
-            // ============================================================
+            // Inactivity monitor for OLED Screensaver
             LaunchedEffect(screensaverTimeoutMs) {
                 while (true) {
                     delay(5000)
@@ -234,6 +242,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            // Back handler
             BackHandler(enabled = isSettingsOpen) {
                 isSettingsOpen = false
             }
@@ -276,62 +285,57 @@ class MainActivity : ComponentActivity() {
             }
 
             // ============================================================
-            // UPDATE DIALOG — Overlay di atas semua screen
+            // UPDATE DIALOG OVERLAY — Skenario A
             // ============================================================
             if (showUpdateDialog && updateInfo != null) {
                 UpdateDialog(
-                    currentVersion = updateInfo!!.currentVersion,
-                    latestVersion = updateInfo!!.latestVersion,
-                    releaseNotes = updateInfo!!.releaseNotes,
-                    forceUpdate = updateInfo!!.isForceUpdate,
-                    downloadProgress = if (isDownloading || downloadReady) downloadProgress else null,
+                    info = updateInfo!!,
+                    progress = downloadProgress,
                     isDownloading = isDownloading,
-                    downloadReady = downloadReady,
-                    isInstalling = isInstalling,
-                    onUpdateClick = {
-                        if (isInstalling) return@UpdateDialog
-
+                    isReady = downloadReady,
+                    onUpdate = {
                         if (downloadReady) {
-                            // === INSTALL MODE ===
-                            if (!ApkDownloader.canInstallApk(context)) {
-                                Toast.makeText(context, "Beri izin 'Install unknown apps' dulu", Toast.LENGTH_LONG).show()
-                                ApkDownloader.openInstallPermissionSettings(context)
-                            } else {
-                                val state = UpdateDownloadService.readState(context)
-                                val path = state.filePath
-                                if (path != null) {
-                                    isInstalling = true
-                                    val ok = ApkDownloader.installApk(context, path)
-                                    if (!ok) {
-                                        isInstalling = false
-                                        Toast.makeText(context, "Gagal membuka installer APK", Toast.LENGTH_LONG).show()
-                                    }
-                                } else {
-                                    Toast.makeText(context, "File APK tidak ditemukan", Toast.LENGTH_LONG).show()
-                                    downloadReady = false
+                            // === MODE INSTALL ===
+                            val prefs = context.getSharedPreferences(UpdateDownloadService.PREFS, Context.MODE_PRIVATE)
+                            val path = prefs.getString(UpdateDownloadService.KEY_PATH, null)
+                            if (path != null) {
+                                val ok = ApkDownloader.install(context, path)
+                                if (!ok) {
+                                    Toast.makeText(context, "Gagal membuka installer. Pastikan izin 'Install unknown apps' sudah diberikan.", Toast.LENGTH_LONG).show()
                                 }
+                            } else {
+                                Toast.makeText(context, "File APK tidak ditemukan di /HomeiO/Pembaharuan/", Toast.LENGTH_LONG).show()
+                                downloadReady = false
                             }
                         } else {
-                            // === DOWNLOAD MODE ===
+                            // === MODE DOWNLOAD ===
+                            val url = updateInfo!!.downloadUrl
+                            if (url.isNullOrBlank()) {
+                                Toast.makeText(context, "URL download tidak tersedia di GitHub Release", Toast.LENGTH_LONG).show()
+                                return@UpdateDialog
+                            }
                             isDownloading = true
                             downloadProgress = 0f
                             downloadReady = false
-                            val safeFileName = "HomeIO_Update_${System.currentTimeMillis()}.apk"
-                            UpdateDownloadService.start(
-                                context = context,
-                                downloadUrl = updateInfo!!.downloadUrl ?: "",
-                                fileName = safeFileName
-                            )
+                            val safeName = "HomeIO_Update_${System.currentTimeMillis()}.apk"
+                            UpdateDownloadService.start(context, url, safeName)
                         }
                     },
-                    onLaterClick = {
+                    onLater = {
                         if (updateInfo!!.isForceUpdate) return@UpdateDialog
                         showUpdateDialog = false
+                        // Reset state untuk sesi berikutnya
+                        isDownloading = false
+                        downloadReady = false
+                        downloadProgress = 0f
                     },
-                    onSkipClick = {
+                    onSkip = {
                         if (updateInfo!!.isForceUpdate) return@UpdateDialog
-                        UpdatePrefs.setSkippedVersion(context, updateInfo!!.latestVersion)
+                        UpdatePrefs.setSkipped(context, updateInfo!!.latestVersion)
                         showUpdateDialog = false
+                        isDownloading = false
+                        downloadReady = false
+                        downloadProgress = 0f
                     }
                 )
             }
