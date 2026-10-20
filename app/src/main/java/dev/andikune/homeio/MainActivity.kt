@@ -1,10 +1,13 @@
 package dev.andikune.homeio
 
+import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ActivityInfo
+import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -41,9 +44,11 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -60,7 +65,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.andikune.homeio.domain.model.AppItem
 import dev.andikune.homeio.domain.model.SettingsConfig
 import dev.andikune.homeio.domain.model.WeatherInfo
 import dev.andikune.homeio.presentation.components.GlassColors
@@ -68,8 +72,13 @@ import dev.andikune.homeio.presentation.components.liquidGlass
 import dev.andikune.homeio.presentation.home.HomeScreen
 import dev.andikune.homeio.presentation.screensaver.ScreensaverActivity
 import dev.andikune.homeio.presentation.settings.SettingsScreen
+import dev.andikune.homeio.presentation.settings.UpdateDialog
+import dev.andikune.homeio.service.UpdateDownloadService
+import dev.andikune.homeio.util.ApkDownloader
 import dev.andikune.homeio.util.CrashHandler
 import dev.andikune.homeio.util.SoundFeedback
+import dev.andikune.homeio.util.UpdateManager
+import dev.andikune.homeio.util.UpdatePrefs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -80,8 +89,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // Strict landscape orientation enforcement for TV & Tablet 16:9 view
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         enableEdgeToEdge()
 
@@ -95,12 +102,21 @@ class MainActivity : ComponentActivity() {
             var isSplashFinished by remember { mutableStateOf(false) }
             var isSettingsOpen by remember { mutableStateOf(false) }
 
+            // ============================================================
+            // OTA UPDATE STATE
+            // ============================================================
+            var updateInfo by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
+            var showUpdateDialog by remember { mutableStateOf(false) }
+            var downloadProgress by remember { mutableFloatStateOf(0f) }
+            var isDownloading by remember { mutableStateOf(false) }
+            var downloadReady by remember { mutableStateOf(false) }
+            var isInstalling by remember { mutableStateOf(false) }
+
             // Observe Settings
             val config by appContainer.preferencesManager.settingsFlow.collectAsState(
                 initial = SettingsConfig()
             )
 
-            // Update screensaver timeout
             screensaverTimeoutMs = (config.screensaverTimeoutMinutes * 60 * 1000L).coerceAtLeast(60000L)
 
             // Observe Installed Apps
@@ -108,12 +124,13 @@ class MainActivity : ComponentActivity() {
                 initial = emptyList()
             )
 
-            // Refresh apps on startup
             LaunchedEffect(Unit) {
                 appContainer.appRepository.refreshApps()
             }
 
-            // Realtime Weather from Open-Meteo
+            // ============================================================
+            // REALTIME WEATHER (Open-Meteo)
+            // ============================================================
             var weatherInfo by remember { mutableStateOf<WeatherInfo?>(null) }
             LaunchedEffect(Unit) {
                 try {
@@ -147,24 +164,83 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Inactivity monitor for OLED Screensaver
+            // ============================================================
+            // CEK UPDATE — Hanya setelah Splash selesai (cooldown 6 jam)
+            // ============================================================
+            LaunchedEffect(isSplashFinished) {
+                if (!isSplashFinished) return@LaunchedEffect
+                if (!UpdatePrefs.shouldCheckUpdate(context)) return@LaunchedEffect
+                UpdatePrefs.markChecked(context)
+                try {
+                    val info = UpdateManager.checkForUpdate()
+                    if (info.available && UpdatePrefs.shouldShowDialog(context, info.latestVersion, info.isForceUpdate)) {
+                        updateInfo = info
+                        showUpdateDialog = true
+                    }
+                } catch (_: Exception) {
+                    // silent fail — tidak ganggu user
+                }
+            }
+
+            // ============================================================
+            // BROADCAST RECEIVER — Progress download real-time
+            // ============================================================
+            DisposableEffect(Unit) {
+                val receiver = object : BroadcastReceiver() {
+                    override fun onReceive(ctx: Context?, intent: Intent?) {
+                        if (intent?.action == UpdateDownloadService.ACTION_PROGRESS) {
+                            val state = UpdateDownloadService.readState(context)
+                            downloadProgress = state.progress
+                            when (state.status) {
+                                UpdateDownloadService.STATUS_COMPLETE -> {
+                                    isDownloading = false
+                                    downloadReady = true
+                                    Toast.makeText(context, "Download selesai! Klik INSTALL.", Toast.LENGTH_SHORT).show()
+                                }
+                                UpdateDownloadService.STATUS_ERROR -> {
+                                    isDownloading = false
+                                    downloadReady = false
+                                    Toast.makeText(context, "Download gagal: ${state.error}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                    }
+                }
+                val filter = IntentFilter(UpdateDownloadService.ACTION_PROGRESS)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+                } else {
+                    @Suppress("UnspecifiedRegisterReceiverFlag")
+                    context.registerReceiver(receiver, filter)
+                }
+                onDispose { context.unregisterReceiver(receiver) }
+            }
+
+            // ============================================================
+            // INACTIVITY MONITOR (Screensaver OLED)
+            // ============================================================
             LaunchedEffect(screensaverTimeoutMs) {
                 while (true) {
                     delay(5000)
                     val elapsed = System.currentTimeMillis() - lastUserInteractionTime
-                    if (elapsed >= screensaverTimeoutMs && !isSettingsOpen && crashLog == null && isSplashFinished) {
+                    if (elapsed >= screensaverTimeoutMs
+                        && !isSettingsOpen
+                        && crashLog == null
+                        && isSplashFinished
+                        && !showUpdateDialog) {
                         startActivity(Intent(this@MainActivity, ScreensaverActivity::class.java))
                         lastUserInteractionTime = System.currentTimeMillis()
                     }
                 }
             }
 
-            // Back handler
             BackHandler(enabled = isSettingsOpen) {
                 isSettingsOpen = false
             }
 
+            // ============================================================
             // RENDER SCREEN STATE
+            // ============================================================
             if (crashLog != null) {
                 CrashLogScreen(
                     crashLog = crashLog!!,
@@ -195,6 +271,67 @@ class MainActivity : ComponentActivity() {
                         scope.launch {
                             appContainer.preferencesManager.updateSettings(updated)
                         }
+                    }
+                )
+            }
+
+            // ============================================================
+            // UPDATE DIALOG — Overlay di atas semua screen
+            // ============================================================
+            if (showUpdateDialog && updateInfo != null) {
+                UpdateDialog(
+                    currentVersion = updateInfo!!.currentVersion,
+                    latestVersion = updateInfo!!.latestVersion,
+                    releaseNotes = updateInfo!!.releaseNotes,
+                    forceUpdate = updateInfo!!.isForceUpdate,
+                    downloadProgress = if (isDownloading || downloadReady) downloadProgress else null,
+                    isDownloading = isDownloading,
+                    downloadReady = downloadReady,
+                    isInstalling = isInstalling,
+                    onUpdateClick = {
+                        if (isInstalling) return@UpdateDialog
+
+                        if (downloadReady) {
+                            // === INSTALL MODE ===
+                            if (!ApkDownloader.canInstallApk(context)) {
+                                Toast.makeText(context, "Beri izin 'Install unknown apps' dulu", Toast.LENGTH_LONG).show()
+                                ApkDownloader.openInstallPermissionSettings(context)
+                            } else {
+                                val state = UpdateDownloadService.readState(context)
+                                val path = state.filePath
+                                if (path != null) {
+                                    isInstalling = true
+                                    val ok = ApkDownloader.installApk(context, path)
+                                    if (!ok) {
+                                        isInstalling = false
+                                        Toast.makeText(context, "Gagal membuka installer APK", Toast.LENGTH_LONG).show()
+                                    }
+                                } else {
+                                    Toast.makeText(context, "File APK tidak ditemukan", Toast.LENGTH_LONG).show()
+                                    downloadReady = false
+                                }
+                            }
+                        } else {
+                            // === DOWNLOAD MODE ===
+                            isDownloading = true
+                            downloadProgress = 0f
+                            downloadReady = false
+                            val safeFileName = "HomeIO_Update_${System.currentTimeMillis()}.apk"
+                            UpdateDownloadService.start(
+                                context = context,
+                                downloadUrl = updateInfo!!.downloadUrl ?: "",
+                                fileName = safeFileName
+                            )
+                        }
+                    },
+                    onLaterClick = {
+                        if (updateInfo!!.isForceUpdate) return@UpdateDialog
+                        showUpdateDialog = false
+                    },
+                    onSkipClick = {
+                        if (updateInfo!!.isForceUpdate) return@UpdateDialog
+                        UpdatePrefs.setSkippedVersion(context, updateInfo!!.latestVersion)
+                        showUpdateDialog = false
                     }
                 )
             }
