@@ -1,9 +1,40 @@
+import java.util.Calendar
+import java.util.TimeZone
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
 }
+
+// ============================================================
+// VERSIONING OTOMATIS HOME.IO
+// Format: v.[bulan_index].[tanggal].[commit]
+// Contoh: v.1.20.14
+//   - Bulan Index  : Oktober 2026 = 1 (naik +1 setiap ganti bulan)
+//   - Tanggal      : Hari ini real-time
+//   - Commit       : GITHUB_RUN_NUMBER (fallback timestamp lokal)
+// ============================================================
+val jakartaTz = TimeZone.getTimeZone("Asia/Jakarta")
+val nowCalendar = Calendar.getInstance(jakartaTz)
+
+val START_YEAR = 2026
+val START_MONTH = 10 // Oktober
+
+val currentYear = nowCalendar.get(Calendar.YEAR)
+val currentMonth = nowCalendar.get(Calendar.MONTH) + 1 // Jan=1
+val currentDay = nowCalendar.get(Calendar.DAY_OF_MONTH)
+
+val monthsSinceStart = (currentYear - START_YEAR) * 12 + (currentMonth - START_MONTH)
+val monthIndex = (monthsSinceStart + 1).coerceAtLeast(1)
+
+val githubRunNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+val fallbackCommit = ((System.currentTimeMillis() / 1000) % 10000).toInt()
+val commitNumber = githubRunNumber ?: fallbackCommit
+
+val autoVersionName = "v.$monthIndex.$currentDay.$commitNumber"
+val autoVersionCode = monthIndex * 1_000_000 + currentDay * 10_000 + (commitNumber % 10_000)
 
 android {
     namespace = "dev.andikune.homeio"
@@ -13,10 +44,10 @@ android {
         applicationId = "dev.andikune.homeio"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
-        buildConfigField("String", "VERSION_NAME", "\"1.0.0\"")
-        buildConfigField("int", "VERSION_CODE", "1")
+        versionCode = autoVersionCode
+        versionName = autoVersionName
+        buildConfigField("String", "VERSION_NAME", "\"$autoVersionName\"")
+        buildConfigField("int", "VERSION_CODE", "$autoVersionCode")
     }
 
     // ============================================================
@@ -65,46 +96,27 @@ android {
 }
 
 dependencies {
-    // Compose BOM
     implementation(platform(libs.androidx.compose.bom))
-
-    // Core
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
-
-    // Compose UI
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.compose.material.icons.extended)
-
-    // Android TV
     implementation(libs.androidx.tv.material)
     implementation(libs.androidx.tv.foundation)
-
-    // Media3 ExoPlayer
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
-
-    // Coil
     implementation(libs.coil.compose)
-
-    // Network
     implementation(libs.retrofit)
     implementation(libs.converter.kotlinx.serialization)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
     implementation(libs.logging.interceptor)
-
-    // Coroutines
     implementation(libs.kotlinx.coroutines.android)
-
-    // DataStore
     implementation(libs.androidx.datastore.preferences)
-
-    // Debug
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
