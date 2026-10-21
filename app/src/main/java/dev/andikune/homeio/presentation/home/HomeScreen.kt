@@ -79,7 +79,9 @@ fun HomeScreen(
     allApps: List<AppItem>,
     weatherInfo: WeatherInfo?,
     onOpenSettings: () -> Unit,
-    onSaveConfig: (SettingsConfig) -> Unit
+    onSaveConfig: (SettingsConfig) -> Unit,
+    openFileManagerTrigger: Boolean = false,
+    onFileManagerOpened: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -91,7 +93,17 @@ fun HomeScreen(
     var selectedAppForContextMenu by remember { mutableStateOf<AppItem?>(null) }
     var isSideloadOnly by remember { mutableStateOf(false) }
 
-    // FIX #34-39: Tanggal + Jam sesuai config
+    // ============================================================
+    // USB OTG INTEGRATION
+    // ============================================================
+    LaunchedEffect(openFileManagerTrigger) {
+        if (openFileManagerTrigger) {
+            showFileManager = true
+            onFileManagerOpened()
+        }
+    }
+
+    // Live Date & Time
     var currentDateString by remember { mutableStateOf(DateTimeFormatter.formatDate(Date(), config.languageCode)) }
     var currentTimeString by remember { mutableStateOf(DateTimeFormatter.formatTime(Date(), config.timeFormat, config.showSeconds)) }
 
@@ -105,7 +117,6 @@ fun HomeScreen(
     }
 
     var memInfo by remember { mutableStateOf(SystemUtils.getMemoryInfo(context)) }
-
     LaunchedEffect(config.isAutoRamBoostEnabled) {
         if (config.isAutoRamBoostEnabled) memInfo = SystemUtils.boostRam(context)
     }
@@ -159,7 +170,6 @@ fun HomeScreen(
 
             Row(Modifier.fillMaxSize().horizontalScroll(horizontalScrollState)) {
                 Column(Modifier.fillMaxHeight().width(780.dp), verticalArrangement = Arrangement.SpaceBetween) {
-                    // FIX: TopStatusBar terima dateString
                     TopStatusBar(
                         currentTime = currentTimeString,
                         currentDate = currentDateString,
@@ -271,23 +281,9 @@ fun TopStatusBar(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             if (showNtpWarning) Icon(Icons.Default.Warning, "NTP", tint = GlassColors.AccentAmber, modifier = Modifier.size(18.dp))
 
-            // FIX #34-39: Tanggal di atas, jam di bawah
             Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    currentDate,
-                    color = GlassColors.TextSecondary,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    textAlign = TextAlign.End,
-                    maxLines = 1
-                )
-                Text(
-                    currentTime,
-                    color = Color.White,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.5.sp
-                )
+                Text(currentDate, color = GlassColors.TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.End, maxLines = 1)
+                Text(currentTime, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
             }
 
             Icon(Icons.Default.Wifi, "Wi-Fi", tint = GlassColors.AccentGlow, modifier = Modifier.size(18.dp))
