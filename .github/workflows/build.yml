@@ -40,12 +40,10 @@ jobs:
       - name: Generate Version Tag
         id: get_version
         run: |
-          # Hitung tanggal berdasarkan Waktu Indonesia Barat (WIB)
           YEAR=$(TZ='Asia/Jakarta' date +%Y)
           MONTH=$(TZ='Asia/Jakarta' date +%m)
           DAY=$(TZ='Asia/Jakarta' date +%d)
           
-          # Logika sama dengan build.gradle.kts
           START_YEAR=2026
           START_MONTH=10
           
@@ -53,7 +51,6 @@ jobs:
           MONTH_INDEX=$(( MONTHS_SINCE_START + 1 ))
           if [ $MONTH_INDEX -lt 1 ]; then MONTH_INDEX=1; fi
           
-          # Gunakan run_number sebagai version code
           COMMIT_NUM=${{ github.run_number }}
           
           VERSION="v.$MONTH_INDEX.$DAY.$COMMIT_NUM"
@@ -61,27 +58,48 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "✅ Detected Version: $VERSION"
 
-      - name: Create GitHub Release & Upload APK
+      # 1. BUAT DRAFT RELEASE DULU
+      - name: Create Draft Release
+        id: create_draft
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ steps.get_version.outputs.VERSION }}"
           NOTES="Auto-release dari commit terbaru."
           
-          # Deteksi Force Update dari pesan commit
           if [[ "${{ github.event.head_commit.message }}" == *"[force]"* ]]; then
             NOTES="FORCE_UPDATE=true\n\nAuto-release dari commit terbaru."
           fi
 
-          echo "🚀 Membuat Release untuk tag: $VERSION"
+          echo "🚀 Membuat DRAFT Release untuk tag: $VERSION"
           
-          # Hapus release lama jika ada (jika re-run)
+          # Hapus release lama jika ada (untuk re-run)
           gh release delete "$VERSION" --yes 2>/dev/null || true
           
-          # Buat release baru dan upload APK
+          # Buat DRAFT release
           gh release create "$VERSION" \
+            --draft \
             --title "Home.io $VERSION" \
-            --notes "$NOTES" \
-            app/build/outputs/apk/debug/*.apk
+            --notes "$NOTES"
             
-          echo "✅ Release $VERSION berhasil dibuat!"
+          echo "✅ Draft Release $VERSION berhasil dibuat."
+
+      # 2. UPLOAD APK KE DRAFT
+      - name: Upload APK to Draft Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          echo "📦 Meng-upload APK ke Draft $VERSION..."
+          gh release upload "$VERSION" app/build/outputs/apk/debug/*.apk --clobber
+          echo "✅ APK berhasil di-upload."
+
+      # 3. PUBLISH DRAFT (Ubah jadi Published)
+      - name: Publish Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          echo "🔓 Mempublish Release $VERSION..."
+          gh release edit "$VERSION" --draft=false
+          echo "✅ Release $VERSION sekarang PUBLISHED dan bisa di-download!"
