@@ -56,9 +56,17 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     val paneFocusRequester = remember { FocusRequester() }
 
-    // Auto-save logic (debounce)
+    // FIX BUG #3: Force Save saat keluar (mencegah data loss karena delay)
+    DisposableEffect(Unit) {
+        onDispose {
+            if (draftConfig != currentConfig) {
+                onSaveConfig(draftConfig)
+            }
+        }
+    }
+
     LaunchedEffect(draftConfig) {
-        delay(300)
+        delay(500)
         if (draftConfig != currentConfig) {
             onSaveConfig(draftConfig)
         }
@@ -73,7 +81,6 @@ fun SettingsScreen(
                 .padding(16.dp).verticalScroll(rememberScrollState()).focusGroup(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Tombol Kembali
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                     .background(GlassColors.GlassTint)
@@ -89,7 +96,6 @@ fun SettingsScreen(
             Spacer(Modifier.height(8.dp))
             Text("KATEGORI", color = GlassColors.TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, modifier = Modifier.padding(start = 8.dp))
 
-            // Daftar Kategori
             SettingsCategory.entries.forEach { cat ->
                 SidebarItem(
                     category = cat,
@@ -98,6 +104,7 @@ fun SettingsScreen(
                         selectedCategory = cat
                         scope.launch {
                             delay(150)
+                            // FIX BUG #11: Request focus ke pane kanan
                             try { paneFocusRequester.requestFocus() } catch (_: Exception) {}
                         }
                     }
@@ -110,7 +117,6 @@ fun SettingsScreen(
         // ============================================================
         Box(Modifier.weight(0.72f).fillMaxHeight().padding(24.dp)) {
             AutoFocusPane(paneKey = selectedCategory, modifier = Modifier.fillMaxSize().focusRequester(paneFocusRequester)) {
-                // TAMBAHKAN VERTICAL SCROLL DI SINI AGAR SEMUA SECTION BISA DIGESER
                 Column(
                     Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
                 ) {
