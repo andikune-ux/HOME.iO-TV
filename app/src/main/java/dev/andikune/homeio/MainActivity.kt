@@ -9,7 +9,6 @@ import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
-import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -19,7 +18,17 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -28,8 +37,21 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -51,8 +73,15 @@ import dev.andikune.homeio.presentation.home.HomeScreen
 import dev.andikune.homeio.presentation.onboarding.OnboardingPermissionDialog
 import dev.andikune.homeio.presentation.screensaver.ScreensaverActivity
 import dev.andikune.homeio.presentation.settings.SettingsScreen
+import dev.andikune.homeio.receiver.UsbReceiver
 import dev.andikune.homeio.service.UpdateDownloadService
-import dev.andikune.homeio.util.*
+import dev.andikune.homeio.util.ApkDownloader
+import dev.andikune.homeio.util.CrashHandler
+import dev.andikune.homeio.util.OnboardingPrefs
+import dev.andikune.homeio.util.SoundFeedback
+import dev.andikune.homeio.util.UpdateDialog
+import dev.andikune.homeio.util.UpdateManager
+import dev.andikune.homeio.util.UpdatePrefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -62,10 +91,16 @@ class MainActivity : ComponentActivity() {
     private var lastUserInteractionTime = System.currentTimeMillis()
     private var screensaverTimeoutMs = 5 * 60 * 1000L
 
+    // State yang bisa di-trigger dari USB notification
+    private var pendingFileManagerTrigger by mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         enableEdgeToEdge()
+
+        // Cek intent awal (dibuka dari notifikasi USB)
+        intent?.let { handleUsbIntent(it) }
 
         val appContainer = (application as HomeIoApplication).container
 
@@ -95,9 +130,7 @@ class MainActivity : ComponentActivity() {
 
             val config by appContainer.preferencesManager.settingsFlow.collectAsState(initial = SettingsConfig())
 
-            // ============================================================
-            // KIOSK MODE & BRIGHTNESS INTEGRATION
-            // ============================================================
+            // Kiosk
             LaunchedEffect(config.isKioskModeEnabled) {
                 if (config.isKioskModeEnabled) {
                     KioskManager.enableKiosk(this@MainActivity)
@@ -108,12 +141,9 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            // Brightness
             LaunchedEffect(config.brightnessMode, config.manualBrightness) {
-                val brightness = if (config.brightnessMode == "MANUAL") {
-                    (config.manualBrightness / 100f).coerceIn(0.01f, 1f)
-                } else {
-                    1f // AUTO fallback (bisa dikembangkan nanti pakai jam)
-                }
+                val brightness = if (config.brightnessMode == "MANUAL") (config.manualBrightness / 100f).coerceIn(0.01f, 1f) else 1f
                 runOnUiThread {
                     val attrs = window.attributes
                     attrs.screenBrightness = brightness
@@ -121,7 +151,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Screensaver monitor
+            // Screensaver
             screensaverTimeoutMs = if (!config.screensaverEnabled) 0L else (config.screensaverTimeoutMinutes * 60 * 1000L)
             LaunchedEffect(screensaverTimeoutMs) {
                 if (screensaverTimeoutMs <= 0L) return@LaunchedEffect
@@ -210,16 +240,22 @@ class MainActivity : ComponentActivity() {
 
             BackHandler(enabled = isSettingsOpen) { isSettingsOpen = false }
 
-            // RENDER UI
             when {
                 crashLog != null -> CrashLogScreen(crashLog!!) { CrashHandler.clearCrashLog(context); crashLog = null }
                 showOnboarding -> OnboardingPermissionDialog { OnboardingPrefs.markCompleted(context); showOnboarding = false }
                 !isSplashFinished -> SplashScreen { isSplashFinished = true }
                 isSettingsOpen -> SettingsScreen(config, { updated -> scope.launch { appContainer.preferencesManager.updateSettings(updated) } }, onBack = { isSettingsOpen = false })
-                else -> HomeScreen(config, installedApps, weatherInfo, onOpenSettings = { isSettingsOpen = true }, onSaveConfig = { updated -> scope.launch { appContainer.preferencesManager.updateSettings(updated) } })
+                else -> HomeScreen(
+                    config = config,
+                    allApps = installedApps,
+                    weatherInfo = weatherInfo,
+                    onOpenSettings = { isSettingsOpen = true },
+                    onSaveConfig = { updated -> scope.launch { appContainer.preferencesManager.updateSettings(updated) } },
+                    openFileManagerTrigger = pendingFileManagerTrigger,
+                    onFileManagerOpened = { pendingFileManagerTrigger = false }
+                )
             }
 
-            // DIALOG UPDATE
             if (showUpdateDialog && updateInfo != null) {
                 UpdateDialog(
                     info = updateInfo!!, progress = downloadProgress, isDownloading = isDownloading, isReady = downloadReady, isError = isError,
@@ -245,6 +281,22 @@ class MainActivity : ComponentActivity() {
                     onSkip = { if (!updateInfo!!.isForceUpdate && !isDownloading) { UpdatePrefs.setSkipped(context, updateInfo!!.latestVersion); showUpdateDialog = false; downloadProgress = 0f; downloadReady = false; isError = false } }
                 )
             }
+        }
+    }
+
+    /**
+     * Tangkap intent USB saat app di-launch ulang (singleTask mode).
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleUsbIntent(intent)
+    }
+
+    private fun handleUsbIntent(intent: Intent) {
+        if (intent.getBooleanExtra(UsbReceiver.EXTRA_OPEN_FILE_MANAGER, false)) {
+            pendingFileManagerTrigger = true
+            intent.removeExtra(UsbReceiver.EXTRA_OPEN_FILE_MANAGER)
         }
     }
 
