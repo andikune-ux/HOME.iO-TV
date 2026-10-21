@@ -112,16 +112,19 @@ fun SettingsScreen(
             // PANE KANAN (KONTEN GLASS)
             Box(Modifier.weight(0.72f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp).padding(24.dp)) {
                 AutoFocusPane(paneKey = selectedCategory, modifier = Modifier.fillMaxSize().focusRequester(paneFocusRequester)) {
-                    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
-                        when (selectedCategory) {
-                            SettingsCategory.WALLPAPER -> WallpaperSection(draftConfig) { draftConfig = it }
-                            SettingsCategory.SCREENSAVER -> ScreensaverSection(draftConfig) { draftConfig = it }
-                            SettingsCategory.PERFORMANCE -> PerformanceSection(draftConfig) { draftConfig = it }
-                            SettingsCategory.LANGUAGE -> LanguageSection(draftConfig) { draftConfig = it }
-                            SettingsCategory.TV_DISPLAY -> TvDisplaySection(draftConfig) { draftConfig = it }
-                            SettingsCategory.UPDATER -> ApkFileListSection()
-                            SettingsCategory.BACKUP -> BackupBiasaSection(draftConfig) { draftConfig = it }
-                            SettingsCategory.INFO -> InfoAppSection()
+                    // FIX: Membungkus dengan Box fillMaxSize agar child tidak mendapat infinite constraints
+                    Box(Modifier.fillMaxSize()) {
+                        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                            when (selectedCategory) {
+                                SettingsCategory.WALLPAPER -> WallpaperSection(draftConfig) { draftConfig = it }
+                                SettingsCategory.SCREENSAVER -> ScreensaverSection(draftConfig) { draftConfig = it }
+                                SettingsCategory.PERFORMANCE -> PerformanceSection(draftConfig) { draftConfig = it }
+                                SettingsCategory.LANGUAGE -> LanguageSection(draftConfig) { draftConfig = it }
+                                SettingsCategory.TV_DISPLAY -> TvDisplaySection(draftConfig) { draftConfig = it }
+                                SettingsCategory.UPDATER -> ApkFileListSection()
+                                SettingsCategory.BACKUP -> BackupBiasaSection(draftConfig) { draftConfig = it }
+                                SettingsCategory.INFO -> InfoAppSection()
+                            }
                         }
                     }
                 }
