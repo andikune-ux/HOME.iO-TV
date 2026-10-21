@@ -374,8 +374,26 @@ fun ApkFileListSection() {
             isChecking = true; checkResult = null
             scope.launch {
                 val info = UpdateManager.checkForUpdate(); isChecking = false
-                if (info.available) { isErrorResult = false; checkResult = "✅ Update tersedia: ${info.latestVersion}"; localUpdateInfo = info; showUpdateDialog = true } 
-                else { isErrorResult = true; val msg = if (info.errorType != null) "Gagal cek: ${info.errorType}" else "Aplikasi sudah versi terbaru (${info.currentVersion})"; checkResult = "❌ $msg" }
+                if (info.available) {
+                    isErrorResult = false
+                    checkResult = "✅ Update tersedia: ${info.latestVersion}"
+                    localUpdateInfo = info
+                    val saved = UpdateDownloadService.getCompletedFilePath(ctx, info.latestVersion)
+                    if (saved != null) {
+                        downloadReady = true
+                        downloadProgress = 1f
+                        isDownloading = false
+                    } else {
+                        downloadReady = false
+                        downloadProgress = 0f
+                        isDownloading = false
+                    }
+                    showUpdateDialog = true
+                } else {
+                    isErrorResult = true
+                    val msg = if (info.errorType != null) "Gagal cek: ${info.errorType}" else "Aplikasi sudah versi terbaru (${info.currentVersion})"
+                    checkResult = "❌ $msg"
+                }
             }
         }.padding(20.dp), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -405,9 +423,31 @@ fun ApkFileListSection() {
         UpdateDialog(info = localUpdateInfo!!, progress = downloadProgress, isDownloading = isDownloading, isReady = downloadReady, isError = isError,
             onUpdate = {
                 if (downloadReady || isError) {
-                    if (isError) { isError = false; downloadProgress = 0f; isDownloading = true; localUpdateInfo!!.downloadUrl?.let { UpdateDownloadService.start(ctx, it, "HomeIO_${System.currentTimeMillis()}.apk") } } 
-                    else { val path = UpdateDownloadService.readState(ctx).filePath; if (path != null) { if (!ApkDownloader.install(ctx, path)) Toast.makeText(ctx, "Beri izin install APK", Toast.LENGTH_LONG).show() } else { downloadReady = false; isError = true } }
-                } else { localUpdateInfo!!.downloadUrl?.let { isDownloading = true; downloadProgress = 0f; downloadReady = false; isError = false; UpdateDownloadService.start(ctx, it, "HomeIO_${System.currentTimeMillis()}.apk") } }
+                    if (isError) {
+                        isError = false; downloadProgress = 0f; isDownloading = true
+                        localUpdateInfo!!.downloadUrl?.let {
+                            val cleanVer = localUpdateInfo!!.latestVersion.replace("[^a-zA-Z0-9._-]".toRegex(), "_")
+                            UpdateDownloadService.start(ctx, it, "HomeIO_${cleanVer}.apk", localUpdateInfo!!.latestVersion)
+                        }
+                    } else {
+                        val path = UpdateDownloadService.getCompletedFilePath(ctx, localUpdateInfo!!.latestVersion)
+                            ?: UpdateDownloadService.readState(ctx).filePath
+                        if (path != null) {
+                            if (ApkDownloader.install(ctx, path)) {
+                                UpdateDownloadService.resetState(ctx)
+                                showUpdateDialog = false
+                            } else {
+                                Toast.makeText(ctx, "Beri izin install APK", Toast.LENGTH_LONG).show()
+                            }
+                        } else { downloadReady = false; isError = true }
+                    }
+                } else {
+                    localUpdateInfo!!.downloadUrl?.let {
+                        isDownloading = true; downloadProgress = 0f; downloadReady = false; isError = false
+                        val cleanVer = localUpdateInfo!!.latestVersion.replace("[^a-zA-Z0-9._-]".toRegex(), "_")
+                        UpdateDownloadService.start(ctx, it, "HomeIO_${cleanVer}.apk", localUpdateInfo!!.latestVersion)
+                    }
+                }
             }, onLater = { showUpdateDialog = false }, onSkip = { UpdatePrefs.setSkipped(ctx, localUpdateInfo!!.latestVersion); showUpdateDialog = false })
     }
 }

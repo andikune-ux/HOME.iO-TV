@@ -175,20 +175,25 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(isSplashFinished) {
                     if (!isSplashFinished) return@LaunchedEffect
-                    val savedPath = UpdateDownloadService.getCompletedFilePath(context)
-                    if (savedPath != null) {
-                        val info = try { UpdateManager.checkForUpdate() } catch (_: Exception) { null }
-                        if (info?.available == true) {
-                            updateInfo = info; downloadProgress = 1f; downloadReady = true; isDownloading = false; showUpdateDialog = true
-                        }
-                        return@LaunchedEffect
-                    }
-                    if (!UpdatePrefs.shouldCheck(context)) return@LaunchedEffect
                     try {
                         val info = UpdateManager.checkForUpdate()
-                        if (info.available && UpdatePrefs.shouldShow(context, info.latestVersion, info.isForceUpdate)) {
-                            UpdatePrefs.markChecked(context); updateInfo = info; showUpdateDialog = true
-                        } else if (info.available) { UpdatePrefs.markChecked(context) }
+                        if (info.available) {
+                            val savedPath = UpdateDownloadService.getCompletedFilePath(context, info.latestVersion)
+                            if (savedPath != null) {
+                                updateInfo = info
+                                downloadProgress = 1f
+                                downloadReady = true
+                                isDownloading = false
+                                showUpdateDialog = true
+                            } else if (UpdatePrefs.shouldShow(context, info.latestVersion, info.isForceUpdate)) {
+                                UpdatePrefs.markChecked(context)
+                                updateInfo = info
+                                downloadProgress = 0f
+                                downloadReady = false
+                                isDownloading = false
+                                showUpdateDialog = true
+                            }
+                        }
                     } catch (_: Exception) {}
                 }
 
@@ -251,17 +256,27 @@ class MainActivity : ComponentActivity() {
                             if (downloadReady || isError) {
                                 if (isError) {
                                     isError = false; downloadProgress = 0f; isDownloading = true
-                                    updateInfo!!.downloadUrl?.let { UpdateDownloadService.start(context, it, "HomeIO_${System.currentTimeMillis()}.apk") }
+                                    updateInfo!!.downloadUrl?.let {
+                                        val cleanVer = updateInfo!!.latestVersion.replace("[^a-zA-Z0-9._-]".toRegex(), "_")
+                                        UpdateDownloadService.start(context, it, "HomeIO_${cleanVer}.apk", updateInfo!!.latestVersion)
+                                    }
                                 } else {
-                                    val path = UpdateDownloadService.readState(context).filePath
+                                    val path = UpdateDownloadService.getCompletedFilePath(context, updateInfo!!.latestVersion)
+                                        ?: UpdateDownloadService.readState(context).filePath
                                     if (path != null) {
-                                        if (!ApkDownloader.install(context, path)) Toast.makeText(context, "Beri izin install APK", Toast.LENGTH_LONG).show()
+                                        if (ApkDownloader.install(context, path)) {
+                                            UpdateDownloadService.resetState(context)
+                                            showUpdateDialog = false
+                                        } else {
+                                            Toast.makeText(context, "Beri izin install APK", Toast.LENGTH_LONG).show()
+                                        }
                                     } else { downloadReady = false; isError = true }
                                 }
                             } else {
                                 updateInfo!!.downloadUrl?.let {
                                     isDownloading = true; downloadProgress = 0f; downloadReady = false; isError = false
-                                    UpdateDownloadService.start(context, it, "HomeIO_${System.currentTimeMillis()}.apk")
+                                    val cleanVer = updateInfo!!.latestVersion.replace("[^a-zA-Z0-9._-]".toRegex(), "_")
+                                    UpdateDownloadService.start(context, it, "HomeIO_${cleanVer}.apk", updateInfo!!.latestVersion)
                                 }
                             }
                         },

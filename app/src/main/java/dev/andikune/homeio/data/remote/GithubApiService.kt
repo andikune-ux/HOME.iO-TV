@@ -20,6 +20,6 @@ data class GithubAsset(
 )
 
 interface GithubApiService {
-    @GET("repos/andikune/homeio/releases/latest")
+    @GET("repos/andikune-ux/HOME.iO-TV/releases/latest")
     suspend fun getLatestRelease(): GithubRelease
 }

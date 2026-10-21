@@ -32,21 +32,26 @@ class UpdateDownloadService : Service() {
         const val ACTION_PROGRESS = "dev.andikune.homeio.UPDATE_DOWNLOAD_PROGRESS"
         const val EXTRA_URL = "download_url"
         const val EXTRA_FILE_NAME = "file_name"
+        const val EXTRA_VERSION = "version"
 
         const val PREFS = "update_download_state"
         const val KEY_STATUS = "status"
         const val KEY_PROGRESS = "progress"
         const val KEY_FILE_PATH = "file_path"
         const val KEY_ERROR = "error"
+        const val KEY_VERSION = "version"
 
         const val STATUS_IDLE = "IDLE"
         const val STATUS_DOWNLOADING = "DOWNLOADING"
         const val STATUS_COMPLETE = "COMPLETE"
         const val STATUS_ERROR = "ERROR"
 
-        fun start(context: Context, downloadUrl: String, fileName: String) {
+        fun start(context: Context, downloadUrl: String, fileName: String, version: String = "") {
             val intent = Intent(context, UpdateDownloadService::class.java).apply {
-                action = ACTION_START; putExtra(EXTRA_URL, downloadUrl); putExtra(EXTRA_FILE_NAME, fileName)
+                action = ACTION_START
+                putExtra(EXTRA_URL, downloadUrl)
+                putExtra(EXTRA_FILE_NAME, fileName)
+                putExtra(EXTRA_VERSION, version)
             }
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ContextCompat.startForegroundService(context, intent) else context.startService(intent)
@@ -62,24 +67,49 @@ class UpdateDownloadService : Service() {
                 status = prefs.getString(KEY_STATUS, STATUS_IDLE) ?: STATUS_IDLE,
                 progress = prefs.getFloat(KEY_PROGRESS, 0f),
                 filePath = prefs.getString(KEY_FILE_PATH, null),
-                error = prefs.getString(KEY_ERROR, null)
+                error = prefs.getString(KEY_ERROR, null),
+                version = prefs.getString(KEY_VERSION, null)
             )
         }
 
-        fun getCompletedFilePath(context: Context): String? {
+        fun getCompletedFilePath(context: Context, expectedVersion: String? = null): String? {
             val state = readState(context)
-            return if (state.status == STATUS_COMPLETE) state.filePath else null
+            if (state.status != STATUS_COMPLETE || state.filePath == null) return null
+            val file = java.io.File(state.filePath)
+            if (!file.exists() || !ApkDownloader.isValid(context, file)) {
+                resetState(context)
+                return null
+            }
+            if (!expectedVersion.isNullOrBlank()) {
+                val matchesStored = state.version == expectedVersion
+                val archiveInfo = try { context.packageManager.getPackageArchiveInfo(file.absolutePath, 0) } catch (_: Exception) { null }
+                val matchesArchive = archiveInfo?.versionName == expectedVersion
+                if (!matchesStored && !matchesArchive) {
+                    try { file.delete() } catch (_: Exception) {}
+                    resetState(context)
+                    return null
+                }
+            }
+            return state.filePath
         }
 
         fun resetState(context: Context) = writeState(context, STATUS_IDLE)
 
-        private fun writeState(context: Context, status: String, progress: Float = 0f, filePath: String? = null, error: String? = null) {
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                .putString(KEY_STATUS, status).putFloat(KEY_PROGRESS, progress.coerceIn(0f, 1f))
-                .putString(KEY_FILE_PATH, filePath).putString(KEY_ERROR, error).commit()
+        private fun writeState(context: Context, status: String, progress: Float = 0f, filePath: String? = null, error: String? = null, version: String? = null) {
+            val editor = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putString(KEY_STATUS, status)
+                .putFloat(KEY_PROGRESS, progress.coerceIn(0f, 1f))
+                .putString(KEY_FILE_PATH, filePath)
+                .putString(KEY_ERROR, error)
+            if (version != null) {
+                editor.putString(KEY_VERSION, version)
+            } else if (status == STATUS_IDLE) {
+                editor.remove(KEY_VERSION)
+            }
+            editor.commit()
         }
 
-        data class State(val status: String, val progress: Float, val filePath: String?, val error: String?)
+        data class State(val status: String, val progress: Float, val filePath: String?, val error: String?, val version: String? = null)
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -99,9 +129,10 @@ class UpdateDownloadService : Service() {
 
         if (activeJob) return START_REDELIVER_INTENT
         val url = intent.getStringExtra(EXTRA_URL); val fileName = intent.getStringExtra(EXTRA_FILE_NAME)
+        val version = intent.getStringExtra(EXTRA_VERSION) ?: ""
         if (url.isNullOrBlank() || fileName.isNullOrBlank()) { writeState(this, STATUS_ERROR, error = "URL atau nama file kosong"); stopSelf(startId); return START_NOT_STICKY }
 
-        activeJob = true; writeState(this, STATUS_DOWNLOADING); broadcastState()
+        activeJob = true; writeState(this, STATUS_DOWNLOADING, version = version); broadcastState()
 
         serviceScope.launch {
             try {
@@ -110,7 +141,7 @@ class UpdateDownloadService : Service() {
                         state.error != null -> { writeState(this@UpdateDownloadService, STATUS_ERROR, error = state.error); updateNotification("Download gagal"); broadcastState() }
                         state.isFinished && state.savedFilePath != null -> {
                             val apkFile = java.io.File(state.savedFilePath)
-                            if (ApkDownloader.isValid(applicationContext, apkFile)) { writeState(this@UpdateDownloadService, STATUS_COMPLETE, progress = 1f, filePath = state.savedFilePath); updateNotification("Download selesai — Ketuk untuk Install") } 
+                            if (ApkDownloader.isValid(applicationContext, apkFile)) { writeState(this@UpdateDownloadService, STATUS_COMPLETE, progress = 1f, filePath = state.savedFilePath, version = version); updateNotification("Download selesai — Ketuk untuk Install") } 
                             else { apkFile.delete(); writeState(this@UpdateDownloadService, STATUS_ERROR, error = "APK tidak valid"); updateNotification("Download gagal: APK tidak valid") }
                             broadcastState()
                         }
