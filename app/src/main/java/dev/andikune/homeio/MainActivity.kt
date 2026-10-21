@@ -1,4 +1,4 @@
-lpackage dev.andikune.homeio
+package dev.andikune.homeio
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -328,7 +328,6 @@ class MainActivity : ComponentActivity() {
     override fun dispatchTouchEvent(ev: MotionEvent?): Boolean { lastUserInteractionTime = System.currentTimeMillis(); return super.dispatchTouchEvent(ev) }
 }
 
-// FIX: Gunakan NeonFocusBorder untuk fokus yang jelas di TV
 @Composable
 fun DefaultLauncherDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
