@@ -9,7 +9,9 @@ import android.graphics.RectF
 import android.graphics.Shader
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
@@ -28,10 +30,6 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/**
- * NeonFocusBorder — Efek border menyala.
- * FIX BUG #38: Mengurangi jumlah dot (dari 48 jadi 24) agar animasi ringan di STB RAM 1GB.
- */
 @Composable
 fun NeonFocusBorder(
     focused: Boolean,
@@ -42,9 +40,13 @@ fun NeonFocusBorder(
     glowRadius: Dp = 8.dp,
     content: @Composable () -> Unit
 ) {
+    // FIX UI: Menggunakan animasi Spring agar perpindahan skala terasa lebih "hidup" dan mewah
     val scale by animateFloatAsState(
-        targetValue = if (focused) 1.05f else 1f,
-        animationSpec = tween(durationMillis = 150, easing = LinearEasing),
+        targetValue = if (focused) 1.06f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
         label = "focus_scale"
     )
 
@@ -57,7 +59,7 @@ fun NeonFocusBorder(
         }
         while (true) {
             rotation.snapTo(0f)
-            rotation.animateTo(360f, tween(2000, easing = LinearEasing))
+            rotation.animateTo(360f, tween(3000, easing = LinearEasing)) // Diperlambat jadi 3 detik agar elegan
         }
     }
 
@@ -131,13 +133,16 @@ private fun DrawScope.drawGlowBorder(
 
         val headColors = if (isPressed) listOf(android.graphics.Color.WHITE) else {
             val blue = GlassColors.AccentGlow
-            listOf(android.graphics.Color.WHITE, android.graphics.Color.argb(255, (blue.red * 255).toInt(), (blue.green * 255).toInt(), (blue.blue * 255).toInt()))
+            val lightBlue = GlassColors.AccentGlowLight
+            listOf(
+                android.graphics.Color.argb(255, (lightBlue.red * 255).toInt(), (lightBlue.green * 255).toInt(), (lightBlue.blue * 255).toInt()),
+                android.graphics.Color.argb(255, (blue.red * 255).toInt(), (blue.green * 255).toInt(), (blue.blue * 255).toInt())
+            )
         }
 
-        val tailLenFraction = 0.30f
-        // FIX BUG #38: Dot dikurangi dari 48 menjadi 24
-        val dotCount = 24 
-        val blurRadius = glowPx * 1.2f
+        val tailLenFraction = 0.35f // Ekor lebih panjang agar lebih elegan
+        val dotCount = 32 
+        val blurRadius = glowPx * 1.5f
 
         headColors.forEachIndexed { idx, color ->
             val baseT = rotationDeg / 360f
@@ -150,9 +155,9 @@ private fun DrawScope.drawGlowBorder(
                 pathMeasure.getPosTan(wrapped * pathLength, pos, null)
 
                 val linear = 1f - (i.toFloat() / dotCount)
-                val alphaBase = linear * linear * 0.7f + linear * 0.3f
+                val alphaBase = linear * linear * 0.8f + linear * 0.2f
                 val alpha = if (isPressed) alphaBase * flash else alphaBase
-                val dotRadius = glowPx * (0.35f + 0.35f * linear)
+                val dotRadius = glowPx * (0.35f + 0.45f * linear)
 
                 val paint = AndroidPaint().apply {
                     isAntiAlias = true
@@ -161,8 +166,8 @@ private fun DrawScope.drawGlowBorder(
                         pos[0], pos[1], dotRadius,
                         intArrayOf(
                             colorWithAlpha(color, alpha * 1.0f),
-                            colorWithAlpha(color, alpha * 0.7f),
-                            colorWithAlpha(color, alpha * 0.3f),
+                            colorWithAlpha(color, alpha * 0.6f),
+                            colorWithAlpha(color, alpha * 0.2f),
                             colorWithAlpha(color, 0f)
                         ),
                         floatArrayOf(0f, 0.3f, 0.7f, 1f),
