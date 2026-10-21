@@ -37,36 +37,45 @@ jobs:
       - name: Build Debug APK
         run: gradle assembleDebug --stacktrace --no-daemon --no-configuration-cache
 
-      - name: Extract Version Name
+      - name: Generate Version Tag
         id: get_version
         run: |
-          # Mengambil nilai versionName dari app/build.gradle.kts
-          VERSION=$(grep -oP 'val versionNameValue = "\K[^"]+' app/build.gradle.kts)
+          # Hitung tanggal berdasarkan Waktu Indonesia Barat (WIB)
+          YEAR=$(TZ='Asia/Jakarta' date +%Y)
+          MONTH=$(TZ='Asia/Jakarta' date +%m)
+          DAY=$(TZ='Asia/Jakarta' date +%d)
+          
+          # Logika sama dengan build.gradle.kts
+          START_YEAR=2026
+          START_MONTH=10
+          
+          MONTHS_SINCE_START=$(( (YEAR - START_YEAR) * 12 + (MONTH - START_MONTH) ))
+          MONTH_INDEX=$(( MONTHS_SINCE_START + 1 ))
+          if [ $MONTH_INDEX -lt 1 ]; then MONTH_INDEX=1; fi
+          
+          # Gunakan run_number sebagai version code
+          COMMIT_NUM=${{ github.run_number }}
+          
+          VERSION="v.$MONTH_INDEX.$DAY.$COMMIT_NUM"
+          
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "✅ Detected Version: $VERSION"
-
-      - name: Check for FORCE_UPDATE in Commit
-        id: check_force
-        run: |
-          # Jika commit message mengandung [force], otomatis jadikan Force Update
-          if [[ "${{ github.event.head_commit.message }}" == *"[force]"* ]]; then
-            echo "NOTES=FORCE_UPDATE=true" >> $GITHUB_OUTPUT
-            echo "✅ Force Update AKTIF"
-          else
-            echo "NOTES=Auto-release dari commit terbaru." >> $GITHUB_OUTPUT
-            echo "ℹ️ Release Normal"
-          fi
 
       - name: Create GitHub Release & Upload APK
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ steps.get_version.outputs.VERSION }}"
-          NOTES="${{ steps.check_force.outputs.NOTES }}"
+          NOTES="Auto-release dari commit terbaru."
           
+          # Deteksi Force Update dari pesan commit
+          if [[ "${{ github.event.head_commit.message }}" == *"[force]"* ]]; then
+            NOTES="FORCE_UPDATE=true\n\nAuto-release dari commit terbaru."
+          fi
+
           echo "🚀 Membuat Release untuk tag: $VERSION"
           
-          # Hapus release lama jika ada (opsional, agar tidak error saat re-run)
+          # Hapus release lama jika ada (jika re-run)
           gh release delete "$VERSION" --yes 2>/dev/null || true
           
           # Buat release baru dan upload APK
@@ -74,3 +83,5 @@ jobs:
             --title "Home.io $VERSION" \
             --notes "$NOTES" \
             app/build/outputs/apk/debug/*.apk
+            
+          echo "✅ Release $VERSION berhasil dibuat!"
