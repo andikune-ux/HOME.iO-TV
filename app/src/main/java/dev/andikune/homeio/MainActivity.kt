@@ -14,6 +14,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -52,7 +54,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.background
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -61,10 +63,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.platform.testTag
 import dev.andikune.homeio.domain.model.SettingsConfig
 import dev.andikune.homeio.domain.model.WeatherInfo
 import dev.andikune.homeio.presentation.components.GlassColors
@@ -106,19 +104,16 @@ class MainActivity : ComponentActivity() {
             var isSettingsOpen by remember { mutableStateOf(false) }
             var showOnboarding by remember { mutableStateOf(false) }
 
-            // FIX #49: Load crash log ASYNC
             LaunchedEffect(Unit) {
                 crashLog = withContext(Dispatchers.IO) { CrashHandler.getLastCrashLog(context) }
             }
 
-            // FIX #3, #23: Onboarding permission check
             LaunchedEffect(Unit) {
                 if (!OnboardingPrefs.isCompleted(context)) {
                     showOnboarding = true
                 }
             }
 
-            // OTA state
             var updateInfo by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
             var showUpdateDialog by remember { mutableStateOf(false) }
             var downloadProgress by remember { mutableFloatStateOf(0f) }
@@ -130,7 +125,6 @@ class MainActivity : ComponentActivity() {
                 initial = SettingsConfig()
             )
 
-            // FIX #12: Respect screensaver disable (0 = disabled)
             screensaverTimeoutMs = if (!config.screensaverEnabled) 0L
                 else (config.screensaverTimeoutMinutes * 60 * 1000L).coerceAtLeast(0L)
 
@@ -138,7 +132,6 @@ class MainActivity : ComponentActivity() {
                 initial = emptyList()
             )
 
-            // FIX #50: Debounce refreshApps (min 5 detik antar refresh)
             var lastRefreshTime by remember { mutableLongStateOf(0L) }
             LaunchedEffect(Unit) {
                 if (System.currentTimeMillis() - lastRefreshTime > 5000L) {
@@ -147,7 +140,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // FIX #53: Weather — retry setiap splashFinished
             var weatherInfo by remember { mutableStateOf<WeatherInfo?>(null) }
             LaunchedEffect(isSplashFinished) {
                 if (!isSplashFinished) return@LaunchedEffect
@@ -170,14 +162,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // FIX #11, #19: Cek update + restore download state setelah splash selesai
             LaunchedEffect(isSplashFinished) {
                 if (!isSplashFinished) return@LaunchedEffect
 
-                // FIX #19: Restore state dari Service kalau app di-kill saat download
                 val savedPath = UpdateDownloadService.getCompletedFilePath(context)
                 if (savedPath != null) {
-                    // Ada APK sudah terunduh tapi belum di-install
                     val info = try { UpdateManager.checkForUpdate() } catch (_: Exception) { null }
                     if (info?.available == true) {
                         updateInfo = info
@@ -189,7 +178,6 @@ class MainActivity : ComponentActivity() {
                     return@LaunchedEffect
                 }
 
-                // FIX #11: markChecked SETELAH API success (bukan sebelumnya)
                 if (!UpdatePrefs.shouldCheck(context)) return@LaunchedEffect
                 try {
                     val info = UpdateManager.checkForUpdate()
@@ -203,7 +191,6 @@ class MainActivity : ComponentActivity() {
                 } catch (_: Exception) {}
             }
 
-            // Broadcast receiver OTA
             DisposableEffect(Unit) {
                 val receiver = object : BroadcastReceiver() {
                     override fun onReceive(ctx: Context?, intent: Intent?) {
@@ -217,7 +204,6 @@ class MainActivity : ComponentActivity() {
                                     Toast.makeText(context, "Download selesai — klik INSTALL", Toast.LENGTH_SHORT).show()
                                 }
                                 "ERROR" -> {
-                                    // FIX #2: Reset progress saat error
                                     isDownloading = false; downloadReady = false; isError = true; downloadProgress = 0f
                                     Toast.makeText(context, "Download gagal: ${state.error ?: "unknown"}", Toast.LENGTH_LONG).show()
                                 }
@@ -235,12 +221,10 @@ class MainActivity : ComponentActivity() {
                 onDispose { context.unregisterReceiver(receiver) }
             }
 
-            // FIX #43: Reset timer saat settings screensaver berubah
             LaunchedEffect(screensaverTimeoutMs) {
                 lastUserInteractionTime = System.currentTimeMillis()
             }
 
-            // Screensaver monitor (FIX #12: skip kalau disabled)
             LaunchedEffect(screensaverTimeoutMs) {
                 if (screensaverTimeoutMs <= 0L) return@LaunchedEffect
                 while (true) {
@@ -254,10 +238,8 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // FIX #6: BackHandler mencegah dismiss dialog saat download aktif
             BackHandler(enabled = isSettingsOpen) { isSettingsOpen = false }
 
-            // Render
             when {
                 crashLog != null -> CrashLogScreen(
                     crashLog = crashLog!!,
@@ -283,7 +265,6 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
-            // Update Dialog (FIX #6: no-op back saat download, FIX #46: retry install)
             if (showUpdateDialog && updateInfo != null) {
                 UpdateDialog(
                     info = updateInfo!!,
@@ -293,7 +274,6 @@ class MainActivity : ComponentActivity() {
                     isError = isError,
                     onUpdate = {
                         if (downloadReady || isError) {
-                            // INSTALL atau COBA LAGI
                             if (isError) {
                                 isError = false
                                 downloadProgress = 0f
