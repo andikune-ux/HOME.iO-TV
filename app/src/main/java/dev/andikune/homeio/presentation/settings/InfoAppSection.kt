@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,12 +25,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import dev.andikune.homeio.BuildConfig
 import dev.andikune.homeio.R
 import dev.andikune.homeio.data.AppKnowledge
@@ -78,8 +77,9 @@ fun InfoAppSection() {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // IDENTITAS APP
-        Image(
-            painter = painterResource(id = R.mipmap.ic_launcher),
+        // FIX: Menggunakan AsyncImage (Coil) untuk memuat adaptive icon agar tidak crash
+        AsyncImage(
+            model = R.mipmap.ic_launcher,
             contentDescription = "Icon",
             modifier = Modifier.size(90.dp).clip(RoundedCornerShape(20.dp)).border(2.dp, GlassColors.AccentGlow, RoundedCornerShape(20.dp))
         )
