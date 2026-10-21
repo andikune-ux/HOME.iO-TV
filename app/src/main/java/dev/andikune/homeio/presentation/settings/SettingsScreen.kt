@@ -112,7 +112,8 @@ fun SettingsScreen(
             // PANE KANAN (KONTEN GLASS)
             Box(Modifier.weight(0.72f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp).padding(24.dp)) {
                 AutoFocusPane(paneKey = selectedCategory, modifier = Modifier.fillMaxSize().focusRequester(paneFocusRequester)) {
-                    // FIX: Membungkus dengan Box fillMaxSize agar child tidak mendapat infinite constraints
+                    // FIX: Memberikan batasan lebar (width) yang jelas pada Box induk
+                    // agar komponen seperti LazyRow di dalam Section tidak menyebabkan crash.
                     Box(Modifier.fillMaxSize()) {
                         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                             when (selectedCategory) {
