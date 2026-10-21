@@ -12,29 +12,27 @@ plugins {
 // VERSIONING OTOMATIS HOME.IO
 // Format: v.[bulan_index].[tanggal].[commit]
 // Contoh: v.1.20.14
-//   - Bulan Index  : Oktober 2026 = 1 (naik +1 setiap ganti bulan)
-//   - Tanggal      : Hari ini real-time
-//   - Commit       : GITHUB_RUN_NUMBER (fallback timestamp lokal)
 // ============================================================
 val jakartaTz = TimeZone.getTimeZone("Asia/Jakarta")
 val nowCalendar = Calendar.getInstance(jakartaTz)
 
 val START_YEAR = 2026
-val START_MONTH = 10 // Oktober
+val START_MONTH = 10
 
 val currentYear = nowCalendar.get(Calendar.YEAR)
-val currentMonth = nowCalendar.get(Calendar.MONTH) + 1 // Jan=1
+val currentMonth = nowCalendar.get(Calendar.MONTH) + 1
 val currentDay = nowCalendar.get(Calendar.DAY_OF_MONTH)
 
 val monthsSinceStart = (currentYear - START_YEAR) * 12 + (currentMonth - START_MONTH)
 val monthIndex = (monthsSinceStart + 1).coerceAtLeast(1)
 
 val githubRunNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
-val fallbackCommit = ((System.currentTimeMillis() / 1000) % 10000).toInt()
-val commitNumber = githubRunNumber ?: fallbackCommit
 
-val autoVersionName = "v.$monthIndex.$currentDay.$commitNumber"
-val autoVersionCode = monthIndex * 1_000_000 + currentDay * 10_000 + (commitNumber % 10_000)
+// FIX #21: versionCode tidak drop. Pakai commitNumber murni (tidak modulo 10.000)
+val versionCodeValue: Int = githubRunNumber
+    ?: ((System.currentTimeMillis() / 1000) % 2_000_000_000L).toInt()
+
+val versionNameValue = "v.$monthIndex.$currentDay.$versionCodeValue"
 
 android {
     namespace = "dev.andikune.homeio"
@@ -44,15 +42,11 @@ android {
         applicationId = "dev.andikune.homeio"
         minSdk = 24
         targetSdk = 35
-        versionCode = autoVersionCode
-        versionName = autoVersionName
-        buildConfigField("String", "VERSION_NAME", "\"$autoVersionName\"")
-        buildConfigField("int", "VERSION_CODE", "$autoVersionCode")
+        versionCode = versionCodeValue
+        versionName = versionNameValue
+        // FIX #4: buildConfigField VERSION_NAME dihapus (redundan dengan versionName)
     }
 
-    // ============================================================
-    // JANGAN UBAH BLOK SIGNING CONFIGS INI!
-    // ============================================================
     signingConfigs {
         create("debugConfig") {
             storeFile = file("${rootDir}/debug.keystore")
