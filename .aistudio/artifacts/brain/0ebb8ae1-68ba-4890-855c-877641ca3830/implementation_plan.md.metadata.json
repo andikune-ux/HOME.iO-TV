@@ -1,0 +1,6 @@
+{
+  "summary":  "Rencana perbaikan alur CI/CD GitHub Actions (.github/workflows/build.yml) untuk mengaktifkan pengunggahan file APK otomatis ke GitHub Actions Artifacts agar tombol download muncul setelah build selesai. Dilengkapi panduan penyesuaian file workflow tanpa merusak struktur kode Android TV launcher yang sudah ada.",
+  "updatedAt":  "2026-10-21T13:35:49.311161155Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

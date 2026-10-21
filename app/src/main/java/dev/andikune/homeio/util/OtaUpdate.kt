@@ -62,7 +62,13 @@ object UpdateManager {
     suspend fun checkForUpdate(): UpdateInfo = withContext(Dispatchers.IO) {
         val current = try { BuildConfig.VERSION_NAME } catch (e: Exception) { "v.1.1.1" }
         try {
-            val conn = (URL(GITHUB_API).openConnection() as HttpURLConnection).apply { requestMethod = "GET"; setRequestProperty("Accept", "application/vnd.github.v3+json"); connectTimeout = 10000; readTimeout = 10000 }
+            val conn = (URL(GITHUB_API).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                setRequestProperty("Accept", "application/vnd.github.v3+json")
+                setRequestProperty("User-Agent", "HomeIO-TV-Launcher/1.0")
+                connectTimeout = 15000
+                readTimeout = 15000
+            }
             if (conn.responseCode == 403) return@withContext noUpdate(current, "RATE_LIMIT")
             if (conn.responseCode == 404) return@withContext noUpdate(current, "NOT_FOUND")
             if (conn.responseCode != 200) return@withContext noUpdate(current, "HTTP_${conn.responseCode}")
@@ -74,16 +80,35 @@ object UpdateManager {
             val isNewer = compareVersions(latest, current) > 0
             val isForce = isNewer && notes.lines().any { it.trim().uppercase().startsWith("FORCE_UPDATE=TRUE") }
             var dlUrl: String? = null
-            json.optJSONArray("assets")?.let { arr -> for (i in 0 until arr.length()) { val name = arr.getJSONObject(i).optString("name", ""); if (name.endsWith(".apk", true)) { dlUrl = arr.getJSONObject(i).getString("browser_download_url"); break } } }
+            json.optJSONArray("assets")?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    val name = arr.getJSONObject(i).optString("name", "")
+                    if (name.endsWith(".apk", true)) {
+                        dlUrl = arr.getJSONObject(i).getString("browser_download_url")
+                        break
+                    }
+                }
+            }
             UpdateInfo(isNewer, current, latest, dlUrl, notes, isForce)
-        } catch (e: Exception) { noUpdate(current, "NETWORK") }
+        } catch (e: Exception) {
+            noUpdate(current, "NETWORK: ${e.message}")
+        }
     }
+
     private fun compareVersions(v1: String, v2: String): Int {
-        fun parse(v: String): List<Int> = v.removePrefix("v").removePrefix("V").substringBefore("-").split(".").filter { it.isNotBlank() }.mapNotNull { it.toIntOrNull() }
+        fun parse(v: String): List<Int> {
+            val cleaned = v.trim().trimStart('v', 'V', '.', ' ').substringBefore("-")
+            return cleaned.split(".").filter { it.isNotBlank() }.mapNotNull { it.toIntOrNull() }
+        }
         val p1 = parse(v1); val p2 = parse(v2)
-        for (i in 0 until maxOf(p1.size, p2.size)) { val a = p1.getOrElse(i) { 0 }; val b = p2.getOrElse(i) { 0 }; if (a != b) return a - b }
+        for (i in 0 until maxOf(p1.size, p2.size)) {
+            val a = p1.getOrElse(i) { 0 }
+            val b = p2.getOrElse(i) { 0 }
+            if (a != b) return a - b
+        }
         return 0
     }
+
     private fun noUpdate(cur: String, errorType: String? = null) = UpdateInfo(false, cur, cur, null, null, false, errorType)
 }
 
@@ -102,38 +127,154 @@ object UpdatePrefs {
 object ApkDownloader {
     private const val FOLDER = "HomeiO/Pembaharuan"
     data class State(val isDownloading: Boolean = false, val progress: Float = 0f, val savedFilePath: String? = null, val error: String? = null, val isFinished: Boolean = false)
-    private fun getDir(ctx: Context): File {
-        val externalDir = File(Environment.getExternalStorageDirectory(), FOLDER)
-        if (!externalDir.exists()) externalDir.mkdirs()
-        return if (externalDir.canWrite()) externalDir else File(ctx.getExternalFilesDir(null), FOLDER).also { if (!it.exists()) it.mkdirs() }
+
+    fun getDir(ctx: Context): File {
+        val base = ctx.getExternalFilesDir(null) ?: ctx.filesDir
+        val dir = File(base, FOLDER)
+        if (!dir.exists()) dir.mkdirs()
+        return dir
     }
-    fun isUsingFallbackPath(ctx: Context): Boolean = !File(Environment.getExternalStorageDirectory(), FOLDER).canWrite()
+
+    fun isUsingFallbackPath(ctx: Context): Boolean = false
+
     fun download(ctx: Context, urlStr: String, fileName: String): Flow<State> = flow {
         emit(State(isDownloading = true))
         try {
-            val dir = getDir(ctx); dir.listFiles()?.filter { it.name.endsWith(".part") }?.forEach { it.delete() }
+            val dir = getDir(ctx)
+            dir.listFiles()?.filter { it.name.endsWith(".part") }?.forEach { it.delete() }
             val target = File(dir, fileName)
-            if (target.exists() && isValid(ctx, target)) { emit(State(isFinished = true, savedFilePath = target.absolutePath, progress = 1f)); return@flow }
+            if (target.exists() && isValid(ctx, target)) {
+                emit(State(isFinished = true, savedFilePath = target.absolutePath, progress = 1f))
+                return@flow
+            }
             if (target.exists()) target.delete()
-            val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply { connectTimeout = 30000; readTimeout = 60000; instanceFollowRedirects = true }
-            var respCode = conn.responseCode; var activeConn = conn
-            if (respCode == HttpURLConnection.HTTP_MOVED_TEMP || respCode == HttpURLConnection.HTTP_MOVED_PERM) { val redirectUrl = conn.getHeaderField("Location"); if (redirectUrl != null) { activeConn = (URL(redirectUrl).openConnection() as HttpURLConnection).apply { connectTimeout = 30000; readTimeout = 60000 }; respCode = activeConn.responseCode } }
-            if (respCode != HttpURLConnection.HTTP_OK) { emit(State(error = "Server Error $respCode")); return@flow }
-            val input = activeConn.inputStream; val total = activeConn.contentLengthLong
+
+            var currentUrl = urlStr
+            var redirectHops = 0
+            var activeConn: HttpURLConnection
+            var respCode: Int
+            while (true) {
+                val urlObj = URL(currentUrl)
+                activeConn = (urlObj.openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 30000
+                    readTimeout = 60000
+                    instanceFollowRedirects = true
+                    setRequestProperty("User-Agent", "HomeIO-TV-Launcher/1.0")
+                    setRequestProperty("Accept", "*/*")
+                }
+                respCode = activeConn.responseCode
+                if (respCode == HttpURLConnection.HTTP_MOVED_TEMP ||
+                    respCode == HttpURLConnection.HTTP_MOVED_PERM ||
+                    respCode == HttpURLConnection.HTTP_SEE_OTHER ||
+                    respCode == 307 || respCode == 308) {
+                    val redirectUrl = activeConn.getHeaderField("Location")
+                    activeConn.disconnect()
+                    if (redirectUrl != null && redirectHops < 7) {
+                        currentUrl = if (redirectUrl.startsWith("http://") || redirectUrl.startsWith("https://")) {
+                            redirectUrl
+                        } else {
+                            URL(urlObj, redirectUrl).toString()
+                        }
+                        redirectHops++
+                        continue
+                    }
+                }
+                break
+            }
+
+            if (respCode != HttpURLConnection.HTTP_OK) {
+                emit(State(error = "Server Error $respCode"))
+                return@flow
+            }
+
+            val input = activeConn.inputStream
+            val total = activeConn.contentLengthLong
             val partFile = File(target.parentFile, "${target.name}.part")
-            FileOutputStream(partFile).use { out -> val buf = ByteArray(8192); var read: Int; var totalRead = 0L; while (input.read(buf).also { read = it } != -1) { out.write(buf, 0, read); totalRead += read; emit(State(isDownloading = true, progress = if (total > 0) totalRead.toFloat() / total else 0f)) } }
-            input.close(); activeConn.disconnect()
-            if (!partFile.renameTo(target)) { partFile.delete(); throw IllegalStateException("Gagal menyimpan APK") }
+            FileOutputStream(partFile).use { out ->
+                val buf = ByteArray(16384)
+                var read: Int
+                var totalRead = 0L
+                while (input.read(buf).also { read = it } != -1) {
+                    out.write(buf, 0, read)
+                    totalRead += read
+                    emit(State(isDownloading = true, progress = if (total > 0) totalRead.toFloat() / total else 0f))
+                }
+            }
+            input.close()
+            activeConn.disconnect()
+
+            if (!partFile.renameTo(target)) {
+                partFile.delete()
+                throw IllegalStateException("Gagal menyimpan APK")
+            }
             emit(State(isFinished = true, savedFilePath = target.absolutePath, progress = 1f))
-        } catch (e: Exception) { emit(State(error = e.message ?: "Download gagal")) }
+        } catch (e: Exception) {
+            emit(State(error = e.message ?: "Download gagal"))
+        }
     }.flowOn(Dispatchers.IO)
-    fun getList(ctx: Context): List<File> = getDir(ctx).listFiles()?.filter { it.name.endsWith(".apk") }?.sortedByDescending { it.lastModified() } ?: emptyList()
+
+    fun getList(ctx: Context): List<File> {
+        val list = mutableListOf<File>()
+        getDir(ctx).listFiles()?.filter { it.name.endsWith(".apk") }?.let { list.addAll(it) }
+        try {
+            val legacy = File(Environment.getExternalStorageDirectory(), FOLDER)
+            if (legacy.exists()) {
+                legacy.listFiles()?.filter { it.name.endsWith(".apk") }?.let { list.addAll(it) }
+            }
+        } catch (_: Exception) {}
+        return list.distinctBy { it.absolutePath }.sortedByDescending { it.lastModified() }
+    }
+
     fun delete(path: String): Boolean = try { File(path).delete() } catch (e: Exception) { false }
-    fun isValid(ctx: Context, file: File): Boolean = if (file.length() < 1024) false else try { ctx.packageManager.getPackageArchiveInfo(file.absolutePath, 0)?.packageName == ctx.packageName } catch (e: Exception) { false }
+
+    fun isValid(ctx: Context, file: File): Boolean {
+        if (!file.exists() || file.length() < 1024 * 1024) return false
+        val isZip = try {
+            file.inputStream().use { input ->
+                val header = ByteArray(4)
+                input.read(header) == 4 &&
+                    header[0] == 0x50.toByte() &&
+                    header[1] == 0x4B.toByte() &&
+                    header[2] == 0x03.toByte() &&
+                    header[3] == 0x04.toByte()
+            }
+        } catch (_: Exception) { false }
+        if (!isZip) return false
+
+        return try {
+            val pkg = ctx.packageManager.getPackageArchiveInfo(file.absolutePath, 0)
+            if (pkg != null) {
+                pkg.packageName == ctx.packageName
+            } else {
+                true
+            }
+        } catch (_: Exception) {
+            true
+        }
+    }
+
     fun install(ctx: Context, path: String): Boolean {
-        val file = File(path); if (!file.exists() || !isValid(ctx, file)) return false
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !ctx.packageManager.canRequestPackageInstalls()) { try { ctx.startActivity(Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply { data = Uri.parse("package:${ctx.packageName}"); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) } catch (_: Exception) {}; return false }
-        return try { val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file); ctx.startActivity(Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, "application/vnd.android.package-archive"); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION) }); true } catch (e: Exception) { false }
+        val file = File(path)
+        if (!file.exists() || !isValid(ctx, file)) return false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !ctx.packageManager.canRequestPackageInstalls()) {
+            try {
+                ctx.startActivity(Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                    data = Uri.parse("package:${ctx.packageName}")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                })
+            } catch (_: Exception) {}
+            return false
+        }
+        return try {
+            val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
+            ctx.startActivity(Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            })
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
 }
 

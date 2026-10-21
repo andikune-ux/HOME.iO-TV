@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <!-- FIX #17: Scope dibatasi ke folder HomeiO/ saja, tidak seluruh /sdcard/ -->
+    <!-- Storage paths for FileProvider -->
     <external-path name="homeio_external" path="HomeiO/" />
+    <external-path name="homeio_external_all" path="." />
     <external-files-path name="homeio_files" path="HomeiO/" />
+    <external-files-path name="homeio_files_all" path="." />
+    <files-path name="homeio_internal" path="." />
     <cache-path name="homeio_cache" path="." />
 </paths>
