@@ -13,18 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -36,15 +25,12 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -57,10 +43,14 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import dev.andikune.homeio.presentation.components.GlassColors
+import dev.andikune.homeio.presentation.components.NeonFocusBorder
+import kotlinx.coroutines.delay
 
 /**
  * OnboardingPermissionDialog — Dialog izin runtime saat pertama buka.
  * Fix Bug #3 (MANAGE_EXTERNAL_STORAGE), #23 (POST_NOTIFICATIONS), #46 (install).
+ * 
+ * FIX UI: Menambahkan NeonFocusBorder dan FocusRequester agar D-Pad fokus terlihat jelas.
  */
 @Composable
 fun OnboardingPermissionDialog(
@@ -88,6 +78,13 @@ fun OnboardingPermissionDialog(
     ) { refresh++ }
 
     val allGranted = hasStorage && hasNotif && hasInstall
+
+    // FIX: Auto-Focus ke tombol pertama saat dialog dibuka
+    val firstFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        delay(400)
+        runCatching { firstFocusRequester.requestFocus() }
+    }
 
     Dialog(
         onDismissRequest = { if (allGranted) onDismiss() },
@@ -121,6 +118,7 @@ fun OnboardingPermissionDialog(
                     title = "Akses File",
                     desc = "Untuk simpan Backup & download Update ke /sdcard/HomeiO/",
                     granted = hasStorage,
+                    modifier = Modifier.focusRequester(firstFocusRequester),
                     onGrant = {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                             try {
@@ -176,25 +174,30 @@ fun OnboardingPermissionDialog(
                 Spacer(Modifier.height(12.dp))
 
                 // Tombol Selesai
-                var isFocused by remember { mutableStateOf(false) }
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (allGranted) GlassColors.AccentGreen else GlassColors.SurfaceDark)
-                        .border(if (isFocused) 2.dp else 0.dp, Color.White, RoundedCornerShape(12.dp))
-                        .onFocusChanged { isFocused = it.isFocused }
-                        .focusable()
-                        .clickable {
-                            if (allGranted) onDismiss() else refresh++
-                        }
-                        .padding(14.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        if (allGranted) "MULAI GUNAKAN HOME.IO" else "CEK ULANG IZIN",
-                        color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp
-                    )
+                var isFocusedBtn by remember { mutableStateOf(false) }
+                
+                // FIX: Gunakan NeonFocusBorder
+                NeonFocusBorder(focused = isFocusedBtn, cornerRadius = 12.dp, borderWidth = 4.dp, modifier = Modifier.fillMaxWidth()) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isFocusedBtn) GlassColors.AccentGlow else if (allGranted) GlassColors.AccentGreen else GlassColors.SurfaceDark)
+                            .onFocusChanged { isFocusedBtn = it.isFocused }
+                            .focusable()
+                            .clickable {
+                                if (allGranted) onDismiss() else refresh++
+                            }
+                            .padding(14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            if (allGranted) "MULAI GUNAKAN HOME.IO" else "CEK ULANG IZIN",
+                            color = if (isFocusedBtn) GlassColors.DeepBackground else Color.White, 
+                            fontWeight = FontWeight.Bold, 
+                            fontSize = 13.sp
+                        )
+                    }
                 }
             }
         }
@@ -207,39 +210,39 @@ private fun PermissionRow(
     title: String,
     desc: String,
     granted: Boolean,
+    modifier: Modifier = Modifier,
     onGrant: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (granted) GlassColors.AccentGreen.copy(alpha = 0.15f) else GlassColors.GlassTint)
-            .border(
-                if (focused) 2.dp else 1.dp,
-                if (granted) GlassColors.AccentGreen else GlassColors.GlassBorder,
-                RoundedCornerShape(12.dp)
+    
+    // FIX: Gunakan NeonFocusBorder
+    NeonFocusBorder(focused = focused, cornerRadius = 12.dp, borderWidth = 4.dp, modifier = modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(if (focused) GlassColors.GlassTintLighter else if (granted) GlassColors.AccentGreen.copy(alpha = 0.15f) else GlassColors.GlassTint)
+                .onFocusChanged { focused = it.isFocused }
+                .focusable()
+                .clickable { if (!granted) onGrant() }
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                if (granted) Icons.Default.CheckCircle else icon, null,
+                tint = if (granted) GlassColors.AccentGreen else GlassColors.AccentGlow,
+                modifier = Modifier.size(28.dp)
             )
-            .onFocusChanged { focused = it.isFocused }
-            .focusable()
-            .clickable { if (!granted) onGrant() }
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            if (granted) Icons.Default.CheckCircle else icon, null,
-            tint = if (granted) GlassColors.AccentGreen else GlassColors.AccentGlow,
-            modifier = Modifier.size(28.dp)
-        )
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, color = GlassColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            Text(desc, color = GlassColors.TextSecondary, fontSize = 11.sp)
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, color = GlassColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Text(desc, color = GlassColors.TextSecondary, fontSize = 11.sp)
+            }
+            Text(
+                if (granted) "✓ OK" else "BERI",
+                color = if (granted) GlassColors.AccentGreen else GlassColors.AccentGlow,
+                fontWeight = FontWeight.Bold, fontSize = 12.sp
+            )
         }
-        Text(
-            if (granted) "✓ OK" else "BERI",
-            color = if (granted) GlassColors.AccentGreen else GlassColors.AccentGlow,
-            fontWeight = FontWeight.Bold, fontSize = 12.sp
-        )
     }
 }
