@@ -21,6 +21,12 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # TAMBAHAN: Membersihkan cache Gradle agar tidak terjadi error aneh (seperti corrupt file)
+      - name: Clean Gradle Cache
+        run: |
+          rm -rf ~/.gradle/caches/
+          rm -rf ~/.gradle/wrapper/
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
