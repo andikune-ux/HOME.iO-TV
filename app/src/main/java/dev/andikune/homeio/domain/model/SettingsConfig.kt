@@ -6,20 +6,20 @@ import kotlinx.serialization.Serializable
 data class SettingsConfig(
     // === WALLPAPER ===
     val wallpaperPath: String? = null,
-    val wallpaperType: String = "IMAGE", // IMAGE or VIDEO
-    val wallpaperScaleMode: String = "FILL", // FIT, FILL, ZOOM, CROP
+    val wallpaperType: String = "IMAGE",
+    val wallpaperScaleMode: String = "FILL",
 
     // === FAVORITES ===
     val favoritePackages: List<String> = emptyList(),
 
     // === BAHASA & UMUM ===
     val languageCode: String = "in",
-    val timeFormat: String = "24H", // "24H" or "12H"  — NEW
-    val showSeconds: Boolean = true, // — NEW
+    val timeFormat: String = "24H",
+    val showSeconds: Boolean = true,
     val isNtpCheckEnabled: Boolean = true,
 
     // === SCREENSAVER ===
-    val screensaverEnabled: Boolean = true, // — NEW
+    val screensaverEnabled: Boolean = true,
     val screensaverTimeoutMinutes: Int = 5,
 
     // === PERFORMA ===
@@ -27,5 +27,14 @@ data class SettingsConfig(
     val isAutoRamBoostEnabled: Boolean = true,
 
     // === CUACA ===
-    val weatherLocation: String = "Jakarta, ID" // — NEW
+    val weatherLocation: String = "Jakarta, ID",
+
+    // === KIOSK & WATCHDOG (BARU) ===
+    val isKioskModeEnabled: Boolean = false,
+    val isAutoStartOnBoot: Boolean = true,
+
+    // === TAMPILAN TV (BARU) ===
+    val safeAreaPercent: Float = 2f, // 0f - 10f
+    val brightnessMode: String = "MANUAL", // MANUAL, AUTO, SCHEDULE
+    val manualBrightness: Int = 100 // 0 - 100
 )
