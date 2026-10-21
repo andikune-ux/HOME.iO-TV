@@ -29,6 +29,11 @@ import dev.andikune.homeio.domain.model.SettingsConfig
 import dev.andikune.homeio.presentation.components.GlassColors
 import dev.andikune.homeio.presentation.components.NeonFocusBorder
 import dev.andikune.homeio.presentation.components.TvToggle
+import dev.andikune.homeio.presentation.wallpaper.FileManagerDialog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 @Composable
 fun WallpaperSection(
@@ -36,15 +41,13 @@ fun WallpaperSection(
     onUpdate: (SettingsConfig) -> Unit
 ) {
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-    // Launcher untuk pilih gambar dari galeri
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        uri?.let { onUpdate(settings.copy(wallpaperPath = it.toString(), wallpaperType = "IMAGE")) }
-    }
+    var showFileManager by remember { mutableStateOf(false) }
+    var pickerModeIsVideo by remember { mutableStateOf(false) }
 
-    // Launcher untuk pilih video dari galeri
-    val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        uri?.let { onUpdate(settings.copy(wallpaperPath = it.toString(), wallpaperType = "VIDEO")) }
+    val galleryPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let { onUpdate(settings.copy(wallpaperPath = it.toString(), wallpaperType = if (pickerModeIsVideo) "VIDEO" else "IMAGE")) }
     }
 
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -57,7 +60,6 @@ fun WallpaperSection(
             }
         }
 
-        // Tipe Wallpaper
         TvToggle(
             label = "Gunakan Video Sebagai Wallpaper",
             description = "Jika aktif, wallpaper akan diputar sebagai video (ExoPlayer)",
@@ -67,19 +69,24 @@ fun WallpaperSection(
             }
         )
 
-        // Tombol Pilih File
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             ActionButton(
                 icon = Icons.Default.PhotoLibrary,
-                label = "PILIH GAMBAR",
+                label = "GALERI SISTEM",
                 modifier = Modifier.weight(1f),
-                onClick = { imagePicker.launch("image/*") }
+                onClick = { 
+                    pickerModeIsVideo = (settings.wallpaperType == "VIDEO")
+                    if (pickerModeIsVideo) galleryPicker.launch("video/*") else galleryPicker.launch("image/*")
+                }
             )
             ActionButton(
                 icon = Icons.Default.Folder,
-                label = "PILIH VIDEO",
+                label = "FILE MANAGER (TV)",
                 modifier = Modifier.weight(1f),
-                onClick = { videoPicker.launch("video/*") }
+                onClick = { 
+                    pickerModeIsVideo = (settings.wallpaperType == "VIDEO")
+                    showFileManager = true 
+                }
             )
         }
 
@@ -90,7 +97,6 @@ fun WallpaperSection(
             )
         }
 
-        // Mode Skala
         Text("MODE SKALA", color = GlassColors.TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("FIT", "FILL", "ZOOM", "CROP").forEach { mode ->
@@ -103,6 +109,21 @@ fun WallpaperSection(
                 )
             }
         }
+    }
+
+    if (showFileManager) {
+        FileManagerDialog(
+            onFileSelected = { file: File ->
+                showFileManager = false
+                scope.launch {
+                    onUpdate(settings.copy(
+                        wallpaperPath = file.absolutePath, 
+                        wallpaperType = if (pickerModeIsVideo) "VIDEO" else "IMAGE"
+                    ))
+                }
+            },
+            onDismiss = { showFileManager = false }
+        )
     }
 }
 
@@ -121,7 +142,7 @@ private fun ActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, 
         ) {
             Icon(icon, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
-            Text(label, color = GlassColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            Text(label, color = GlassColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
         }
     }
 }
