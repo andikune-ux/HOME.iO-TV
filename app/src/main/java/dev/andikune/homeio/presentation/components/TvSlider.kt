@@ -2,6 +2,7 @@ package dev.andikune.homeio.presentation.components
 
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -67,7 +68,9 @@ fun TvSlider(
         val nextVal = if (steps > 0) {
             val stepIdx = ((rawNew - valueRange.start) / stepSize).roundToInt()
             (valueRange.start + stepIdx * stepSize).coerceIn(valueRange.start, valueRange.endInclusive)
-        } else rawNew.coerceIn(valueRange.start, valueRange.endInclusive)
+        } else {
+            rawNew.coerceIn(valueRange.start, valueRange.endInclusive)
+        }
         onValueChange(nextVal)
     }
 
@@ -76,118 +79,223 @@ fun TvSlider(
         val nextVal = if (steps > 0) {
             val stepIdx = ((rawNew - valueRange.start) / stepSize).roundToInt()
             (valueRange.start + stepIdx * stepSize).coerceIn(valueRange.start, valueRange.endInclusive)
-        } else rawNew.coerceIn(valueRange.start, valueRange.endInclusive)
+        } else {
+            rawNew.coerceIn(valueRange.start, valueRange.endInclusive)
+        }
         onValueChange(nextVal)
     }
 
     val displayValue = formatter?.invoke(value) ?: "${value.toInt()}$unit"
 
-    NeonFocusBorder(
-        focused = isFocused,
-        pressed = isSliderActive,
-        cornerRadius = 14.dp,
-        borderWidth = 3.5.dp,
-        modifier = modifier.fillMaxWidth()
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (isSliderActive) Color(0x33A5D6A7) else Color(0x22000000))
+            .border(
+                width = if (isSliderActive) 2.dp else 1.dp,
+                color = if (isSliderActive) GlassColors.AccentGreen else GlassColors.GlassBorder,
+                shape = RoundedCornerShape(14.dp)
+            )
+            .onFocusChanged {
+                isFocused = it.isFocused
+                if (!it.isFocused) isSliderActive = false
+            }
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown) {
+                    val keyCode = event.key.nativeKeyCode
+                    when {
+                        event.key == Key.DirectionCenter ||
+                                event.key == Key.Enter ||
+                                event.key == Key.NumPadEnter ||
+                                keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER ||
+                                keyCode == AndroidKeyEvent.KEYCODE_ENTER -> {
+                            isSliderActive = !isSliderActive
+                            true
+                        }
+                        event.key == Key.DirectionLeft || keyCode == AndroidKeyEvent.KEYCODE_DPAD_LEFT -> {
+                            isSliderActive = true
+                            slideLeft()
+                            true
+                        }
+                        event.key == Key.DirectionRight || keyCode == AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> {
+                            isSliderActive = true
+                            slideRight()
+                            true
+                        }
+                        else -> false
+                    }
+                } else false
+            }
+            .focusable()
+            .clickable {
+                isSliderActive = !isSliderActive
+            }
+            .padding(16.dp)
     ) {
-        Column(
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = when {
+                    isSliderActive -> GlassColors.AccentGreen
+                    isFocused -> GlassColors.AccentGlow
+                    else -> GlassColors.TextPrimary
+                }
+            )
+            Text(
+                text = displayValue,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = when {
+                    isSliderActive -> GlassColors.AccentGreen
+                    isFocused -> GlassColors.AccentGlow
+                    else -> GlassColors.TextPrimary
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(if (isSliderActive) GlassColors.AccentGreen.copy(alpha = 0.15f) else GlassColors.GlassTint)
-                .onFocusChanged {
-                    isFocused = it.isFocused
-                    if (!it.isFocused) isSliderActive = false
-                }
-                .onPreviewKeyEvent { event ->
-                    if (event.type == KeyEventType.KeyDown) {
-                        val keyCode = event.key.nativeKeyCode
-                        when {
-                            event.key == Key.DirectionCenter || event.key == Key.Enter || keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER || keyCode == AndroidKeyEvent.KEYCODE_ENTER -> {
-                                isSliderActive = !isSliderActive; true
+                .height(32.dp)
+                .pointerInput(valueRange) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        isSliderActive = true
+
+                        val initialFraction = (down.position.x / size.width).coerceIn(0f, 1f)
+                        onValueChange(valueRange.start + initialFraction * (valueRange.endInclusive - valueRange.start))
+                        down.consume()
+
+                        var pointer = down
+                        while (pointer.pressed) {
+                            val event = awaitPointerEvent()
+                            pointer = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (pointer.positionChanged()) {
+                                val fraction = (pointer.position.x / size.width).coerceIn(0f, 1f)
+                                onValueChange(valueRange.start + fraction * (valueRange.endInclusive - valueRange.start))
+                                pointer.consume()
                             }
-                            event.key == Key.DirectionLeft || keyCode == AndroidKeyEvent.KEYCODE_DPAD_LEFT -> {
-                                isSliderActive = true; slideLeft(); true
-                            }
-                            event.key == Key.DirectionRight || keyCode == AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> {
-                                isSliderActive = true; slideRight(); true
-                            }
-                            else -> false
                         }
-                    } else false
-                }
-                .focusable()
-                .clickable { isSliderActive = !isSliderActive }
-                .padding(16.dp)
+                    }
+                },
+            contentAlignment = Alignment.CenterStart
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = label, fontSize = 15.sp, fontWeight = FontWeight.Bold,
-                    color = when { isSliderActive -> GlassColors.AccentGreen; isFocused -> GlassColors.AccentGlow; else -> GlassColors.TextPrimary }
-                )
-                Text(
-                    text = displayValue, fontSize = 17.sp, fontWeight = FontWeight.Bold,
-                    color = when { isSliderActive -> GlassColors.AccentGreen; isFocused -> GlassColors.AccentGlow; else -> GlassColors.TextPrimary }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(32.dp)
-                    .pointerInput(valueRange) {
-                        awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = false)
-                            isSliderActive = true
-                            val initialFraction = (down.position.x / size.width).coerceIn(0f, 1f)
-                            onValueChange(valueRange.start + initialFraction * (valueRange.endInclusive - valueRange.start))
-                            down.consume()
-                            var pointer = down
-                            while (pointer.pressed) {
-                                val event = awaitPointerEvent()
-                                pointer = event.changes.firstOrNull { it.id == down.id } ?: break
-                                if (pointer.positionChanged()) {
-                                    val fraction = (pointer.position.x / size.width).coerceIn(0f, 1f)
-                                    onValueChange(valueRange.start + fraction * (valueRange.endInclusive - valueRange.start))
-                                    pointer.consume()
-                                }
-                            }
-                        }
-                    },
-                contentAlignment = Alignment.CenterStart
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(Color(0x33FFFFFF))
+            )
+
+            val rangeSpan = valueRange.endInclusive - valueRange.start
+            val progressFraction = if (rangeSpan > 0f) {
+                ((value - valueRange.start) / rangeSpan).coerceIn(0.005f, 1f)
+            } else 0.005f
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(progressFraction)
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(if (isSliderActive) GlassColors.AccentGreen else GlassColors.AccentGlow)
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(progressFraction)
+                    .height(28.dp),
+                contentAlignment = Alignment.CenterEnd
             ) {
-                Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(Color(0x33FFFFFF)))
-                val rangeSpan = valueRange.endInclusive - valueRange.start
-                val progressFraction = if (rangeSpan > 0f) ((value - valueRange.start) / rangeSpan).coerceIn(0.005f, 1f) else 0.005f
-                Box(Modifier.fillMaxWidth(progressFraction).height(8.dp).clip(RoundedCornerShape(4.dp)).background(if (isSliderActive) GlassColors.AccentGreen else GlassColors.AccentGlow))
-                Box(Modifier.fillMaxWidth(progressFraction).height(28.dp), contentAlignment = Alignment.CenterEnd) {
-                    Box(Modifier.size(if (isSliderActive) 30.dp else 26.dp).clip(CircleShape).background(when { isSliderActive -> GlassColors.AccentGreen; isFocused -> GlassColors.AccentGlow; else -> GlassColors.TextSecondary }))
+                Box(
+                    modifier = Modifier
+                        .size(if (isSliderActive) 30.dp else 26.dp)
+                        .clip(CircleShape)
+                        .background(
+                            when {
+                                isSliderActive -> GlassColors.AccentGreen
+                                isFocused -> GlassColors.AccentGlowLight
+                                else -> GlassColors.AccentGlow
+                            }
+                        )
+                        .border(3.dp, Color.White, CircleShape)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable {
+                            isSliderActive = true
+                            slideLeft()
+                        }
+                        .padding(4.dp)
+                ) {
+                    Text(
+                        text = "◀",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isSliderActive) GlassColors.AccentGreen else GlassColors.TextSecondary
+                    )
+                }
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (isSliderActive)
+                        "Geser / D-pad KIRI-KANAN untuk atur"
+                    else
+                        "Tekan D-pad KIRI-KANAN / OK untuk atur",
+                    fontSize = 11.sp,
+                    color = if (isSliderActive) GlassColors.AccentGreen else GlassColors.TextSecondary
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable {
+                            isSliderActive = true
+                            slideRight()
+                        }
+                        .padding(4.dp)
+                ) {
+                    Text(
+                        text = "▶",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isSliderActive) GlassColors.AccentGreen else GlassColors.TextSecondary
+                    )
                 }
             }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.clip(RoundedCornerShape(6.dp)).clickable { isSliderActive = true; slideLeft() }.padding(4.dp)) {
-                        Text("◀", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = if (isSliderActive) GlassColors.AccentGreen else GlassColors.TextSecondary)
-                    }
-                    Spacer(Modifier.width(6.dp))
-                    Text(if (isSliderActive) "Geser KIRI-KANAN" else "OK / KIRI-KANAN", fontSize = 11.sp, color = if (isSliderActive) GlassColors.AccentGreen else GlassColors.TextSecondary)
-                    Spacer(Modifier.width(6.dp))
-                    Box(Modifier.clip(RoundedCornerShape(6.dp)).clickable { isSliderActive = true; slideRight() }.padding(4.dp)) {
-                        Text("▶", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = if (isSliderActive) GlassColors.AccentGreen else GlassColors.TextSecondary)
-                    }
-                }
-                if (isSliderActive) {
-                    Box(Modifier.clip(RoundedCornerShape(6.dp)).background(GlassColors.AccentGreen.copy(alpha = 0.3f)).padding(horizontal = 8.dp, vertical = 2.dp)) {
-                        Text("AKTIF", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = GlassColors.AccentGreen)
-                    }
+            if (isSliderActive) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(GlassColors.AccentGreen.copy(alpha = 0.3f))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "AKTIF",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GlassColors.AccentGreen
+                    )
                 }
             }
         }
