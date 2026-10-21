@@ -15,6 +15,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -32,12 +33,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -78,7 +82,6 @@ class MainActivity : ComponentActivity() {
         val appContainer = (application as HomeIoApplication).container
 
         setContent {
-            // FIX BUG #25: Bungkus dengan ResponsiveProvider
             ResponsiveProvider {
                 val context = LocalContext.current
                 val scope = rememberCoroutineScope()
@@ -87,8 +90,6 @@ class MainActivity : ComponentActivity() {
                 var isSplashFinished by remember { mutableStateOf(false) }
                 var isSettingsOpen by remember { mutableStateOf(false) }
                 var showOnboarding by remember { mutableStateOf(false) }
-                
-                // FIX BUG #21: Cek status pernah ditanya atau belum
                 var showLauncherPrompt by remember { 
                     mutableStateOf(!LauncherHelper.isDefaultLauncher(context) && !OnboardingPrefs.hasAskedLauncher(context)) 
                 }
@@ -144,8 +145,6 @@ class MainActivity : ComponentActivity() {
 
                 val installedApps by appContainer.appRepository.getInstalledApps().collectAsState(initial = emptyList())
                 var lastRefreshTime by remember { mutableLongStateOf(0L) }
-                
-                // FIX BUG #26: Hanya refresh jika sudah 10 detik berlalu
                 LaunchedEffect(Unit) {
                     if (System.currentTimeMillis() - lastRefreshTime > 10000L) {
                         lastRefreshTime = System.currentTimeMillis()
@@ -239,7 +238,7 @@ class MainActivity : ComponentActivity() {
                 if (showLauncherPrompt && isSplashFinished && !showOnboarding) {
                     DefaultLauncherDialog(
                         onDismiss = { 
-                            OnboardingPrefs.markLauncherAsked(context) // Tandai sudah ditanya
+                            OnboardingPrefs.markLauncherAsked(context)
                             showLauncherPrompt = false 
                         }
                     )
@@ -293,7 +292,7 @@ class MainActivity : ComponentActivity() {
     
     override fun onDestroy() {
         super.onDestroy()
-        SoundFeedback.release() // FIX BUG #23
+        SoundFeedback.release()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -315,10 +314,9 @@ fun DefaultLauncherDialog(onDismiss: () -> Unit) {
     LaunchedEffect(Unit) { delay(300); runCatching { focusReq.requestFocus() } }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)), contentAlignment = Alignment.Center) {
             Column(
-                Modifier.fillMaxWidth(0.85f).clip(RoundedCornerShape(20.dp))
-                    .background(GlassColors.DeepBackground).border(2.dp, GlassColors.AccentGlow, RoundedCornerShape(20.dp)).padding(24.dp),
+                Modifier.fillMaxWidth(0.85f).liquidGlass(cornerRadius = 20.dp).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Icon(Icons.Default.Home, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(56.dp))
@@ -350,14 +348,41 @@ fun DefaultLauncherDialog(onDismiss: () -> Unit) {
 @Composable
 fun SplashScreen(onFinish: () -> Unit) {
     val alphaAnim = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { alphaAnim.animateTo(1f, tween(400)); delay(600); alphaAnim.animateTo(0f, tween(400)); onFinish() }
-    Box(Modifier.fillMaxSize().background(GlassColors.DeepBackground), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.alpha(alphaAnim.value)) {
-            Box(Modifier.size(110.dp).liquidGlass(cornerRadius = 32.dp, isFocused = true), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Home, "Logo", tint = GlassColors.AccentGlow, modifier = Modifier.size(56.dp))
+    val scaleAnim = remember { Animatable(0.8f) }
+
+    LaunchedEffect(Unit) {
+        alphaAnim.animateTo(1f, tween(600, easing = LinearEasing))
+        scaleAnim.animateTo(1f, tween(600, easing = LinearEasing))
+        delay(800)
+        alphaAnim.animateTo(0f, tween(400, easing = LinearEasing))
+        onFinish()
+    }
+
+    Box(
+        Modifier.fillMaxSize().background(GlassColors.DeepBackgroundGradient),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.alpha(alphaAnim.value).scale(scaleAnim.value)
+        ) {
+            Box(
+                Modifier.size(120.dp).liquidGlass(cornerRadius = 36.dp, isFocused = true),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Home, "Logo", tint = GlassColors.AccentGlow, modifier = Modifier.size(64.dp))
             }
-            Spacer(Modifier.height(20.dp))
-            Text("Home.io", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Spacer(Modifier.height(24.dp))
+            Text(
+                "Home.io",
+                color = Color.White,
+                fontSize = 36.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 2.sp,
+                style = TextStyle(shadow = Shadow(color = GlassColors.AccentGlow, blurRadius = 20f))
+            )
+            Spacer(Modifier.height(8.dp))
+            Text("Liquid Glass Launcher", color = GlassColors.TextSecondary, fontSize = 14.sp, letterSpacing = 1.sp)
         }
     }
 }
@@ -365,7 +390,7 @@ fun SplashScreen(onFinish: () -> Unit) {
 @Composable
 fun CrashLogScreen(crashLog: String, onClearAndReload: () -> Unit) {
     val context = LocalContext.current
-    Box(Modifier.fillMaxSize().background(GlassColors.DeepBackground).padding(24.dp)) {
+    Box(Modifier.fillMaxSize().background(GlassColors.DeepBackgroundGradient).padding(24.dp)) {
         Column(Modifier.fillMaxSize().liquidGlass(cornerRadius = 24.dp).padding(24.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.Warning, null, tint = GlassColors.AccentRed, modifier = Modifier.size(32.dp))
