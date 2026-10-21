@@ -57,9 +57,21 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "✅ Detected Version: $VERSION"
 
+      # Cek apakah token sudah terbaca
+      - name: Verify Token Exists
+        env:
+          TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "❌ RELEASE_TOKEN tidak ditemukan di Secrets!"
+            echo "Silakan tambahkan di Settings → Secrets → Actions → New repository secret"
+            exit 1
+          fi
+          echo "✅ RELEASE_TOKEN ditemukan (panjang: ${#TOKEN} karakter)."
+
       - name: Create and Publish Release
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}  # <-- PAKAI PAT, BUKAN GITHUB_TOKEN
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           VERSION="${{ steps.get_version.outputs.VERSION }}"
           NOTES="Auto-release dari commit terbaru."
