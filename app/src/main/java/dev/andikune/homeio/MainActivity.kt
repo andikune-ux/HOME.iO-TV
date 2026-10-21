@@ -25,10 +25,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -87,8 +84,6 @@ class MainActivity : ComponentActivity() {
             var isSplashFinished by remember { mutableStateOf(false) }
             var isSettingsOpen by remember { mutableStateOf(false) }
             var showOnboarding by remember { mutableStateOf(false) }
-            
-            // State untuk Default Launcher Prompt
             var showLauncherPrompt by remember { mutableStateOf(!LauncherHelper.isDefaultLauncher(context)) }
 
             LaunchedEffect(Unit) {
@@ -108,7 +103,7 @@ class MainActivity : ComponentActivity() {
 
             val config by appContainer.preferencesManager.settingsFlow.collectAsState(initial = SettingsConfig())
 
-            // Kiosk
+            // Kiosk Mode Integration
             LaunchedEffect(config.isKioskModeEnabled) {
                 if (config.isKioskModeEnabled) {
                     KioskManager.enableKiosk(this@MainActivity)
@@ -119,7 +114,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Brightness
+            // Brightness Integration
             LaunchedEffect(config.brightnessMode, config.manualBrightness) {
                 val brightness = if (config.brightnessMode == "MANUAL") (config.manualBrightness / 100f).coerceIn(0.01f, 1f) else 1f
                 runOnUiThread {
@@ -129,7 +124,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Screensaver
+            // Screensaver Timer
             screensaverTimeoutMs = if (!config.screensaverEnabled) 0L else (config.screensaverTimeoutMinutes * 60 * 1000L)
             LaunchedEffect(screensaverTimeoutMs) {
                 if (screensaverTimeoutMs <= 0L) return@LaunchedEffect
@@ -143,7 +138,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Installed Apps
+            // Installed Apps Debounce
             val installedApps by appContainer.appRepository.getInstalledApps().collectAsState(initial = emptyList())
             var lastRefreshTime by remember { mutableLongStateOf(0L) }
             LaunchedEffect(Unit) {
@@ -153,26 +148,29 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Weather
+            // FINAL FIX: Weather Loop 30 Menit (Menggantikan single fetch)
             var weatherInfo by remember { mutableStateOf<WeatherInfo?>(null) }
             LaunchedEffect(isSplashFinished) {
                 if (!isSplashFinished) return@LaunchedEffect
-                try {
-                    val response = appContainer.weatherApiService.getCurrentWeather()
-                    val cw = response.currentWeather
-                    if (cw != null) {
-                        val desc = when (cw.weathercode) {
-                            0 -> "Clear Sky"; 1, 2, 3 -> "Partly Cloudy"; 45, 48 -> "Foggy"; 51, 53, 55 -> "Drizzle"
-                            61, 63, 65 -> "Rain"; 71, 73, 75 -> "Snow"; 95, 96, 99 -> "Thunderstorm"; else -> "Clear"
+                while (true) {
+                    try {
+                        val response = appContainer.weatherApiService.getCurrentWeather()
+                        val cw = response.currentWeather
+                        if (cw != null) {
+                            val desc = when (cw.weathercode) {
+                                0 -> "Clear Sky"; 1, 2, 3 -> "Partly Cloudy"; 45, 48 -> "Foggy"; 51, 53, 55 -> "Drizzle"
+                                61, 63, 65 -> "Rain"; 71, 73, 75 -> "Snow"; 95, 96, 99 -> "Thunderstorm"; else -> "Clear"
+                            }
+                            weatherInfo = WeatherInfo(cw.temperature, cw.weathercode, desc, config.weatherLocation)
                         }
-                        weatherInfo = WeatherInfo(cw.temperature, cw.weathercode, desc, config.weatherLocation)
+                    } catch (_: Exception) {
+                        if (weatherInfo == null) weatherInfo = WeatherInfo(29.0, 1, "Partly Cloudy", config.weatherLocation)
                     }
-                } catch (_: Exception) {
-                    weatherInfo = WeatherInfo(29.0, 1, "Partly Cloudy", config.weatherLocation)
+                    delay(30 * 60 * 1000L) // Perbarui tiap 30 menit
                 }
             }
 
-            // OTA Check
+            // OTA Auto-Check
             LaunchedEffect(isSplashFinished) {
                 if (!isSplashFinished) return@LaunchedEffect
                 val savedPath = UpdateDownloadService.getCompletedFilePath(context)
@@ -192,7 +190,7 @@ class MainActivity : ComponentActivity() {
                 } catch (_: Exception) {}
             }
 
-            // OTA Receiver
+            // OTA Progress Receiver
             DisposableEffect(Unit) {
                 val receiver = object : BroadcastReceiver() {
                     override fun onReceive(ctx: Context?, intent: Intent?) {
@@ -234,11 +232,8 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
-            // Tampilkan Dialog Launcher Default
             if (showLauncherPrompt && isSplashFinished && !showOnboarding) {
-                DefaultLauncherDialog(
-                    onDismiss = { showLauncherPrompt = false }
-                )
+                DefaultLauncherDialog(onDismiss = { showLauncherPrompt = false })
             }
 
             if (showUpdateDialog && updateInfo != null) {
@@ -297,62 +292,38 @@ class MainActivity : ComponentActivity() {
     override fun dispatchTouchEvent(ev: MotionEvent?): Boolean { lastUserInteractionTime = System.currentTimeMillis(); return super.dispatchTouchEvent(ev) }
 }
 
-// ============================================================
-// KOMPONEN BARU: DIALOG DEFAULT LAUNCHER
-// ============================================================
 @Composable
 fun DefaultLauncherDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val focusReq = remember { FocusRequester() }
-
     LaunchedEffect(Unit) { delay(300); runCatching { focusReq.requestFocus() } }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(
                 Modifier.fillMaxWidth(0.85f).clip(RoundedCornerShape(20.dp))
-                    .background(GlassColors.DeepBackground)
-                    .border(2.dp, GlassColors.AccentGlow, RoundedCornerShape(20.dp))
-                    .padding(24.dp),
+                    .background(GlassColors.DeepBackground).border(2.dp, GlassColors.AccentGlow, RoundedCornerShape(20.dp)).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Icon(Icons.Default.Home, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(56.dp))
                 Spacer(Modifier.height(16.dp))
                 Text("JADIKAN LAUNCHER UTAMA", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = GlassColors.AccentGlow)
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    "Agar tombol HOME di remote selalu membuka Home.io, izinkan aplikasi ini menjadi launcher default TV Anda.",
-                    fontSize = 13.sp, color = GlassColors.TextSecondary, textAlign = TextAlign.Center, lineHeight = 18.sp
-                )
+                Text("Agar tombol HOME di remote selalu membuka Home.io.", fontSize = 13.sp, color = GlassColors.TextSecondary, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(24.dp))
-
-                // Tombol Jadikan Default
                 var isFocusedBtn by remember { mutableStateOf(false) }
                 Box(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                         .background(if (isFocusedBtn) Color.White else GlassColors.AccentGlow)
-                        .focusRequester(focusReq)
-                        .onFocusChanged { isFocusedBtn = it.isFocused }
-                        .focusable().clickable {
-                            LauncherHelper.openLauncherChooser(context)
-                            onDismiss() // Tutup dialog setelah membuka setting
+                        .focusRequester(focusReq).onFocusChanged { isFocusedBtn = it.isFocused }.focusable().clickable {
+                            LauncherHelper.openLauncherChooser(context); onDismiss()
                         }.padding(14.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text("JADIKAN LAUNCHER SEKARANG", color = if (isFocusedBtn) Color.Black else GlassColors.DeepBackground, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 }
-
                 Spacer(Modifier.height(12.dp))
-
-                // Tombol Nanti
-                Box(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                        .clickable { onDismiss() }.padding(12.dp),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { onDismiss() }.padding(12.dp), contentAlignment = Alignment.Center) {
                     Text("NANTI SAJA", color = GlassColors.TextSecondary, fontSize = 13.sp)
                 }
             }
