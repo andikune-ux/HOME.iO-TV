@@ -29,12 +29,13 @@ data class SettingsConfig(
     // === CUACA ===
     val weatherLocation: String = "Jakarta, ID",
 
-    // === KIOSK & WATCHDOG (BARU) ===
+    // === KIOSK & WATCHDOG ===
     val isKioskModeEnabled: Boolean = false,
     val isAutoStartOnBoot: Boolean = true,
 
-    // === TAMPILAN TV (BARU) ===
+    // === TAMPILAN TV ===
     val safeAreaPercent: Float = 2f, // 0f - 10f
     val brightnessMode: String = "MANUAL", // MANUAL, AUTO, SCHEDULE
-    val manualBrightness: Int = 100 // 0 - 100
+    val manualBrightness: Int = 100, // 0 - 100
+    val appIconSizeMultiplier: Float = 0.8f // BARU: Default 0.8x (lebih kecil)
 )
