@@ -60,7 +60,6 @@ fun FileManagerDialog(
     var isLoading by remember { mutableStateOf(true) }
     var isVideoMode by remember { mutableStateOf(true) }
     
-    // FIX BUG #2 & #47: Cek Izin Storage
     val hasStoragePermission = remember {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             Environment.isExternalStorageManager()
@@ -69,7 +68,6 @@ fun FileManagerDialog(
         }
     }
 
-    // FIX BUG #1 & #46: BackHandler untuk mundur folder
     BackHandler(enabled = true) {
         if (currentDir.absolutePath != Environment.getExternalStorageDirectory().absolutePath) {
             currentDir = currentDir.parentFile ?: currentDir
@@ -91,7 +89,7 @@ fun FileManagerDialog(
                 }
             }?.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
         } catch (e: SecurityException) {
-            emptyList() // FIX BUG #9: SecurityException ditangani
+            emptyList() 
         } catch (e: Exception) {
             emptyList()
         }
@@ -108,7 +106,6 @@ fun FileManagerDialog(
         Box(Modifier.fillMaxSize().background(GlassColors.DeepBackground.copy(alpha = 0.98f)).padding(24.dp), contentAlignment = Alignment.Center) {
             Column(Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)).background(GlassColors.DeepBackground).border(2.dp, GlassColors.AccentGlow, RoundedCornerShape(20.dp)).padding(16.dp).focusGroup()) {
                 
-                // HEADER & TOGGLE
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Folder, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(28.dp))
@@ -131,7 +128,6 @@ fun FileManagerDialog(
 
                 Spacer(Modifier.height(16.dp))
 
-                // KONTEN (IZIN / FILE)
                 if (!hasStoragePermission) {
                     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                         Icon(Icons.Default.Lock, null, tint = GlassColors.AccentAmber, modifier = Modifier.size(48.dp))
@@ -141,10 +137,12 @@ fun FileManagerDialog(
                         Text("Aplikasi butuh akses file untuk menampilkan video/foto.", color = GlassColors.TextSecondary, fontSize = 12.sp)
                         Spacer(Modifier.height(16.dp))
                         Box(Modifier.clip(RoundedCornerShape(8.dp)).background(GlassColors.AccentGlow).clickable {
+                            // FIX: Tambahkan startActivity(intent)
                             val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
                                 data = Uri.parse("package:${context.packageName}")
-                                context.startActivity(intent)
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             }
+                            context.startActivity(intent)
                         }.padding(horizontal = 20.dp, vertical = 10.dp)) {
                             Text("BERI IZIN", color = GlassColors.DeepBackground, fontWeight = FontWeight.Bold)
                         }
@@ -224,7 +222,6 @@ private fun FileItemRow(file: File, isVideoMode: Boolean, onFolderClick: () -> U
 
 @Composable
 private fun VideoThumbnail(file: File) {
-    // FIX BUG #10 & #50: Gunakan produceState dengan Dispatchers.IO & pastikan release()
     val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, file) {
         value = withContext(Dispatchers.IO) {
             var retriever: MediaMetadataRetriever? = null
