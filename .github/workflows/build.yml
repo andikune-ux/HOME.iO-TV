@@ -11,6 +11,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -52,15 +55,12 @@ jobs:
           if [ $MONTH_INDEX -lt 1 ]; then MONTH_INDEX=1; fi
           
           COMMIT_NUM=${{ github.run_number }}
-          
           VERSION="v.$MONTH_INDEX.$DAY.$COMMIT_NUM"
           
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "✅ Detected Version: $VERSION"
 
-      # 1. BUAT DRAFT RELEASE DULU
-      - name: Create Draft Release
-        id: create_draft
+      - name: Create and Publish Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -71,35 +71,16 @@ jobs:
             NOTES="FORCE_UPDATE=true\n\nAuto-release dari commit terbaru."
           fi
 
-          echo "🚀 Membuat DRAFT Release untuk tag: $VERSION"
+          echo "🚀 Membuat Release untuk tag: $VERSION"
           
           # Hapus release lama jika ada (untuk re-run)
           gh release delete "$VERSION" --yes 2>/dev/null || true
           
-          # Buat DRAFT release
+          # Buat release LANGSUNG PUBLISHED (bukan draft)
           gh release create "$VERSION" \
-            --draft \
             --title "Home.io $VERSION" \
-            --notes "$NOTES"
+            --notes "$NOTES" \
+            app/build/outputs/apk/debug/*.apk \
+            --latest
             
-          echo "✅ Draft Release $VERSION berhasil dibuat."
-
-      # 2. UPLOAD APK KE DRAFT
-      - name: Upload APK to Draft Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${{ steps.get_version.outputs.VERSION }}"
-          echo "📦 Meng-upload APK ke Draft $VERSION..."
-          gh release upload "$VERSION" app/build/outputs/apk/debug/*.apk --clobber
-          echo "✅ APK berhasil di-upload."
-
-      # 3. PUBLISH DRAFT (Ubah jadi Published)
-      - name: Publish Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${{ steps.get_version.outputs.VERSION }}"
-          echo "🔓 Mempublish Release $VERSION..."
-          gh release edit "$VERSION" --draft=false
-          echo "✅ Release $VERSION sekarang PUBLISHED dan bisa di-download!"
+          echo "✅ Release $VERSION berhasil dibuat dan di-publish!"
