@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -21,18 +22,14 @@ import androidx.media3.ui.PlayerView
 import coil.compose.rememberAsyncImagePainter
 import dev.andikune.homeio.domain.model.SettingsConfig
 
-/**
- * WallpaperView — Menampilkan wallpaper foto atau video sesuai SettingsConfig.
- */
 @Composable
 fun WallpaperView(config: SettingsConfig) {
     val path = config.wallpaperPath
 
     if (path.isNullOrBlank()) {
-        // Fallback jika tidak ada wallpaper (Gradient bawaan)
         androidx.compose.foundation.layout.Box(
             Modifier.fillMaxSize().background(
-                androidx.compose.ui.graphics.Brush.verticalGradient(
+                Brush.verticalGradient(
                     listOf(Color(0xFF0A0E1A), Color(0xFF0F172A), Color(0xFF0A0E1A))
                 )
             )
@@ -52,7 +49,7 @@ private fun ImageWallpaper(path: String, scaleMode: String) {
     val contentScale = when (scaleMode) {
         "FIT" -> ContentScale.Fit
         "FILL" -> ContentScale.Crop
-        "ZOOM" -> ContentScale.Crop // Zoom di compose = Crop dengan sedikit scale
+        "ZOOM" -> ContentScale.Crop
         "CROP" -> ContentScale.Crop
         else -> ContentScale.Crop
     }
@@ -69,20 +66,20 @@ private fun ImageWallpaper(path: String, scaleMode: String) {
 private fun VideoWallpaper(path: String, scaleMode: String) {
     val context = LocalContext.current
     
-    // Inisialisasi ExoPlayer untuk video background
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(Uri.parse(path)))
             prepare()
             playWhenReady = true
             repeatMode = ExoPlayer.REPEAT_MODE_ALL
-            volume = 0f // Mute video
+            volume = 0f
         }
     }
 
-    // Rilis player saat komposisi dibuang
-    DisposableEffect(Unit) {
+    // FIX BUG #1: Key diubah menjadi 'path' agar player lama dilepas saat ganti video
+    DisposableEffect(path) {
         onDispose {
+            exoPlayer.stop()
             exoPlayer.release()
         }
     }
@@ -99,7 +96,6 @@ private fun VideoWallpaper(path: String, scaleMode: String) {
                     useController = false
                     this.player = exoPlayer
                     
-                    // Set mode skala video
                     resizeMode = when (scaleMode) {
                         "FIT" -> AspectRatioFrameLayout.RESIZE_MODE_FIT
                         "FILL" -> AspectRatioFrameLayout.RESIZE_MODE_FILL
