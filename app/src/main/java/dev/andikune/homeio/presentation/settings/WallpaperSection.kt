@@ -1,5 +1,6 @@
 package dev.andikune.homeio.presentation.settings
 
+import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -34,6 +35,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
 
 @Composable
 fun WallpaperSection(
@@ -46,8 +48,32 @@ fun WallpaperSection(
     var showFileManager by remember { mutableStateOf(false) }
     var pickerModeIsVideo by remember { mutableStateOf(false) }
 
+    // FUNGSI HELPER: FIX BUG #48 (Copy file Galeri ke Penyimpanan Internal)
+    suspend fun copyUriToInternal(uri: Uri, isVideo: Boolean): String? = withContext(Dispatchers.IO) {
+        try {
+            val ext = if (isVideo) ".mp4" else ".jpg"
+            val fileName = "wallpaper_${System.currentTimeMillis()}$ext"
+            val file = File(ctx.filesDir, fileName)
+            ctx.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(file).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            file.absolutePath
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     val galleryPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        uri?.let { onUpdate(settings.copy(wallpaperPath = it.toString(), wallpaperType = if (pickerModeIsVideo) "VIDEO" else "IMAGE")) }
+        uri?.let { 
+            scope.launch {
+                val localPath = copyUriToInternal(it, pickerModeIsVideo)
+                if (localPath != null) {
+                    onUpdate(settings.copy(wallpaperPath = localPath, wallpaperType = if (pickerModeIsVideo) "VIDEO" else "IMAGE"))
+                }
+            }
+        }
     }
 
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
