@@ -46,7 +46,9 @@ fun Modifier.liquidGlass(
     borderWidth: Dp = 1.dp
 ): Modifier {
     val shape = RoundedCornerShape(cornerRadius)
-    val supportsBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    
+    // FIX BUG ANDROID 12: Hanya izinkan Blur untuk Android 13 (TIRAMISU) ke atas
+    val supportsBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
     
     val backgroundColor = if (useBlur && supportsBlur) {
         if (isFocused) GlassColors.GlassTintLighter else GlassColors.GlassTint
