@@ -68,13 +68,10 @@ fun SettingsScreen(
         if (draftConfig != currentConfig) onSaveConfig(draftConfig)
     }
 
-    // Gunakan Gradient Background mewah
     Box(Modifier.fillMaxSize().background(GlassColors.DeepBackgroundGradient)) {
         Row(Modifier.fillMaxSize().padding(16.dp)) {
             
-            // ============================================================
             // PANE KIRI (SIDEBAR GLASS)
-            // ============================================================
             Column(
                 Modifier.weight(0.28f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp)
                     .padding(16.dp).verticalScroll(rememberScrollState()).focusGroup(),
@@ -112,9 +109,7 @@ fun SettingsScreen(
 
             Spacer(Modifier.width(24.dp))
 
-            // ============================================================
             // PANE KANAN (KONTEN GLASS)
-            // ============================================================
             Box(Modifier.weight(0.72f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp).padding(24.dp)) {
                 AutoFocusPane(paneKey = selectedCategory, modifier = Modifier.fillMaxSize().focusRequester(paneFocusRequester)) {
                     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
