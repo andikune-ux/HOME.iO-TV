@@ -25,13 +25,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
 import dev.andikune.homeio.BuildConfig
 import dev.andikune.homeio.R
 import dev.andikune.homeio.data.AppKnowledge
@@ -72,17 +74,38 @@ fun InfoAppSection() {
         }
     }
 
+    // FIX: Memuat ikon secara sinkron menggunakan Bitmap (tanpa Coil)
+    // Ini mencegah crash painterResource tanpa memicu bug blur di Android 12.
+    val iconBitmap = remember {
+        try {
+            ContextCompat.getDrawable(ctx, R.mipmap.ic_launcher)?.toBitmap()?.asImageBitmap()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     Column(
         Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // IDENTITAS APP
-        Image(
-            painter = painterResource(id = R.mipmap.ic_launcher),
-            contentDescription = "Icon",
-            modifier = Modifier.size(90.dp).clip(RoundedCornerShape(20.dp)).border(2.dp, GlassColors.AccentGlow, RoundedCornerShape(20.dp))
-        )
+        if (iconBitmap != null) {
+            Image(
+                bitmap = iconBitmap,
+                contentDescription = "Icon",
+                modifier = Modifier.size(90.dp).clip(RoundedCornerShape(20.dp)).border(2.dp, GlassColors.AccentGlow, RoundedCornerShape(20.dp))
+            )
+        } else {
+            // Fallback aman jika bitmap gagal dimuat
+            Box(
+                modifier = Modifier.size(90.dp).clip(RoundedCornerShape(20.dp)).background(GlassColors.GlassSolidFallback).border(2.dp, GlassColors.AccentGlow, RoundedCornerShape(20.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Home, contentDescription = "Icon", tint = GlassColors.AccentGlow, modifier = Modifier.size(40.dp))
+            }
+        }
+
         Spacer(Modifier.height(4.dp))
         Text("HOME.IO", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = GlassColors.TextPrimary, letterSpacing = 1.sp)
         Text("Liquid Glass Launcher", fontSize = 13.sp, color = GlassColors.TextSecondary)
