@@ -31,23 +31,57 @@ jobs:
 
       - name: Ensure Keystore Exists
         run: |
-          if [ -f debug.keystore.base64 ]; then
-            echo "🔑 Decoding debug.keystore from debug.keystore.base64..."
-            base64 -d debug.keystore.base64 > debug.keystore
-          fi
-          if [ ! -f debug.keystore ]; then
-            echo "⚠️ debug.keystore tidak ada, membuat keystore debug baru..."
-            keytool -genkeypair -v \
-              -keystore debug.keystore \
-              -storepass android \
-              -keypass android \
-              -alias androiddebugkey \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
-          fi
-          echo "✅ Keystore siap"
+          echo "🔑 Restoring permanent debug.keystore from embedded base64..."
+          cat << 'EOF' | base64 -d > debug.keystore
+          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
+          EOF
+          echo "✅ Keystore restored, verifying fingerprint..."
+          keytool -list -v -keystore debug.keystore -storepass android | grep "SHA256:"
 
       - name: Build Debug APK
         run: gradle assembleDebug --stacktrace --no-daemon --no-configuration-cache
