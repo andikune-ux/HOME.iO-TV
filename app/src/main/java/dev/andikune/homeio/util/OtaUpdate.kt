@@ -53,9 +53,6 @@ import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
-// ============================================================
-// 1. UPDATE MANAGER
-// ============================================================
 object UpdateManager {
     private const val GITHUB_API = "https://api.github.com/repos/andikune-ux/HOME.iO-TV/releases/latest"
 
@@ -122,9 +119,6 @@ object UpdateManager {
     )
 }
 
-// ============================================================
-// 2. UPDATE PREFS
-// ============================================================
 object UpdatePrefs {
     private const val PREFS = "homeio_update_prefs"
     private const val KEY_SKIP = "skipped_version"
@@ -138,9 +132,6 @@ object UpdatePrefs {
     fun shouldShow(ctx: Context, latest: String, force: Boolean): Boolean = force || getSkipped(ctx) != latest
 }
 
-// ============================================================
-// 3. APK DOWNLOADER
-// ============================================================
 object ApkDownloader {
     private const val FOLDER = "HomeiO/Pembaharuan"
 
@@ -217,9 +208,6 @@ object ApkDownloader {
     }
 }
 
-// ============================================================
-// 4. UPDATE DIALOG
-// ============================================================
 @Composable
 fun UpdateDialog(
     info: UpdateManager.UpdateInfo, progress: Float, isDownloading: Boolean,
@@ -229,10 +217,7 @@ fun UpdateDialog(
     val isForce = info.isForceUpdate
     val focusReq = remember { FocusRequester() }
 
-    // FIX BUG #4: Blokir tombol Back jika Force Update atau sedang Download
-    BackHandler(enabled = isForce || isDownloading) {
-        // Do nothing
-    }
+    BackHandler(enabled = isForce || isDownloading) { }
 
     LaunchedEffect(Unit) { delay(500); if (isActive) runCatching { focusReq.requestFocus() } }
 
@@ -258,20 +243,11 @@ fun UpdateDialog(
                 
                 Spacer(Modifier.height(16.dp))
                 
-                Column(
-                    Modifier.fillMaxWidth()
-                        .background(GlassColors.GlassTint, RoundedCornerShape(12.dp))
-                        .padding(14.dp)
-                ) {
+                Column(Modifier.fillMaxWidth().background(GlassColors.GlassTint, RoundedCornerShape(12.dp)).padding(14.dp)) {
                     Text("📋 Rincian Pembaruan:", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = GlassColors.AccentGlow)
                     Spacer(Modifier.height(8.dp))
                     Box(Modifier.height(120.dp).verticalScroll(rememberScrollState())) {
-                        Text(
-                            text = info.releaseNotes ?: "Tidak ada catatan rilis.",
-                            fontSize = 13.sp,
-                            color = GlassColors.TextPrimary,
-                            lineHeight = 18.sp
-                        )
+                        Text(info.releaseNotes ?: "-", fontSize = 13.sp, color = GlassColors.TextPrimary, lineHeight = 18.sp)
                     }
                 }
 
@@ -327,9 +303,6 @@ private fun OtaButton(txt: String, bg: Color, onClick: () -> Unit, focusReq: Foc
     }
 }
 
-// ============================================================
-// 5. APK FILE LIST SECTION
-// ============================================================
 @Composable
 fun ApkFileListSection() {
     val ctx = LocalContext.current
