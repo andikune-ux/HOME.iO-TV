@@ -40,6 +40,11 @@ jobs:
       - name: Build Debug APK
         run: gradle assembleDebug --stacktrace --no-daemon --no-configuration-cache
 
+      - name: Show Generated APK
+        run: |
+          echo "🔍 Mencari file APK yang dihasilkan..."
+          find app/build/outputs/apk/debug -name "*.apk" -exec ls -lh {} \;
+
       - name: Generate Version Tag
         id: get_version
         run: |
@@ -60,56 +65,23 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "✅ Detected Version: $VERSION"
 
-      - name: Force Clean Up Old Tag
+      - name: Create Draft and Upload APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.VERSION }}
+          name: "Home.io ${{ steps.get_version.outputs.VERSION }}"
+          draft: true
+          prerelease: false
+          generate_release_notes: true
+          files: app/build/outputs/apk/debug/*.apk
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${{ steps.get_version.outputs.VERSION }}"
-          echo "Menghapus release & tag lama jika ada..."
-          gh release delete "$VERSION" --yes 2>/dev/null || true
-          git push origin :refs/tags/"$VERSION" 2>/dev/null || true
-
-      - name: Create Draft Release
-        id: create_draft
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${{ steps.get_version.outputs.VERSION }}"
-          NOTES="Auto-release dari commit terbaru."
-          
-          if [[ "${{ github.event.head_commit.message }}" == *"[force]"* ]]; then
-            NOTES="FORCE_UPDATE=true\n\nAuto-release dari commit terbaru."
-          fi
-
-          echo "🚀 Membuat DRAFT Release untuk tag: $VERSION"
-          gh release create "$VERSION" \
-            --draft \
-            --title "Home.io $VERSION" \
-            --notes "$NOTES"
-            
-          echo "✅ Draft Release $VERSION berhasil dibuat."
-
-      - name: Upload APK to Draft Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${{ steps.get_version.outputs.VERSION }}"
-          APK_PATH=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
-          
-          if [ -z "$APK_PATH" ]; then
-            echo "❌ File APK tidak ditemukan!"
-            exit 1
-          fi
-          
-          echo "📦 Meng-upload APK ($APK_PATH) ke Draft $VERSION..."
-          gh release upload "$VERSION" "$APK_PATH" --clobber
-          echo "✅ APK berhasil di-upload."
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish Release
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.VERSION }}
+          draft: false
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${{ steps.get_version.outputs.VERSION }}"
-          echo "🔓 Mempublish Release $VERSION..."
-          gh release edit "$VERSION" --draft=false
-          echo "✅ Release $VERSION sekarang PUBLISHED dan bisa di-download!"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
