@@ -10,10 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Restore
-import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -31,6 +28,7 @@ import dev.andikune.homeio.domain.model.SettingsConfig
 import dev.andikune.homeio.presentation.components.GlassColors
 import dev.andikune.homeio.presentation.components.NeonFocusBorder
 import dev.andikune.homeio.util.BackupBiasaManager
+import dev.andikune.homeio.util.BackupManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -49,6 +47,8 @@ fun BackupBiasaSection(
     var refreshKey by remember { mutableStateOf(0) }
     var isBackingUp by remember { mutableStateOf(false) }
 
+    // Cek fallback path untuk warning
+    val usingFallback = remember { BackupManager.isUsingFallbackPath() }
     val fileList = remember(refreshKey) { BackupBiasaManager.getBackupList(ctx) }
 
     fun doBackup() {
@@ -87,7 +87,7 @@ fun BackupBiasaSection(
     }
 
     Column(
-        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+        Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -95,12 +95,32 @@ fun BackupBiasaSection(
             Spacer(Modifier.width(10.dp))
             Column {
                 Text("BACKUP BIASA (TEMA)", color = GlassColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text("Simpan & Pulihkan pengaturan aplikasi ke file .json", color = GlassColors.TextSecondary, fontSize = 12.sp)
+                Text("Simpan & Pulihkan tema aplikasi ke file .json", color = GlassColors.TextSecondary, fontSize = 12.sp)
             }
         }
 
-        Text("Lokasi: /HomeiO/Backup/", color = GlassColors.TextSecondary, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+        // FIX: Warning jika pakai fallback path
+        if (usingFallback) {
+            Row(
+                Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(GlassColors.AccentAmber.copy(alpha = 0.15f))
+                    .border(1.dp, GlassColors.AccentAmber, RoundedCornerShape(10.dp))
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Warning, null, tint = GlassColors.AccentAmber, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Izin storage belum diberikan. File backup tersimpan di lokasi internal aplikasi (tidak terlihat di file manager).",
+                    color = GlassColors.AccentAmber, fontSize = 11.sp, lineHeight = 15.sp
+                )
+            }
+        }
 
+        Text("Lokasi: /sdcard/HomeiO/Backup/", color = GlassColors.TextSecondary, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+
+        // Tombol Backup Baru
         var isFocusedBtn by remember { mutableStateOf(false) }
         NeonFocusBorder(focused = isFocusedBtn, cornerRadius = 12.dp, modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -133,7 +153,8 @@ fun BackupBiasaSection(
                 val dateStr = dateFormat.format(Date(file.lastModified()))
 
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                    Modifier.fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
                         .background(GlassColors.GlassTint)
                         .border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(10.dp))
                         .padding(10.dp),
@@ -144,10 +165,8 @@ fun BackupBiasaSection(
                         Text(dateStr, color = GlassColors.TextSecondary, fontSize = 10.sp)
                     }
                     
-                    // Tombol Pulihkan
                     ActionIconButton(icon = Icons.Default.Restore, tint = GlassColors.AccentGreen, onClick = { doRestore(file) })
                     Spacer(Modifier.width(8.dp))
-                    // Tombol Hapus
                     ActionIconButton(icon = Icons.Default.Delete, tint = GlassColors.AccentRed, onClick = { doDelete(file) })
                 }
             }
