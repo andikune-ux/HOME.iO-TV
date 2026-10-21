@@ -13,6 +13,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -35,8 +37,7 @@ import dev.andikune.homeio.R
 import dev.andikune.homeio.domain.model.AppItem
 import dev.andikune.homeio.domain.model.SettingsConfig
 import dev.andikune.homeio.domain.model.WeatherInfo
-import dev.andikune.homeio.presentation.components.GlassColors
-import dev.andikune.homeio.presentation.components.liquidGlass
+import dev.andikune.homeio.presentation.components.*
 import dev.andikune.homeio.presentation.wallpaper.FileManagerDialog
 import dev.andikune.homeio.presentation.wallpaper.WallpaperView
 import dev.andikune.homeio.util.DateTimeFormatter
@@ -88,7 +89,9 @@ fun HomeScreen(
     }
 
     var memInfo by remember { mutableStateOf(SystemUtils.getMemoryInfo(context)) }
-    LaunchedEffect(config.isAutoRamBoostEnabled) {
+    
+    // FIX BUG #13: Auto-Boost RAM hanya saat cold start (mencegah trigger tiap ubah setting)
+    LaunchedEffect(Unit) {
         if (config.isAutoRamBoostEnabled) memInfo = SystemUtils.boostRam(context)
     }
 
@@ -104,8 +107,13 @@ fun HomeScreen(
         AppContextMenuDialog(
             app = app, isFavorite = isFav,
             onToggleFavorite = { pkg ->
-                val newFav = if (isFav) config.favoritePackages.filter { it != pkg } else config.favoritePackages + pkg
-                onSaveConfig(config.copy(favoritePackages = newFav))
+                // FIX BUG #51: Anti-race condition
+                if (isFav) {
+                    onSaveConfig(config.copy(favoritePackages = config.favoritePackages.filter { it != pkg }))
+                } else {
+                    onSaveConfig(config.copy(favoritePackages = config.favoritePackages + pkg))
+                }
+                selectedAppForContextMenu = null
             },
             onDismiss = { selectedAppForContextMenu = null }
         )
@@ -119,10 +127,13 @@ fun HomeScreen(
         if (isSideloadOnly) allApps.filter { it.isSideloaded } else allApps
     }
 
+    // FIX BUG #24: Terapkan Safe Area padding
+    val safePadding = (config.safeAreaPercent * 10).dp
+
     Box(Modifier.fillMaxSize()) {
         WallpaperView(config = config)
 
-        Row(Modifier.fillMaxSize().padding(14.dp)) {
+        Row(Modifier.fillMaxSize().padding(safePadding)) {
             LeftNavigationGlassPanel(
                 selectedNav = selectedNav,
                 isSideloadActive = isSideloadOnly,
@@ -139,8 +150,9 @@ fun HomeScreen(
 
             Spacer(Modifier.width(14.dp))
 
-            Row(Modifier.fillMaxSize().horizontalScroll(horizontalScrollState)) {
-                Column(Modifier.fillMaxHeight().width(780.dp), verticalArrangement = Arrangement.SpaceBetween) {
+            // FIX BUG #18 & #43: Hapus width(780.dp), gunakan weight responsif
+            Row(Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
+                Column(Modifier.fillMaxHeight(), verticalArrangement = Arrangement.SpaceBetween) {
                     TopStatusBar(
                         currentTime = currentTimeString,
                         currentDate = currentDateString,
@@ -173,7 +185,6 @@ fun HomeScreen(
     }
 }
 
-// FINAL FIX: Safe Launch App (Anti Crash saat App di-uninstall)
 fun safeLaunchApp(context: Context, app: AppItem) {
     try {
         val intent = context.packageManager.getLaunchIntentForPackage(app.packageName)
@@ -243,17 +254,12 @@ fun GlassNavButton(
 
 @Composable
 fun TopStatusBar(
-    currentTime: String,
-    currentDate: String,
-    isNtpSynced: Boolean,
-    showNtpWarning: Boolean,
-    onMicClick: () -> Unit,
-    onSettingsClick: () -> Unit
+    currentTime: String, currentDate: String, isNtpSynced: Boolean, showNtpWarning: Boolean,
+    onMicClick: () -> Unit, onSettingsClick: () -> Unit
 ) {
     Row(
         Modifier.fillMaxWidth().liquidGlass(cornerRadius = 20.dp).padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -266,12 +272,10 @@ fun TopStatusBar(
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             if (showNtpWarning) Icon(Icons.Default.Warning, "NTP", tint = GlassColors.AccentAmber, modifier = Modifier.size(18.dp))
-
             Column(horizontalAlignment = Alignment.End) {
                 Text(currentDate, color = GlassColors.TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.End, maxLines = 1)
                 Text(currentTime, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
             }
-
             Icon(Icons.Default.Wifi, "Wi-Fi", tint = GlassColors.AccentGlow, modifier = Modifier.size(18.dp))
             IconButton(onClick = onSettingsClick, modifier = Modifier.size(28.dp)) {
                 Icon(Icons.Default.Settings, "Settings", tint = Color.White, modifier = Modifier.size(18.dp))
@@ -306,10 +310,8 @@ fun LiveSystemInfoWidget(memInfo: SystemUtils.MemoryInfo, onBoostClick: () -> Un
                     Text("${memInfo.freeMemMb} MB Free / ${memInfo.totalMemMb} MB", color = GlassColors.TextSecondary, fontSize = 11.sp)
                 }
                 Button(
-                    onClick = onBoostClick,
-                    colors = ButtonDefaults.buttonColors(containerColor = GlassColors.AccentGlow),
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                    onClick = onBoostClick, colors = ButtonDefaults.buttonColors(containerColor = GlassColors.AccentGlow),
+                    shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Icon(Icons.Default.Refresh, null, tint = Color.Black, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
@@ -336,17 +338,17 @@ fun FavoriteAppsSection(favoriteApps: List<AppItem>, onAppClick: (AppItem) -> Un
     }
 }
 
+// FIX BUG #27 & #40: Ubah Row menjadi LazyRow untuk mencegah OOM
 @Composable
 fun AllAppsHorizontalSection(apps: List<AppItem>, isSideloadOnly: Boolean, onAppClick: (AppItem) -> Unit, onAppLongClick: (AppItem) -> Unit) {
-    val scrollState = rememberScrollState()
     Column {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text(if (isSideloadOnly) stringResource(R.string.sideloaded_apps) else stringResource(R.string.all_apps), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             Text("${apps.size} Aplikasi", color = GlassColors.TextSecondary, fontSize = 11.sp)
         }
         Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(scrollState)) {
-            apps.forEach { app ->
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            items(apps) { app ->
                 AppCardItem(app, app.isTvApp && app.banner != null, Modifier.width(if (app.isTvApp && app.banner != null) 160.dp else 105.dp), { onAppClick(app) }, { onAppLongClick(app) })
             }
         }
@@ -355,7 +357,6 @@ fun AllAppsHorizontalSection(apps: List<AppItem>, isSideloadOnly: Boolean, onApp
 
 @Composable
 fun AppCardItem(app: AppItem, isWide: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit, onLongClick: () -> Unit) {
-    // FINAL FIX: Async Decoding untuk mencegah OOM pada RAM kecil
     val bitmap by produceState<Bitmap?>(initialValue = null, app, isWide) {
         value = withContext(Dispatchers.IO) {
             val target = if (isWide && app.banner != null) app.banner else app.icon
