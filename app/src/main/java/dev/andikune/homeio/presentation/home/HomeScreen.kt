@@ -1,51 +1,24 @@
 @file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 package dev.andikune.homeio.presentation.home
 
+import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.CleaningServices
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,8 +42,10 @@ import dev.andikune.homeio.presentation.wallpaper.WallpaperView
 import dev.andikune.homeio.util.DateTimeFormatter
 import dev.andikune.homeio.util.SoundFeedback
 import dev.andikune.homeio.util.SystemUtils
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Date
 
 @Composable
@@ -93,9 +68,6 @@ fun HomeScreen(
     var selectedAppForContextMenu by remember { mutableStateOf<AppItem?>(null) }
     var isSideloadOnly by remember { mutableStateOf(false) }
 
-    // ============================================================
-    // USB OTG INTEGRATION
-    // ============================================================
     LaunchedEffect(openFileManagerTrigger) {
         if (openFileManagerTrigger) {
             showFileManager = true
@@ -103,7 +75,6 @@ fun HomeScreen(
         }
     }
 
-    // Live Date & Time
     var currentDateString by remember { mutableStateOf(DateTimeFormatter.formatDate(Date(), config.languageCode)) }
     var currentTimeString by remember { mutableStateOf(DateTimeFormatter.formatTime(Date(), config.timeFormat, config.showSeconds)) }
 
@@ -122,7 +93,7 @@ fun HomeScreen(
     }
 
     if (showSearchDialog) {
-        SearchDialog(allApps, { launchApp(context, it) }, { showSearchDialog = false })
+        SearchDialog(allApps, { safeLaunchApp(context, it) }, { showSearchDialog = false })
     }
     if (showFileManager) {
         FileManagerDialog(onFileSelected = { showFileManager = false }, onDismiss = { showFileManager = false })
@@ -186,19 +157,34 @@ fun HomeScreen(
 
                     FavoriteAppsSection(
                         favoriteApps = favoriteApps,
-                        onAppClick = { app -> SoundFeedback.playClick(context); launchApp(context, app) },
+                        onAppClick = { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) },
                         onAppLongClick = { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app }
                     )
 
                     AllAppsHorizontalSection(
                         apps = displayApps,
                         isSideloadOnly = isSideloadOnly,
-                        onAppClick = { app -> SoundFeedback.playClick(context); launchApp(context, app) },
+                        onAppClick = { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) },
                         onAppLongClick = { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app }
                     )
                 }
             }
         }
+    }
+}
+
+// FINAL FIX: Safe Launch App (Anti Crash saat App di-uninstall)
+fun safeLaunchApp(context: Context, app: AppItem) {
+    try {
+        val intent = context.packageManager.getLaunchIntentForPackage(app.packageName)
+        if (intent != null) {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        } else {
+            Toast.makeText(context, "Aplikasi tidak ditemukan atau sudah dihapus.", Toast.LENGTH_SHORT).show()
+        }
+    } catch (e: Exception) {
+        Toast.makeText(context, "Gagal membuka aplikasi.", Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -369,17 +355,21 @@ fun AllAppsHorizontalSection(apps: List<AppItem>, isSideloadOnly: Boolean, onApp
 
 @Composable
 fun AppCardItem(app: AppItem, isWide: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit, onLongClick: () -> Unit) {
-    val bitmap = remember(app) {
-        val target = if (isWide && app.banner != null) app.banner else app.icon
-        target?.let { drawableToBitmap(it) }
+    // FINAL FIX: Async Decoding untuk mencegah OOM pada RAM kecil
+    val bitmap by produceState<Bitmap?>(initialValue = null, app, isWide) {
+        value = withContext(Dispatchers.IO) {
+            val target = if (isWide && app.banner != null) app.banner else app.icon
+            target?.let { drawableToBitmap(it) }
+        }
     }
+
     Box(
         modifier.height(84.dp).liquidGlass(cornerRadius = 20.dp).combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(8.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize()) {
             if (bitmap != null) {
-                Image(bitmap = bitmap.asImageBitmap(), contentDescription = app.label, contentScale = if (isWide) ContentScale.Crop else ContentScale.Fit, modifier = Modifier.size(if (isWide) 48.dp else 36.dp).clip(RoundedCornerShape(8.dp)))
+                Image(bitmap = bitmap!!.asImageBitmap(), contentDescription = app.label, contentScale = if (isWide) ContentScale.Crop else ContentScale.Fit, modifier = Modifier.size(if (isWide) 48.dp else 36.dp).clip(RoundedCornerShape(8.dp)))
             } else {
                 Box(Modifier.size(36.dp).background(Color(0x33FFFFFF), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
                     Text(app.label.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold)
