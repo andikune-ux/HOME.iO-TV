@@ -57,21 +57,11 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "✅ Detected Version: $VERSION"
 
-      # Cek apakah token sudah terbaca
-      - name: Verify Token Exists
+      # 1. BUAT RELEASE DENGAN GITHUB_TOKEN BAWAAN
+      - name: Create Draft Release
+        id: create_draft
         env:
-          TOKEN: ${{ secrets.RELEASE_TOKEN }}
-        run: |
-          if [ -z "$TOKEN" ]; then
-            echo "❌ RELEASE_TOKEN tidak ditemukan di Secrets!"
-            echo "Silakan tambahkan di Settings → Secrets → Actions → New repository secret"
-            exit 1
-          fi
-          echo "✅ RELEASE_TOKEN ditemukan (panjang: ${#TOKEN} karakter)."
-
-      - name: Create and Publish Release
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ steps.get_version.outputs.VERSION }}"
           NOTES="Auto-release dari commit terbaru."
@@ -80,16 +70,33 @@ jobs:
             NOTES="FORCE_UPDATE=true\n\nAuto-release dari commit terbaru."
           fi
 
-          echo "🚀 Membuat Release untuk tag: $VERSION"
+          echo "🚀 Membuat DRAFT Release untuk tag: $VERSION"
           
-          # Hapus release lama jika ada (untuk re-run)
           gh release delete "$VERSION" --yes 2>/dev/null || true
           
-          # Buat release LANGSUNG PUBLISHED
           gh release create "$VERSION" \
+            --draft \
             --title "Home.io $VERSION" \
-            --notes "$NOTES" \
-            app/build/outputs/apk/debug/*.apk \
-            --latest
+            --notes "$NOTES"
             
-          echo "✅ Release $VERSION berhasil dibuat dan di-publish!"
+          echo "✅ Draft Release $VERSION berhasil dibuat."
+
+      # 2. UPLOAD APK KE DRAFT
+      - name: Upload APK to Draft Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          echo "📦 Meng-upload APK ke Draft $VERSION..."
+          gh release upload "$VERSION" app/build/outputs/apk/debug/*.apk --clobber
+          echo "✅ APK berhasil di-upload."
+
+      # 3. PUBLISH DRAFT MENJADI PUBLISHED
+      - name: Publish Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          echo "🔓 Mempublish Release $VERSION..."
+          gh release edit "$VERSION" --draft=false
+          echo "✅ Release $VERSION sekarang PUBLISHED dan bisa di-download!"
