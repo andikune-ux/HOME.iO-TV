@@ -39,6 +39,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import dev.andikune.homeio.BuildConfig
 import dev.andikune.homeio.presentation.components.GlassColors
+import dev.andikune.homeio.presentation.components.NeonFocusBorder
 import dev.andikune.homeio.presentation.components.liquidGlass
 import dev.andikune.homeio.service.UpdateDownloadService
 import kotlinx.coroutines.Dispatchers
@@ -282,11 +283,17 @@ object ApkDownloader {
 fun UpdateDialog(info: UpdateManager.UpdateInfo, progress: Float, isDownloading: Boolean, isReady: Boolean, isError: Boolean = false, onUpdate: () -> Unit, onLater: () -> Unit, onSkip: () -> Unit) {
     val isForce = info.isForceUpdate
     val focusReq = remember { FocusRequester() }
+    
+    // FIX: Auto-focus ke tombol pertama saat dialog muncul
+    LaunchedEffect(Unit) { 
+        delay(400); 
+        if (isActive) runCatching { focusReq.requestFocus() } 
+    }
+    
     BackHandler(enabled = isForce || isDownloading) { }
-    LaunchedEffect(Unit) { delay(300); if (isActive) runCatching { focusReq.requestFocus() } }
 
     Dialog(onDismissRequest = { if (!isForce && !isDownloading) onLater() }, properties = DialogProperties(dismissOnBackPress = !isForce && !isDownloading, usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
             Column(Modifier.fillMaxWidth(0.85f).fillMaxHeight(0.9f).liquidGlass(cornerRadius = 24.dp).padding(24.dp).verticalScroll(rememberScrollState()).focusGroup(), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(Modifier.size(72.dp).background(GlassColors.AccentGlow.copy(alpha = 0.15f), RoundedCornerShape(36.dp)), contentAlignment = Alignment.Center) {
                     Icon(Icons.Default.SystemUpdate, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(40.dp))
@@ -311,23 +318,58 @@ fun UpdateDialog(info: UpdateManager.UpdateInfo, progress: Float, isDownloading:
                         Box(Modifier.fillMaxWidth(progress).fillMaxHeight().background(when { isError -> GlassColors.AccentRed; isReady -> GlassColors.AccentGreen; else -> GlassColors.AccentGlow }))
                     }
                 }
-                Spacer(Modifier.height(24.dp))
-                if (isError) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) { Box(Modifier.weight(1f)) { OtaButton("TUTUP", GlassColors.GlassTint, onLater) }; Box(Modifier.weight(1f)) { OtaButton("COBA LAGI", GlassColors.AccentRed, onUpdate, focusReq) } } }
+                Spacer(modifier = Modifier.height(24.dp))
+                if (isError) { 
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) { 
+                        Box(Modifier.weight(1f)) { OtaButton("TUTUP", GlassColors.GlassTint, onLater) }; 
+                        Box(Modifier.weight(1f)) { OtaButton("COBA LAGI", GlassColors.AccentRed, onUpdate, focusReq) } 
+                    } 
+                }
                 else if (isReady) { OtaButton("INSTALL SEKARANG", GlassColors.AccentGreen, onUpdate, focusReq) }
                 else if (isDownloading) { OtaButton("MOHON TUNGGU...", GlassColors.GlassTint, {}) }
-                else if (isForce) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) { Box(Modifier.weight(1f)) { OtaButton("TIDAK", GlassColors.GlassTint, onLater) }; Box(Modifier.weight(1f)) { OtaButton("UPDATE", GlassColors.AccentGlow, onUpdate, focusReq) } } }
-                else { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { Box(Modifier.weight(1f)) { OtaButton("SKIP", GlassColors.GlassTint, onSkip) }; Box(Modifier.weight(1f)) { OtaButton("NANTI", GlassColors.GlassTint, onLater) }; Box(Modifier.weight(1f)) { OtaButton("UPDATE", GlassColors.AccentGlow, onUpdate, focusReq) } } }
+                else if (isForce) { 
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) { 
+                        Box(Modifier.weight(1f)) { OtaButton("TIDAK", GlassColors.GlassTint, onLater) }; 
+                        Box(Modifier.weight(1f)) { OtaButton("UPDATE", GlassColors.AccentGlow, onUpdate, focusReq) } 
+                    } 
+                }
+                else { 
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { 
+                        Box(Modifier.weight(1f)) { OtaButton("SKIP", GlassColors.GlassTint, onSkip) }; 
+                        Box(Modifier.weight(1f)) { OtaButton("NANTI", GlassColors.GlassTint, onLater) }; 
+                        Box(Modifier.weight(1f)) { OtaButton("UPDATE", GlassColors.AccentGlow, onUpdate, focusReq) } 
+                    } 
+                }
             }
         }
     }
 }
 
+// FIX: Gunakan NeonFocusBorder agar fokus terlihat jelas
 @Composable
 private fun OtaButton(txt: String, bg: Color, onClick: () -> Unit, focusReq: FocusRequester? = null) {
     var focus by remember { mutableStateOf(false) }
     val requester = focusReq ?: remember { FocusRequester() }
-    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (focus) GlassColors.AccentGlow else bg).border(if (focus) 2.dp else 0.dp, Color.White, RoundedCornerShape(12.dp)).focusRequester(requester).onFocusChanged { focus = it.isFocused }.focusable().clickable { onClick() }.padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
-        Text(txt, color = if (focus) GlassColors.DeepBackground else Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+    
+    NeonFocusBorder(
+        focused = focus,
+        cornerRadius = 12.dp,
+        borderWidth = 3.dp,
+        modifier = Modifier.fillMaxWidth().let { if (focusReq != null) it.focusRequester(focusReq) else it }
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(if (focus) GlassColors.AccentGlow else bg)
+                .onFocusChanged { focus = it.isFocused }
+                .focusable()
+                .clickable { onClick() }
+                .padding(vertical = 14.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(txt, color = if (focus) GlassColors.DeepBackground else Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        }
     }
 }
 
@@ -366,40 +408,41 @@ fun ApkFileListSection() {
         onDispose { ctx.unregisterReceiver(receiver) }
     }
 
-    // FIX: Menghapus Modifier.verticalScroll() karena sudah dibungkus oleh parent (SettingsScreen)
     Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (usingFallback) { Row(Modifier.fillMaxWidth().background(GlassColors.AccentAmber.copy(alpha = 0.15f), RoundedCornerShape(8.dp)).border(1.dp, GlassColors.AccentAmber, RoundedCornerShape(8.dp)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Warning, null, tint = GlassColors.AccentAmber, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Izin storage belum diberikan. File tersimpan di lokasi internal.", color = GlassColors.AccentAmber, fontSize = 11.sp) } }
         Spacer(Modifier.height(16.dp))
         var isFocused by remember { mutableStateOf(false) }
-        Box(Modifier.fillMaxWidth(0.8f).clip(RoundedCornerShape(16.dp)).background(if (isFocused) GlassColors.AccentGlow.copy(alpha = 0.3f) else GlassColors.GlassTint).border(if (isFocused) 3.dp else 2.dp, GlassColors.AccentGlow, RoundedCornerShape(16.dp)).onFocusChanged { isFocused = it.isFocused }.focusable().clickable(enabled = !isChecking) {
-            isChecking = true; checkResult = null
-            scope.launch {
-                val info = UpdateManager.checkForUpdate(); isChecking = false
-                if (info.available) {
-                    isErrorResult = false
-                    checkResult = "✅ Update tersedia: ${info.latestVersion}"
-                    localUpdateInfo = info
-                    val saved = UpdateDownloadService.getCompletedFilePath(ctx, info.latestVersion)
-                    if (saved != null) {
-                        downloadReady = true
-                        downloadProgress = 1f
-                        isDownloading = false
+        NeonFocusBorder(focused = isFocused, cornerRadius = 16.dp, modifier = Modifier.fillMaxWidth(0.8f)) {
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(if (isFocused) GlassColors.AccentGlow.copy(alpha = 0.3f) else GlassColors.GlassTint).border(if (isFocused) 3.dp else 2.dp, GlassColors.AccentGlow, RoundedCornerShape(16.dp)).onFocusChanged { isFocused = it.isFocused }.focusable().clickable(enabled = !isChecking) {
+                isChecking = true; checkResult = null
+                scope.launch {
+                    val info = UpdateManager.checkForUpdate(); isChecking = false
+                    if (info.available) {
+                        isErrorResult = false
+                        checkResult = "✅ Update tersedia: ${info.latestVersion}"
+                        localUpdateInfo = info
+                        val saved = UpdateDownloadService.getCompletedFilePath(ctx, info.latestVersion)
+                        if (saved != null) {
+                            downloadReady = true
+                            downloadProgress = 1f
+                            isDownloading = false
+                        } else {
+                            downloadReady = false
+                            downloadProgress = 0f
+                            isDownloading = false
+                        }
+                        showUpdateDialog = true
                     } else {
-                        downloadReady = false
-                        downloadProgress = 0f
-                        isDownloading = false
+                        isErrorResult = true
+                        val msg = if (info.errorType != null) "Gagal cek: ${info.errorType}" else "Aplikasi sudah versi terbaru (${info.currentVersion})"
+                        checkResult = "❌ $msg"
                     }
-                    showUpdateDialog = true
-                } else {
-                    isErrorResult = true
-                    val msg = if (info.errorType != null) "Gagal cek: ${info.errorType}" else "Aplikasi sudah versi terbaru (${info.currentVersion})"
-                    checkResult = "❌ $msg"
                 }
-            }
-        }.padding(20.dp), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                if (isChecking) { CircularProgressIndicator(color = GlassColors.AccentGlow, modifier = Modifier.size(32.dp), strokeWidth = 3.dp); Spacer(Modifier.height(10.dp)); Text("MENGHUBUNGI GITHUB...", color = GlassColors.AccentGlow, fontWeight = FontWeight.Bold, fontSize = 14.sp) } 
-                else { Icon(Icons.Default.Refresh, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(32.dp)); Spacer(Modifier.height(8.dp)); Text("CEK PEMBARUAN APLIKASI", color = GlassColors.AccentGlow, fontWeight = FontWeight.Bold, fontSize = 14.sp); Text("Tekan untuk memeriksa versi terbaru di GitHub", color = GlassColors.TextSecondary, fontSize = 11.sp) }
+            }.padding(20.dp), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    if (isChecking) { CircularProgressIndicator(color = GlassColors.AccentGlow, modifier = Modifier.size(32.dp), strokeWidth = 3.dp); Spacer(Modifier.height(10.dp)); Text("MENGHUBUNGI GITHUB...", color = GlassColors.AccentGlow, fontWeight = FontWeight.Bold, fontSize = 14.sp) } 
+                    else { Icon(Icons.Default.Refresh, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(32.dp)); Spacer(Modifier.height(8.dp)); Text("CEK PEMBARUAN APLIKASI", color = GlassColors.AccentGlow, fontWeight = FontWeight.Bold, fontSize = 14.sp); Text("Tekan untuk memeriksa versi terbaru di GitHub", color = GlassColors.TextSecondary, fontSize = 11.sp) }
+                }
             }
         }
         checkResult?.let { msg -> Text(text = msg, color = if (isErrorResult) GlassColors.AccentRed else GlassColors.AccentGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center) }
