@@ -1,13 +1,11 @@
 package dev.andikune.homeio.presentation.components
 
-import android.os.Build
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
@@ -17,8 +15,8 @@ import androidx.compose.ui.unit.dp
 
 object GlassColors {
     val DeepBackground = Color(0xFF0A0E1A)
-    // Tint kaca transparan (untuk fallback di bawah API 31)
-    val GlassTint = Color(0x26FFFFFF) // 15% white frosted tint
+    // Tint kaca transparan (Frosted Glass)
+    val GlassTint = Color(0x26FFFFFF) // 15% white tint
     val GlassSolidFallback = Color(0xCC1A1A2E) // Low-end solid fallback
     
     val GlassBorder = Color(0x33FFFFFF) // 20% white border
@@ -42,22 +40,20 @@ object GlassColors {
 
 /**
  * iOS 26 Liquid Glass card modifier.
- * Mendukung efek blur asli (API 31+) dan fallback solid transparan (API < 31).
+ * Menggunakan warna tint transparan + border, TANPA Modifier.blur()
+ * agar teks dan ikon di dalamnya tetap tajam dan terbaca.
  */
 @Composable
 fun Modifier.liquidGlass(
     cornerRadius: Dp = 28.dp,
     isFocused: Boolean = false,
-    useBlur: Boolean = true,
+    useBlur: Boolean = true, // parameter dipertahankan untuk kompatibilitas
     borderWidth: Dp = 1.dp
 ): Modifier {
     val shape = RoundedCornerShape(cornerRadius)
     
-    // Cek apakah perangkat mendukung RenderEffect (API 31+)
-    val supportsBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    
-    // Warna background: Jika blur aktif, gunakan tint transparan. Jika tidak, gunakan solid.
-    val backgroundColor = if (useBlur && supportsBlur) GlassColors.GlassTint else GlassColors.GlassSolidFallback
+    // Warna background: Tint transparan
+    val backgroundColor = if (useBlur) GlassColors.GlassTint else GlassColors.GlassSolidFallback
     
     val currentBorderColor = if (isFocused) GlassColors.AccentGlow else GlassColors.GlassBorder
     val effectiveBorderWidth = if (isFocused) 2.dp else borderWidth
@@ -78,10 +74,7 @@ fun Modifier.liquidGlass(
                 }
             } else Modifier
         )
-        .then(
-            // Efek blur asli hanya jika API >= 31 dan useBlur = true
-            if (useBlur && supportsBlur) Modifier.blur(20.dp) else Modifier
-        )
+        // .blur() DIHAPUS DARI SINI
         .background(backgroundColor, shape)
         .border(
             BorderStroke(effectiveBorderWidth, currentBorderColor),
