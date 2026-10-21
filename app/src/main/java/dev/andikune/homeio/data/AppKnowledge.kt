@@ -28,11 +28,11 @@ app/src/main/java/dev/andikune/homeio/
 │   ├── remote/                        -> Retrofit (GitHub API, Open-Meteo)
 │   └── AppKnowledge.kt                -> File ini (Memory AI)
 ├── domain/
-│   ├── model/                         -> Model data (SettingsConfig, dll)
+│   ├── model/                         -> Model data (SettingsConfig, AppItem, dll)
 │   └── repository/                    -> Interface
 ├── presentation/
 │   ├── home/
-│   │   └── HomeScreen.kt              -> UI Utama (Horizontal Only, Widget, App Grid)
+│   │   └── HomeScreen.kt              -> UI Utama (Sliding Pane Overlay, Layar Terkunci, Widget Minimalis)
 │   ├── settings/
 │   │   ├── SettingsScreen.kt          -> 2-Pane Layout (8 Kategori)
 │   │   ├── WallpaperSection.kt
@@ -53,7 +53,7 @@ app/src/main/java/dev/andikune/homeio/
 │   │   └── OnboardingPermissionDialog.kt
 │   └── components/
 │       ├── GlassTheme.kt              -> Modifier Liquid Glass (Real Blur API 31+)
-│       ├── NeonFocusBorder.kt         -> Efek Glow Berputar D-Pad
+│       ├── NeonFocusBorder.kt         -> Efek Glow Berputar D-Pad (Lightweight Pulse)
 │       ├── TvSlider.kt & TvToggle.kt  -> Komponen D-Pad friendly
 │       └── (Komponen UI lainnya)
 ├── service/
@@ -71,7 +71,7 @@ app/src/main/java/dev/andikune/homeio/
     ├── CacheCleaner.kt                -> Logic RAM & Cache (Usage Access)
     ├── BackupBiasaManager.kt          -> Export/Import JSON
     ├── BackupManager.kt               -> Export TXT (AppKnowledge)
-    ├── DateTimeFormatter.kt           -> Format Jam (WIB, 24H/12H) & Tanggal (ID/EN)
+    ├── DateTimeFormatter.kt           -> Format Jam (Auto TZ, 24H/12H) & Tanggal (ID/EN)
     ├── LauncherHelper.kt              -> Pengecekan Default Launcher
     ├── CrashHandler.kt                -> Penangkap Error
     └── (Util lainnya)
@@ -81,13 +81,15 @@ app/src/main/java/dev/andikune/homeio/
 1. UI/UX iOS 26 Liquid Glass
    - Efek Blur asli (RenderEffect API 31+) via GlassTheme.kt.
    - Fallback solid transparan (API < 31).
-   - Border Glow berputar (NeonFocusBorder) saat disorot D-Pad.
+   - Animasi Pulse Glow D-Pad (NeonFocusBorder) yang ringan & hemat RAM.
    - Suara klik (SoundFeedback) saat navigasi.
 
-2. Home Screen HORIZONTAL-ONLY
-   - Panel Kiri: Navigasi (Search, Home, System Utils, Settings).
-   - Panel Kanan: Widget Cuaca, Widget RAM, Favorite Apps (3), All Apps (Horizontal).
-   - Context Menu (Long Press 500ms): Pin, App Info, Uninstall.
+2. Home Screen (Modern Locked Layout)
+   - Layar utama terkunci (Fixed), hanya daftar aplikasi yang bisa scroll horizontal.
+   - Panel kiri model Sliding Pane (Overlay) meluncur dari kiri, dipicu tombol (☰) di tengah layar.
+   - Widget Jam, Cuaca, RAM minimalis (tanpa border) terletak di pojok kanan atas.
+   - Ikon aplikasi standar TV modern (Async Image Loading, anti OOM).
+   - Context Menu (Long Press 500ms): Pin, App Info, Uninstall (kecuali sistem).
    - Safe Launch: Anti-crash saat membuka app yang sudah di-uninstall.
 
 3. Wallpaper Engine
@@ -111,7 +113,6 @@ app/src/main/java/dev/andikune/homeio/
 6. Manajemen RAM & Cache
    - Widget RAM di Home dengan tombol Boost.
    - Clear cache app sendiri (100% works).
-   - Kill background apps (butuh izin KILL_BACKGROUND_PROCESSES).
    - Baca ukuran cache app lain (butuh izin Usage Access).
    - Tombol pintas ke Storage Settings TV.
 
@@ -141,7 +142,7 @@ app/src/main/java/dev/andikune/homeio/
 2. Path lengkap file (code block).
 3. Nama file (code block).
 4. URL edit / URL new (code block).
-5. Kode TIMPA FULL (jangan suruh user edit manual).
+5. Kode TIMPA FULL (jangan suruh user edit manual, sepanjang apapun itu).
 6. Pesan commit.
 
 === ANTI-TRUNCATION ===
@@ -201,8 +202,14 @@ REPO: https://github.com/andikune-ux/HOME.iO-TV
 15. Release Tag kosong di GitHub Actions (Logika Bash timezone Jakarta).
 16. NullPointer di CacheCleaner (applicationInfo null check).
 17. Scroll macet di Settings & OTA (verticalScroll ditambahkan).
-18. Format Tanggal/Jam menggunakan titik dua (:) bukan titik (.) (DateTimeFormatter WIB).
+18. Format Tanggal/Jam menggunakan titik dua (:) bukan titik (.) (DateTimeFormatter Auto TZ).
 19. Progress Download Error tidak reset (fix di OtaUpdate).
+20. OOM (Out of Memory) pada AppItem & AppRepository (Drawable dihapus, ganti Async Image).
+21. Layar Blur Total di Android 12 (Fix GlassTheme TIRAMISU).
+22. Animasi NeonFocusBorder terlalu berat (Diganti animasi Pulse ringan).
+23. D-Pad nyangkut saat panel kiri terbuka (Ditambah Focus Trap & Sliding Pane).
+24. System.gc() dan Kill Processes membuat TV Freeze (Dihapus dari SystemUtils).
+25. Format jam titik dua (:) dan zona waktu otomatis (DateTimeFormatter).
 
 === BELUM DIPERBAIKI (BATASAN ANDROID) ===
 1. Hapus cache aplikasi LAIN secara otomatis tanpa root (Hanya bisa via list app + buka Settings App Info per app).
@@ -265,7 +272,7 @@ Setiap respon harus ada 6 elemen:
 2. Path lengkap file (code block)
 3. Nama file (code block)
 4. URL Edit (file lama) / URL New (file baru) (code block)
-5. Kode TIMPA FULL (jangan suruh user edit manual)
+5. Kode TIMPA FULL (sepanjang apapun itu, jangan suruh edit manual)
 6. Pesan commit
 
 KETENTUAN:
