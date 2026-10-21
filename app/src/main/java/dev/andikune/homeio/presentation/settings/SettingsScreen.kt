@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.item
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -112,10 +114,10 @@ fun SettingsScreen(
             // PANE KANAN (KONTEN GLASS)
             Box(Modifier.weight(0.72f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp).padding(24.dp)) {
                 AutoFocusPane(paneKey = selectedCategory, modifier = Modifier.fillMaxSize().focusRequester(paneFocusRequester)) {
-                    // FIX: Memberikan batasan lebar (width) yang jelas pada Box induk
-                    // agar komponen seperti LazyRow di dalam Section tidak menyebabkan crash.
-                    Box(Modifier.fillMaxSize()) {
-                        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    // FIX DEFINITIF: Menggunakan LazyColumn, bukan Column(verticalScroll)
+                    // LazyColumn menjamin pemberian constraints lebar yang aman untuk semua item di dalamnya.
+                    LazyColumn(Modifier.fillMaxSize()) {
+                        item {
                             when (selectedCategory) {
                                 SettingsCategory.WALLPAPER -> WallpaperSection(draftConfig) { draftConfig = it }
                                 SettingsCategory.SCREENSAVER -> ScreensaverSection(draftConfig) { draftConfig = it }
