@@ -1,7 +1,9 @@
 package dev.andikune.homeio.util
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -27,7 +29,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -281,7 +282,7 @@ private fun OtaButton(txt: String, bg: Color, onClick: () -> Unit, focusReq: Foc
 }
 
 // ============================================================
-// 5. APK FILE LIST SECTION (TAMPILAN BARU: CENTER + LIST)
+// 5. APK FILE LIST SECTION (DENGAN POPUP OTOMATIS)
 // ============================================================
 @Composable
 fun ApkFileListSection() {
@@ -294,6 +295,38 @@ fun ApkFileListSection() {
     var isChecking by remember { mutableStateOf(false) }
     var checkResult by remember { mutableStateOf<String?>(null) }
     var isErrorResult by remember { mutableStateOf(false) }
+
+    // State untuk Pop-up Update Lokal
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var localUpdateInfo by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
+    var downloadProgress by remember { mutableFloatStateOf(0f) }
+    var isDownloading by remember { mutableStateOf(false) }
+    var downloadReady by remember { mutableStateOf(false) }
+    var isError by remember { mutableStateOf(false) }
+
+    // Dengarkan progress download
+    DisposableEffect(Unit) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context?, intent: Intent?) {
+                if (intent?.action == UpdateDownloadService.ACTION_PROGRESS) {
+                    val state = UpdateDownloadService.readState(ctx)
+                    downloadProgress = state.progress
+                    when (state.status) {
+                        "DOWNLOADING" -> { isDownloading = true; downloadReady = false; isError = false }
+                        "COMPLETE" -> { isDownloading = false; downloadReady = true; isError = false; downloadProgress = 1f; refreshKey++ }
+                        "ERROR" -> { isDownloading = false; downloadReady = false; isError = true; downloadProgress = 0f }
+                    }
+                }
+            }
+        }
+        val filter = IntentFilter(UpdateDownloadService.ACTION_PROGRESS)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ctx.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag") ctx.registerReceiver(receiver, filter)
+        }
+        onDispose { ctx.unregisterReceiver(receiver) }
+    }
 
     Column(
         Modifier.fillMaxWidth().padding(24.dp),
@@ -310,7 +343,7 @@ fun ApkFileListSection() {
 
         Spacer(Modifier.height(16.dp))
 
-        // --- TOMBOL BESAR CEK UPDATE (TENGAH) ---
+        // Tombol Cek Update
         var isFocused by remember { mutableStateOf(false) }
         Box(
             Modifier.fillMaxWidth(0.8f).clip(RoundedCornerShape(16.dp))
@@ -325,6 +358,8 @@ fun ApkFileListSection() {
                         if (info.available) {
                             isErrorResult = false
                             checkResult = "✅ Update tersedia: ${info.latestVersion}"
+                            localUpdateInfo = info
+                            showUpdateDialog = true // Tampilkan Dialog
                         } else {
                             isErrorResult = true
                             val msg = if (info.errorType != null) "Gagal cek: ${info.errorType}" else "Aplikasi sudah versi terbaru (${info.currentVersion})"
@@ -359,7 +394,7 @@ fun ApkFileListSection() {
 
         Spacer(Modifier.height(16.dp))
 
-        // --- DAFTAR FILE APK ---
+        // Daftar File APK
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("📦 RIWAYAT UNDUHAN", color = GlassColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Box(Modifier.clip(RoundedCornerShape(8.dp)).background(GlassColors.GlassTint).border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(8.dp))
@@ -389,5 +424,39 @@ fun ApkFileListSection() {
                 }
             }
         }
+    }
+
+    // Render Pop-up Lokal
+    if (showUpdateDialog && localUpdateInfo != null) {
+        UpdateDialog(
+            info = localUpdateInfo!!,
+            progress = downloadProgress,
+            isDownloading = isDownloading,
+            isReady = downloadReady,
+            isError = isError,
+            onUpdate = {
+                if (downloadReady || isError) {
+                    if (isError) {
+                        isError = false; downloadProgress = 0f; isDownloading = true
+                        localUpdateInfo!!.downloadUrl?.let { UpdateDownloadService.start(ctx, it, "HomeIO_${System.currentTimeMillis()}.apk") }
+                    } else {
+                        val path = UpdateDownloadService.readState(ctx).filePath
+                        if (path != null) {
+                            if (!ApkDownloader.install(ctx, path)) Toast.makeText(ctx, "Beri izin install APK", Toast.LENGTH_LONG).show()
+                        } else { downloadReady = false; isError = true }
+                    }
+                } else {
+                    localUpdateInfo!!.downloadUrl?.let {
+                        isDownloading = true; downloadProgress = 0f; downloadReady = false; isError = false
+                        UpdateDownloadService.start(ctx, it, "HomeIO_${System.currentTimeMillis()}.apk")
+                    }
+                }
+            },
+            onLater = { showUpdateDialog = false },
+            onSkip = { 
+                UpdatePrefs.setSkipped(ctx, localUpdateInfo!!.latestVersion)
+                showUpdateDialog = false 
+            }
+        )
     }
 }
