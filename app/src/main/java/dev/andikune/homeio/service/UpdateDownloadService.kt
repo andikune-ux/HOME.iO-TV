@@ -3,6 +3,7 @@ package dev.andikune.homeio.service
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -11,6 +12,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.content.ContextCompat
+import dev.andikune.homeio.MainActivity
 import dev.andikune.homeio.util.ApkDownloader
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -19,16 +21,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
-/**
- * UpdateDownloadService — Foreground Service untuk download APK OTA.
- *
- * Perbaikan Bug:
- *   - #1  : Android 14+ wajib sebutkan foregroundServiceType
- *   - #10 : .part file lama dibersihkan di ApkDownloader
- *   - #15 : try-catch startForeground
- *   - #44 : tambah helper getCompletedFilePath untuk restore state
- *   - #48 : null-check NotificationManager
- */
 class UpdateDownloadService : Service() {
 
     companion object {
@@ -80,18 +72,11 @@ class UpdateDownloadService : Service() {
             )
         }
 
-        /**
-         * FIX #44: Helper untuk restore state setelah app di-kill.
-         * Return filePath jika status COMPLETE, null jika tidak.
-         */
         fun getCompletedFilePath(context: Context): String? {
             val state = readState(context)
             return if (state.status == STATUS_COMPLETE) state.filePath else null
         }
 
-        /**
-         * FIX #44: Reset state setelah install selesai atau user dismiss dialog.
-         */
         fun resetState(context: Context) {
             writeState(context, STATUS_IDLE)
         }
@@ -130,8 +115,6 @@ class UpdateDownloadService : Service() {
             return START_NOT_STICKY
         }
 
-        // FIX #15: try-catch startForeground untuk prevent crash
-        // FIX #1: Wajib foregroundServiceType di Android 14+
         try {
             val notification = buildNotification("Menyiapkan download...")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -174,7 +157,7 @@ class UpdateDownloadService : Service() {
                             val apkFile = java.io.File(state.savedFilePath)
                             if (ApkDownloader.isValid(applicationContext, apkFile)) {
                                 writeState(this@UpdateDownloadService, STATUS_COMPLETE, progress = 1f, filePath = state.savedFilePath)
-                                updateNotification("Download selesai")
+                                updateNotification("Download selesai — Ketuk untuk Install")
                             } else {
                                 apkFile.delete()
                                 writeState(this@UpdateDownloadService, STATUS_ERROR, error = "APK tidak valid")
@@ -223,6 +206,17 @@ class UpdateDownloadService : Service() {
     }
 
     private fun buildNotification(msg: String): Notification {
+        // FINAL FIX: Tambahkan PendingIntent agar notifikasi bisa diklik
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        val pendingIntent = PendingIntent.getActivity(this, 0, intent, pendingFlags)
+
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
         } else {
@@ -234,10 +228,10 @@ class UpdateDownloadService : Service() {
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setOngoing(true)
             .setPriority(Notification.PRIORITY_LOW)
+            .setContentIntent(pendingIntent) // <-- Diklik akan buka app
             .build()
     }
 
-    // FIX #48: null-check NotificationManager
     private fun updateNotification(msg: String) {
         try {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
