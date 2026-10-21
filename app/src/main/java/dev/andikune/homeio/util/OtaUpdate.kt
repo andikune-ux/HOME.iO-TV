@@ -7,8 +7,8 @@ import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
-import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,7 +29,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -55,7 +54,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 // ============================================================
-// 1. UPDATE MANAGER (PARSING JSON YANG LEBIH KUAT)
+// 1. UPDATE MANAGER
 // ============================================================
 object UpdateManager {
     private const val GITHUB_API = "https://api.github.com/repos/andikune-ux/HOME.iO-TV/releases/latest"
@@ -82,7 +81,6 @@ object UpdateManager {
             val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
             conn.disconnect()
 
-            // FIX: Gunakan optString dengan nilai default yang jelas
             val latest = json.optString("tag_name", "Versi Baru").trim().ifEmpty { "Versi Baru" }
             val rawNotes = json.optString("body", "").trim()
             val notes = if (rawNotes.isEmpty()) "Tidak ada catatan rilis." else rawNotes
@@ -102,7 +100,6 @@ object UpdateManager {
             }
             UpdateInfo(isNewer, current, latest, dlUrl, notes, isForce)
         } catch (e: Exception) {
-            Log.e("UpdateManager", "Error: ${e.message}")
             noUpdate(current, "NETWORK")
         }
     }
@@ -221,7 +218,7 @@ object ApkDownloader {
 }
 
 // ============================================================
-// 4. UPDATE DIALOG (LAYOUT DIPERBAIKI)
+// 4. UPDATE DIALOG
 // ============================================================
 @Composable
 fun UpdateDialog(
@@ -231,6 +228,12 @@ fun UpdateDialog(
 ) {
     val isForce = info.isForceUpdate
     val focusReq = remember { FocusRequester() }
+
+    // FIX BUG #4: Blokir tombol Back jika Force Update atau sedang Download
+    BackHandler(enabled = isForce || isDownloading) {
+        // Do nothing
+    }
+
     LaunchedEffect(Unit) { delay(500); if (isActive) runCatching { focusReq.requestFocus() } }
 
     Dialog(
@@ -250,13 +253,11 @@ fun UpdateDialog(
                 Icon(Icons.Default.SystemUpdate, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(48.dp))
                 Spacer(Modifier.height(10.dp))
                 
-                // FIX: Judul Versi lebih jelas
                 Text("UPDATE TERSEDIA", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = GlassColors.AccentGlow)
                 Text("Versi: ${info.latestVersion}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = GlassColors.TextPrimary)
                 
                 Spacer(Modifier.height(16.dp))
                 
-                // FIX: Kotak Changelog
                 Column(
                     Modifier.fillMaxWidth()
                         .background(GlassColors.GlassTint, RoundedCornerShape(12.dp))
@@ -372,7 +373,7 @@ fun ApkFileListSection() {
     }
 
     Column(
-        Modifier.fillMaxWidth().padding(24.dp),
+        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
