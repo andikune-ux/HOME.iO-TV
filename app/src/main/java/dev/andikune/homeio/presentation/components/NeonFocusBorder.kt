@@ -28,8 +28,10 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-private enum class BorderPhase { HIDDEN, IDLE, PRESSED }
-
+/**
+ * NeonFocusBorder — Efek border menyala.
+ * FIX BUG #38: Mengurangi jumlah dot (dari 48 jadi 24) agar animasi ringan di STB RAM 1GB.
+ */
 @Composable
 fun NeonFocusBorder(
     focused: Boolean,
@@ -47,15 +49,12 @@ fun NeonFocusBorder(
     )
 
     val rotation = remember { Animatable(0f) }
-    var currentPhase by remember { mutableStateOf(BorderPhase.HIDDEN) }
 
     LaunchedEffect(focused) {
         if (!focused) {
-            currentPhase = BorderPhase.HIDDEN
             rotation.snapTo(0f)
             return@LaunchedEffect
         }
-        currentPhase = BorderPhase.IDLE
         while (true) {
             rotation.snapTo(0f)
             rotation.animateTo(360f, tween(2000, easing = LinearEasing))
@@ -103,6 +102,7 @@ private fun DrawScope.drawGlowBorder(
 ) {
     drawIntoCanvas { canvas ->
         val native = canvas.nativeCanvas
+
         val coreInset = strokePx / 2f
         val coreRect = RectF(coreInset, coreInset, canvasSize.width - coreInset, canvasSize.height - coreInset)
         val corePaint = AndroidPaint().apply {
@@ -135,7 +135,8 @@ private fun DrawScope.drawGlowBorder(
         }
 
         val tailLenFraction = 0.30f
-        val dotCount = 48
+        // FIX BUG #38: Dot dikurangi dari 48 menjadi 24
+        val dotCount = 24 
         val blurRadius = glowPx * 1.2f
 
         headColors.forEachIndexed { idx, color ->
