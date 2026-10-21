@@ -50,6 +50,7 @@ import dev.andikune.homeio.domain.model.WeatherInfo
 import dev.andikune.homeio.kiosk.KioskManager
 import dev.andikune.homeio.kiosk.WatchdogService
 import dev.andikune.homeio.presentation.components.GlassColors
+import dev.andikune.homeio.presentation.components.ResponsiveProvider
 import dev.andikune.homeio.presentation.components.liquidGlass
 import dev.andikune.homeio.presentation.home.HomeScreen
 import dev.andikune.homeio.presentation.onboarding.OnboardingPermissionDialog
@@ -77,189 +78,198 @@ class MainActivity : ComponentActivity() {
         val appContainer = (application as HomeIoApplication).container
 
         setContent {
-            val context = LocalContext.current
-            val scope = rememberCoroutineScope()
+            // FIX BUG #25: Bungkus dengan ResponsiveProvider
+            ResponsiveProvider {
+                val context = LocalContext.current
+                val scope = rememberCoroutineScope()
 
-            var crashLog by remember { mutableStateOf<String?>(null) }
-            var isSplashFinished by remember { mutableStateOf(false) }
-            var isSettingsOpen by remember { mutableStateOf(false) }
-            var showOnboarding by remember { mutableStateOf(false) }
-            var showLauncherPrompt by remember { mutableStateOf(!LauncherHelper.isDefaultLauncher(context)) }
-
-            LaunchedEffect(Unit) {
-                crashLog = withContext(Dispatchers.IO) { CrashHandler.getLastCrashLog(context) }
-            }
-
-            LaunchedEffect(Unit) {
-                if (!OnboardingPrefs.isCompleted(context)) showOnboarding = true
-            }
-
-            var updateInfo by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
-            var showUpdateDialog by remember { mutableStateOf(false) }
-            var downloadProgress by remember { mutableFloatStateOf(0f) }
-            var isDownloading by remember { mutableStateOf(false) }
-            var downloadReady by remember { mutableStateOf(false) }
-            var isError by remember { mutableStateOf(false) }
-
-            val config by appContainer.preferencesManager.settingsFlow.collectAsState(initial = SettingsConfig())
-
-            // Kiosk Mode Integration
-            LaunchedEffect(config.isKioskModeEnabled) {
-                if (config.isKioskModeEnabled) {
-                    KioskManager.enableKiosk(this@MainActivity)
-                    try { startService(Intent(this@MainActivity, WatchdogService::class.java)) } catch (_: Exception) {}
-                } else {
-                    KioskManager.disableKiosk(this@MainActivity)
-                    try { stopService(Intent(this@MainActivity, WatchdogService::class.java)) } catch (_: Exception) {}
+                var crashLog by remember { mutableStateOf<String?>(null) }
+                var isSplashFinished by remember { mutableStateOf(false) }
+                var isSettingsOpen by remember { mutableStateOf(false) }
+                var showOnboarding by remember { mutableStateOf(false) }
+                
+                // FIX BUG #21: Cek status pernah ditanya atau belum
+                var showLauncherPrompt by remember { 
+                    mutableStateOf(!LauncherHelper.isDefaultLauncher(context) && !OnboardingPrefs.hasAskedLauncher(context)) 
                 }
-            }
 
-            // Brightness Integration
-            LaunchedEffect(config.brightnessMode, config.manualBrightness) {
-                val brightness = if (config.brightnessMode == "MANUAL") (config.manualBrightness / 100f).coerceIn(0.01f, 1f) else 1f
-                runOnUiThread {
-                    val attrs = window.attributes
-                    attrs.screenBrightness = brightness
-                    window.attributes = attrs
+                LaunchedEffect(Unit) {
+                    crashLog = withContext(Dispatchers.IO) { CrashHandler.getLastCrashLog(context) }
                 }
-            }
 
-            // Screensaver Timer
-            screensaverTimeoutMs = if (!config.screensaverEnabled) 0L else (config.screensaverTimeoutMinutes * 60 * 1000L)
-            LaunchedEffect(screensaverTimeoutMs) {
-                if (screensaverTimeoutMs <= 0L) return@LaunchedEffect
-                while (true) {
-                    delay(5000)
-                    val elapsed = System.currentTimeMillis() - lastUserInteractionTime
-                    if (elapsed >= screensaverTimeoutMs && !isSettingsOpen && crashLog == null && isSplashFinished && !showUpdateDialog && !showOnboarding) {
-                        try { startActivity(Intent(this@MainActivity, ScreensaverActivity::class.java)) } catch (_: Exception) {}
-                        lastUserInteractionTime = System.currentTimeMillis()
+                LaunchedEffect(Unit) {
+                    if (!OnboardingPrefs.isCompleted(context)) showOnboarding = true
+                }
+
+                var updateInfo by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
+                var showUpdateDialog by remember { mutableStateOf(false) }
+                var downloadProgress by remember { mutableFloatStateOf(0f) }
+                var isDownloading by remember { mutableStateOf(false) }
+                var downloadReady by remember { mutableStateOf(false) }
+                var isError by remember { mutableStateOf(false) }
+
+                val config by appContainer.preferencesManager.settingsFlow.collectAsState(initial = SettingsConfig())
+
+                LaunchedEffect(config.isKioskModeEnabled) {
+                    if (config.isKioskModeEnabled) {
+                        KioskManager.enableKiosk(this@MainActivity)
+                        try { startService(Intent(this@MainActivity, WatchdogService::class.java)) } catch (_: Exception) {}
+                    } else {
+                        KioskManager.disableKiosk(this@MainActivity)
+                        try { stopService(Intent(this@MainActivity, WatchdogService::class.java)) } catch (_: Exception) {}
                     }
                 }
-            }
 
-            // Installed Apps Debounce
-            val installedApps by appContainer.appRepository.getInstalledApps().collectAsState(initial = emptyList())
-            var lastRefreshTime by remember { mutableLongStateOf(0L) }
-            LaunchedEffect(Unit) {
-                if (System.currentTimeMillis() - lastRefreshTime > 5000L) {
-                    lastRefreshTime = System.currentTimeMillis()
-                    appContainer.appRepository.refreshApps()
+                LaunchedEffect(config.brightnessMode, config.manualBrightness) {
+                    val brightness = if (config.brightnessMode == "MANUAL") (config.manualBrightness / 100f).coerceIn(0.01f, 1f) else 1f
+                    runOnUiThread {
+                        val attrs = window.attributes
+                        attrs.screenBrightness = brightness
+                        window.attributes = attrs
+                    }
                 }
-            }
 
-            // FINAL FIX: Weather Loop 30 Menit (Menggantikan single fetch)
-            var weatherInfo by remember { mutableStateOf<WeatherInfo?>(null) }
-            LaunchedEffect(isSplashFinished) {
-                if (!isSplashFinished) return@LaunchedEffect
-                while (true) {
+                screensaverTimeoutMs = if (!config.screensaverEnabled) 0L else (config.screensaverTimeoutMinutes * 60 * 1000L)
+                LaunchedEffect(screensaverTimeoutMs) {
+                    if (screensaverTimeoutMs <= 0L) return@LaunchedEffect
+                    while (true) {
+                        delay(5000)
+                        val elapsed = System.currentTimeMillis() - lastUserInteractionTime
+                        if (elapsed >= screensaverTimeoutMs && !isSettingsOpen && crashLog == null && isSplashFinished && !showUpdateDialog && !showOnboarding) {
+                            try { startActivity(Intent(this@MainActivity, ScreensaverActivity::class.java)) } catch (_: Exception) {}
+                            lastUserInteractionTime = System.currentTimeMillis()
+                        }
+                    }
+                }
+
+                val installedApps by appContainer.appRepository.getInstalledApps().collectAsState(initial = emptyList())
+                var lastRefreshTime by remember { mutableLongStateOf(0L) }
+                
+                // FIX BUG #26: Hanya refresh jika sudah 10 detik berlalu
+                LaunchedEffect(Unit) {
+                    if (System.currentTimeMillis() - lastRefreshTime > 10000L) {
+                        lastRefreshTime = System.currentTimeMillis()
+                        appContainer.appRepository.refreshApps()
+                    }
+                }
+
+                var weatherInfo by remember { mutableStateOf<WeatherInfo?>(null) }
+                LaunchedEffect(isSplashFinished) {
+                    if (!isSplashFinished) return@LaunchedEffect
+                    while (true) {
+                        try {
+                            val response = appContainer.weatherApiService.getCurrentWeather()
+                            val cw = response.currentWeather
+                            if (cw != null) {
+                                val desc = when (cw.weathercode) {
+                                    0 -> "Clear Sky"; 1, 2, 3 -> "Partly Cloudy"; 45, 48 -> "Foggy"; 51, 53, 55 -> "Drizzle"
+                                    61, 63, 65 -> "Rain"; 71, 73, 75 -> "Snow"; 95, 96, 99 -> "Thunderstorm"; else -> "Clear"
+                                }
+                                weatherInfo = WeatherInfo(cw.temperature, cw.weathercode, desc, config.weatherLocation)
+                            }
+                        } catch (_: Exception) {
+                            if (weatherInfo == null) weatherInfo = WeatherInfo(29.0, 1, "Partly Cloudy", config.weatherLocation)
+                        }
+                        delay(30 * 60 * 1000L)
+                    }
+                }
+
+                LaunchedEffect(isSplashFinished) {
+                    if (!isSplashFinished) return@LaunchedEffect
+                    val savedPath = UpdateDownloadService.getCompletedFilePath(context)
+                    if (savedPath != null) {
+                        val info = try { UpdateManager.checkForUpdate() } catch (_: Exception) { null }
+                        if (info?.available == true) {
+                            updateInfo = info; downloadProgress = 1f; downloadReady = true; isDownloading = false; showUpdateDialog = true
+                        }
+                        return@LaunchedEffect
+                    }
+                    if (!UpdatePrefs.shouldCheck(context)) return@LaunchedEffect
                     try {
-                        val response = appContainer.weatherApiService.getCurrentWeather()
-                        val cw = response.currentWeather
-                        if (cw != null) {
-                            val desc = when (cw.weathercode) {
-                                0 -> "Clear Sky"; 1, 2, 3 -> "Partly Cloudy"; 45, 48 -> "Foggy"; 51, 53, 55 -> "Drizzle"
-                                61, 63, 65 -> "Rain"; 71, 73, 75 -> "Snow"; 95, 96, 99 -> "Thunderstorm"; else -> "Clear"
-                            }
-                            weatherInfo = WeatherInfo(cw.temperature, cw.weathercode, desc, config.weatherLocation)
-                        }
-                    } catch (_: Exception) {
-                        if (weatherInfo == null) weatherInfo = WeatherInfo(29.0, 1, "Partly Cloudy", config.weatherLocation)
-                    }
-                    delay(30 * 60 * 1000L) // Perbarui tiap 30 menit
+                        val info = UpdateManager.checkForUpdate()
+                        if (info.available && UpdatePrefs.shouldShow(context, info.latestVersion, info.isForceUpdate)) {
+                            UpdatePrefs.markChecked(context); updateInfo = info; showUpdateDialog = true
+                        } else if (info.available) { UpdatePrefs.markChecked(context) }
+                    } catch (_: Exception) {}
                 }
-            }
 
-            // OTA Auto-Check
-            LaunchedEffect(isSplashFinished) {
-                if (!isSplashFinished) return@LaunchedEffect
-                val savedPath = UpdateDownloadService.getCompletedFilePath(context)
-                if (savedPath != null) {
-                    val info = try { UpdateManager.checkForUpdate() } catch (_: Exception) { null }
-                    if (info?.available == true) {
-                        updateInfo = info; downloadProgress = 1f; downloadReady = true; isDownloading = false; showUpdateDialog = true
-                    }
-                    return@LaunchedEffect
-                }
-                if (!UpdatePrefs.shouldCheck(context)) return@LaunchedEffect
-                try {
-                    val info = UpdateManager.checkForUpdate()
-                    if (info.available && UpdatePrefs.shouldShow(context, info.latestVersion, info.isForceUpdate)) {
-                        UpdatePrefs.markChecked(context); updateInfo = info; showUpdateDialog = true
-                    } else if (info.available) { UpdatePrefs.markChecked(context) }
-                } catch (_: Exception) {}
-            }
-
-            // OTA Progress Receiver
-            DisposableEffect(Unit) {
-                val receiver = object : BroadcastReceiver() {
-                    override fun onReceive(ctx: Context?, intent: Intent?) {
-                        if (intent?.action == UpdateDownloadService.ACTION_PROGRESS) {
-                            val state = UpdateDownloadService.readState(context)
-                            downloadProgress = state.progress
-                            when (state.status) {
-                                "DOWNLOADING" -> { isDownloading = true; downloadReady = false; isError = false }
-                                "COMPLETE" -> { isDownloading = false; downloadReady = true; isError = false; downloadProgress = 1f }
-                                "ERROR" -> { isDownloading = false; downloadReady = false; isError = true; downloadProgress = 0f }
+                DisposableEffect(Unit) {
+                    val receiver = object : BroadcastReceiver() {
+                        override fun onReceive(ctx: Context?, intent: Intent?) {
+                            if (intent?.action == UpdateDownloadService.ACTION_PROGRESS) {
+                                val state = UpdateDownloadService.readState(context)
+                                downloadProgress = state.progress
+                                when (state.status) {
+                                    "DOWNLOADING" -> { isDownloading = true; downloadReady = false; isError = false }
+                                    "COMPLETE" -> { isDownloading = false; downloadReady = true; isError = false; downloadProgress = 1f }
+                                    "ERROR" -> { isDownloading = false; downloadReady = false; isError = true; downloadProgress = 0f }
+                                }
                             }
                         }
                     }
+                    val filter = IntentFilter(UpdateDownloadService.ACTION_PROGRESS)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+                    } else {
+                        @Suppress("UnspecifiedRegisterReceiverFlag") context.registerReceiver(receiver, filter)
+                    }
+                    onDispose { context.unregisterReceiver(receiver) }
                 }
-                val filter = IntentFilter(UpdateDownloadService.ACTION_PROGRESS)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
-                } else {
-                    @Suppress("UnspecifiedRegisterReceiverFlag") context.registerReceiver(receiver, filter)
+
+                BackHandler(enabled = isSettingsOpen) { isSettingsOpen = false }
+
+                when {
+                    crashLog != null -> CrashLogScreen(crashLog!!) { CrashHandler.clearCrashLog(context); crashLog = null }
+                    showOnboarding -> OnboardingPermissionDialog { 
+                        OnboardingPrefs.markCompleted(context); showOnboarding = false 
+                    }
+                    !isSplashFinished -> SplashScreen { isSplashFinished = true }
+                    isSettingsOpen -> SettingsScreen(config, { updated -> scope.launch { appContainer.preferencesManager.updateSettings(updated) } }, onBack = { isSettingsOpen = false })
+                    else -> HomeScreen(
+                        config = config,
+                        allApps = installedApps,
+                        weatherInfo = weatherInfo,
+                        onOpenSettings = { isSettingsOpen = true },
+                        onSaveConfig = { updated -> scope.launch { appContainer.preferencesManager.updateSettings(updated) } },
+                        openFileManagerTrigger = pendingFileManagerTrigger,
+                        onFileManagerOpened = { pendingFileManagerTrigger = false }
+                    )
                 }
-                onDispose { context.unregisterReceiver(receiver) }
-            }
 
-            BackHandler(enabled = isSettingsOpen) { isSettingsOpen = false }
+                if (showLauncherPrompt && isSplashFinished && !showOnboarding) {
+                    DefaultLauncherDialog(
+                        onDismiss = { 
+                            OnboardingPrefs.markLauncherAsked(context) // Tandai sudah ditanya
+                            showLauncherPrompt = false 
+                        }
+                    )
+                }
 
-            when {
-                crashLog != null -> CrashLogScreen(crashLog!!) { CrashHandler.clearCrashLog(context); crashLog = null }
-                showOnboarding -> OnboardingPermissionDialog { OnboardingPrefs.markCompleted(context); showOnboarding = false }
-                !isSplashFinished -> SplashScreen { isSplashFinished = true }
-                isSettingsOpen -> SettingsScreen(config, { updated -> scope.launch { appContainer.preferencesManager.updateSettings(updated) } }, onBack = { isSettingsOpen = false })
-                else -> HomeScreen(
-                    config = config,
-                    allApps = installedApps,
-                    weatherInfo = weatherInfo,
-                    onOpenSettings = { isSettingsOpen = true },
-                    onSaveConfig = { updated -> scope.launch { appContainer.preferencesManager.updateSettings(updated) } },
-                    openFileManagerTrigger = pendingFileManagerTrigger,
-                    onFileManagerOpened = { pendingFileManagerTrigger = false }
-                )
-            }
-
-            if (showLauncherPrompt && isSplashFinished && !showOnboarding) {
-                DefaultLauncherDialog(onDismiss = { showLauncherPrompt = false })
-            }
-
-            if (showUpdateDialog && updateInfo != null) {
-                UpdateDialog(
-                    info = updateInfo!!, progress = downloadProgress, isDownloading = isDownloading, isReady = downloadReady, isError = isError,
-                    onUpdate = {
-                        if (downloadReady || isError) {
-                            if (isError) {
-                                isError = false; downloadProgress = 0f; isDownloading = true
-                                updateInfo!!.downloadUrl?.let { UpdateDownloadService.start(context, it, "HomeIO_${System.currentTimeMillis()}.apk") }
+                if (showUpdateDialog && updateInfo != null) {
+                    UpdateDialog(
+                        info = updateInfo!!, progress = downloadProgress, isDownloading = isDownloading, isReady = downloadReady, isError = isError,
+                        onUpdate = {
+                            if (downloadReady || isError) {
+                                if (isError) {
+                                    isError = false; downloadProgress = 0f; isDownloading = true
+                                    updateInfo!!.downloadUrl?.let { UpdateDownloadService.start(context, it, "HomeIO_${System.currentTimeMillis()}.apk") }
+                                } else {
+                                    val path = UpdateDownloadService.readState(context).filePath
+                                    if (path != null) {
+                                        if (!ApkDownloader.install(context, path)) Toast.makeText(context, "Beri izin install APK", Toast.LENGTH_LONG).show()
+                                    } else { downloadReady = false; isError = true }
+                                }
                             } else {
-                                val path = UpdateDownloadService.readState(context).filePath
-                                if (path != null) {
-                                    if (!ApkDownloader.install(context, path)) Toast.makeText(context, "Beri izin install APK", Toast.LENGTH_LONG).show()
-                                } else { downloadReady = false; isError = true }
+                                updateInfo!!.downloadUrl?.let {
+                                    isDownloading = true; downloadProgress = 0f; downloadReady = false; isError = false
+                                    UpdateDownloadService.start(context, it, "HomeIO_${System.currentTimeMillis()}.apk")
+                                }
                             }
-                        } else {
-                            updateInfo!!.downloadUrl?.let {
-                                isDownloading = true; downloadProgress = 0f; downloadReady = false; isError = false
-                                UpdateDownloadService.start(context, it, "HomeIO_${System.currentTimeMillis()}.apk")
-                            }
-                        }
-                    },
-                    onLater = { if (!updateInfo!!.isForceUpdate && !isDownloading) { showUpdateDialog = false; if (!downloadReady) { downloadProgress = 0f; isError = false } } },
-                    onSkip = { if (!updateInfo!!.isForceUpdate && !isDownloading) { UpdatePrefs.setSkipped(context, updateInfo!!.latestVersion); showUpdateDialog = false; downloadProgress = 0f; downloadReady = false; isError = false } }
-                )
+                        },
+                        onLater = { if (!updateInfo!!.isForceUpdate && !isDownloading) { showUpdateDialog = false; if (!downloadReady) { downloadProgress = 0f; isError = false } } },
+                        onSkip = { if (!updateInfo!!.isForceUpdate && !isDownloading) { UpdatePrefs.setSkipped(context, updateInfo!!.latestVersion); showUpdateDialog = false; downloadProgress = 0f; downloadReady = false; isError = false } }
+                    )
+                }
             }
         }
     }
@@ -280,6 +290,12 @@ class MainActivity : ComponentActivity() {
     override fun onResume() { super.onResume(); lastUserInteractionTime = System.currentTimeMillis(); KioskManager.isMainActivityForeground = true }
     override fun onPause() { super.onPause(); KioskManager.isMainActivityForeground = false }
     override fun onUserInteraction() { super.onUserInteraction(); lastUserInteractionTime = System.currentTimeMillis() }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        SoundFeedback.release() // FIX BUG #23
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         lastUserInteractionTime = System.currentTimeMillis()
         if (event.action == KeyEvent.ACTION_DOWN) {
