@@ -7,7 +7,6 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Brightness6
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -22,7 +21,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.andikune.homeio.domain.model.SettingsConfig
 import dev.andikune.homeio.presentation.components.GlassColors
-import dev.andikune.homeio.presentation.components.NeonFocusBorder
 import dev.andikune.homeio.presentation.components.TvSlider
 import dev.andikune.homeio.presentation.components.TvToggle
 
@@ -37,7 +35,7 @@ fun TvDisplaySection(
             Spacer(Modifier.width(10.dp))
             Column {
                 Text("TAMPILAN TV & SISTEM", color = GlassColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text("Safe Area, Kecerahan, Kiosk Mode", color = GlassColors.TextSecondary, fontSize = 12.sp)
+                Text("Safe Area, Kecerahan, Kiosk Mode, Ukuran Ikon", color = GlassColors.TextSecondary, fontSize = 12.sp)
             }
         }
 
@@ -51,6 +49,18 @@ fun TvDisplaySection(
             valueRange = 0f..10f,
             steps = 19,
             formatter = { String.format("%.1f%%", it) }
+        )
+
+        // === UKURAN IKON APLIKASI ===
+        Text("UKURAN IKON APLIKASI", color = GlassColors.TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text("Perkecil atau perbesar ikon di Home Screen", color = GlassColors.TextSecondary, fontSize = 11.sp)
+        TvSlider(
+            label = "Skala Ikon",
+            value = settings.appIconSizeMultiplier,
+            onValueChange = { onUpdate(settings.copy(appIconSizeMultiplier = it)) },
+            valueRange = 0.6f..1.5f,
+            steps = 9,
+            formatter = { String.format("%.1fx", it) }
         )
 
         // === KECERAHAN ===
@@ -101,21 +111,19 @@ fun TvDisplaySection(
 @Composable
 private fun BrightnessChip(label: String, isSelected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     var isFocused by remember { mutableStateOf(false) }
-    NeonFocusBorder(focused = isFocused, cornerRadius = 10.dp, modifier = modifier) {
-        Box(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-                .background(
-                    when {
-                        isSelected -> GlassColors.AccentGlow.copy(alpha = 0.25f)
-                        isFocused -> GlassColors.GlassTint.copy(alpha = 0.5f)
-                        else -> GlassColors.GlassTint
-                    }
-                )
-                .border(if (isSelected) 1.5.dp else 0.dp, if (isSelected) GlassColors.AccentGlow else Color.Transparent, RoundedCornerShape(10.dp))
-                .onFocusChanged { isFocused = it.isFocused }.focusable().clickable { onClick() }.padding(vertical = 12.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(label, color = if (isSelected) GlassColors.AccentGlow else GlassColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-        }
+    Box(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+            .background(
+                when {
+                    isSelected -> GlassColors.AccentGlow.copy(alpha = 0.25f)
+                    isFocused -> GlassColors.GlassTint.copy(alpha = 0.5f)
+                    else -> GlassColors.GlassTint
+                }
+            )
+            .border(if (isSelected) 1.5.dp else 0.dp, if (isSelected) GlassColors.AccentGlow else Color.Transparent, RoundedCornerShape(10.dp))
+            .onFocusChanged { isFocused = it.isFocused }.focusable().clickable { onClick() }.padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = if (isSelected) GlassColors.AccentGlow else GlassColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
     }
 }
