@@ -1,14 +1,12 @@
 package dev.andikune.homeio.presentation.components
 
-import androidx.compose.foundation.layout.PaddingValues
+import android.content.res.Configuration
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -16,12 +14,7 @@ import androidx.compose.ui.unit.sp
 
 /**
  * ResponsiveHelper — Helper Auto-Scale UI untuk TV & HP.
- *
- * Masalah: 1 Dp di TV 32 inci (720p) dan 1 Dp di TV 65 inci (4K) ukuran fisiknya beda jauh.
- * Solusi: Deteksi ukuran layar, hitung rasio terhadap base 1080p, kalikan semua ukuran.
  */
-
-// Base design kita adalah TV 1920x1080 (FHD), yang kira-kira setara 960dp x 540dp
 private const val BASE_WIDTH_DP = 960f
 private const val BASE_HEIGHT_DP = 540f
 
@@ -42,14 +35,12 @@ fun rememberScreenInfo(): ScreenInfo {
     val widthDp = configuration.screenWidthDp.toFloat()
     val heightDp = configuration.screenHeightDp.toFloat()
 
-    // Hitung rasio (scale factor) dengan base 960x540
-    // Gunakan minOf agar UI tidak terlalu besar jika layar HP memanjang
+    // FIX: Skala dibatasi maksimal 1.5x dan minimal 0.8x agar teks tidak terlalu kecil/besar
     val rawScale = minOf(widthDp / BASE_WIDTH_DP, heightDp / BASE_HEIGHT_DP)
-    
-    // Batasi scale minimal 0.6x dan maksimal 2.5x agar UI tidak terlalu kecil/besar
-    val scale = rawScale.coerceIn(0.6f, 2.5f)
+    val scale = rawScale.coerceIn(0.8f, 1.5f)
 
-    val isTv = configuration.smallestScreenWidthDp >= 600
+    // FIX: Deteksi TV yang lebih akurat menggunakan uiMode
+    val isTv = (configuration.uiMode and Configuration.UI_MODE_TYPE_MASK) == Configuration.UI_MODE_TYPE_TELEVISION
 
     return ScreenInfo(
         screenWidthDp = widthDp,
@@ -70,30 +61,18 @@ fun ResponsiveProvider(content: @Composable () -> Unit) {
 // ============================================================
 // EXTENSION UNTUK UKURAN
 // ============================================================
-
-/**
- * Mengubah angka Dp statis menjadi Dp yang sudah di-scale.
- * Contoh: 16.scaledDp() -> jika scale 1.5x, hasilnya jadi 24.dp
- */
 @Composable
 fun Dp.scaled(): Dp {
     val info = LocalScreenInfo.current
     return (this.value * info.scaleFactor).dp
 }
 
-/**
- * Mengubah angka TextUnit (Sp) statis menjadi Sp yang sudah di-scale.
- * Contoh: 14.scaledSp() -> jika scale 1.5x, hasilnya jadi 21.sp
- */
 @Composable
 fun TextUnit.scaled(): TextUnit {
     val info = LocalScreenInfo.current
     return (this.value * info.scaleFactor).sp
 }
 
-/**
- * Modifier untuk memberikan padding responsif.
- */
 @Composable
 fun Modifier.responsivePadding(all: Dp): Modifier {
     val info = LocalScreenInfo.current
