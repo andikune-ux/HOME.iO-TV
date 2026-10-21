@@ -29,6 +29,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -54,7 +55,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 // ============================================================
-// 1. UPDATE MANAGER
+// 1. UPDATE MANAGER (PARSING JSON YANG LEBIH KUAT)
 // ============================================================
 object UpdateManager {
     private const val GITHUB_API = "https://api.github.com/repos/andikune-ux/HOME.iO-TV/releases/latest"
@@ -81,9 +82,10 @@ object UpdateManager {
             val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
             conn.disconnect()
 
-            val latest = json.optString("tag_name", "")
-            val notes = json.optString("body", "")
-            if (latest.isBlank()) return@withContext noUpdate(current, "NO_TAG")
+            // FIX: Gunakan optString dengan nilai default yang jelas
+            val latest = json.optString("tag_name", "Versi Baru").trim().ifEmpty { "Versi Baru" }
+            val rawNotes = json.optString("body", "").trim()
+            val notes = if (rawNotes.isEmpty()) "Tidak ada catatan rilis." else rawNotes
 
             val isNewer = compareVersions(latest, current) > 0
             val isForce = isNewer && notes.lines().any { it.trim().uppercase().startsWith("FORCE_UPDATE=TRUE") }
@@ -100,6 +102,7 @@ object UpdateManager {
             }
             UpdateInfo(isNewer, current, latest, dlUrl, notes, isForce)
         } catch (e: Exception) {
+            Log.e("UpdateManager", "Error: ${e.message}")
             noUpdate(current, "NETWORK")
         }
     }
@@ -218,44 +221,83 @@ object ApkDownloader {
 }
 
 // ============================================================
-// 4. UPDATE DIALOG
+// 4. UPDATE DIALOG (LAYOUT DIPERBAIKI)
 // ============================================================
 @Composable
-fun UpdateDialog(info: UpdateManager.UpdateInfo, progress: Float, isDownloading: Boolean, isReady: Boolean, isError: Boolean = false, onUpdate: () -> Unit, onLater: () -> Unit, onSkip: () -> Unit) {
+fun UpdateDialog(
+    info: UpdateManager.UpdateInfo, progress: Float, isDownloading: Boolean,
+    isReady: Boolean, isError: Boolean = false, onUpdate: () -> Unit,
+    onLater: () -> Unit, onSkip: () -> Unit
+) {
     val isForce = info.isForceUpdate
     val focusReq = remember { FocusRequester() }
     LaunchedEffect(Unit) { delay(500); if (isActive) runCatching { focusReq.requestFocus() } }
 
-    Dialog(onDismissRequest = { if (!isForce && !isDownloading) onLater() }, properties = DialogProperties(dismissOnBackPress = !isForce && !isDownloading, usePlatformDefaultWidth = false)) {
+    Dialog(
+        onDismissRequest = { if (!isForce && !isDownloading) onLater() },
+        properties = DialogProperties(dismissOnBackPress = !isForce && !isDownloading, usePlatformDefaultWidth = false)
+    ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(Modifier.fillMaxWidth(0.9f).fillMaxHeight(0.9f).clip(RoundedCornerShape(18.dp)).background(GlassColors.DeepBackground).border(2.dp, GlassColors.AccentGlow, RoundedCornerShape(18.dp)).padding(16.dp).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.SystemUpdate, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(40.dp))
-                Text("UPDATE TERSEDIA", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = GlassColors.AccentGlow)
-                Text("Versi ${info.latestVersion} tersedia", fontSize = 12.sp, color = GlassColors.TextSecondary)
+            Column(
+                Modifier.fillMaxWidth(0.9f).fillMaxHeight(0.9f)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(GlassColors.DeepBackground)
+                    .border(2.dp, GlassColors.AccentGlow, RoundedCornerShape(18.dp))
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(Icons.Default.SystemUpdate, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(48.dp))
                 Spacer(Modifier.height(10.dp))
-                Column(Modifier.fillMaxWidth().background(GlassColors.GlassTint, RoundedCornerShape(10.dp)).padding(10.dp)) {
-                    Text("Apa yang baru:", fontSize = 12.sp, color = GlassColors.AccentGlow)
-                    Box(Modifier.height(80.dp).verticalScroll(rememberScrollState())) { Text(info.releaseNotes ?: "-", fontSize = 12.sp, color = GlassColors.TextPrimary) }
+                
+                // FIX: Judul Versi lebih jelas
+                Text("UPDATE TERSEDIA", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = GlassColors.AccentGlow)
+                Text("Versi: ${info.latestVersion}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = GlassColors.TextPrimary)
+                
+                Spacer(Modifier.height(16.dp))
+                
+                // FIX: Kotak Changelog
+                Column(
+                    Modifier.fillMaxWidth()
+                        .background(GlassColors.GlassTint, RoundedCornerShape(12.dp))
+                        .padding(14.dp)
+                ) {
+                    Text("📋 Rincian Pembaruan:", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = GlassColors.AccentGlow)
+                    Spacer(Modifier.height(8.dp))
+                    Box(Modifier.height(120.dp).verticalScroll(rememberScrollState())) {
+                        Text(
+                            text = info.releaseNotes ?: "Tidak ada catatan rilis.",
+                            fontSize = 13.sp,
+                            color = GlassColors.TextPrimary,
+                            lineHeight = 18.sp
+                        )
+                    }
                 }
+
                 if (isDownloading || isReady || isError) {
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(16.dp))
                     val label = when { isError -> "❌ Download gagal"; isReady -> "✅ Download selesai"; else -> "⬇️ Mengunduh... ${(progress * 100).toInt()}%" }
                     val labelColor = when { isError -> GlassColors.AccentRed; isReady -> GlassColors.AccentGreen; else -> GlassColors.AccentGlow }
-                    Text(label, color = labelColor, fontSize = 12.sp)
-                    Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(Color.Gray)) {
+                    Text(label, color = labelColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Box(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)).background(Color.Gray)) {
                         Box(Modifier.fillMaxWidth(progress).fillMaxHeight().background(when { isError -> GlassColors.AccentRed; isReady -> GlassColors.AccentGreen; else -> GlassColors.AccentGlow }))
                     }
                 }
+
                 Spacer(Modifier.height(20.dp))
+                
                 if (isError) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Box(Modifier.weight(1f)) { OtaButton("TUTUP", GlassColors.SurfaceDark, onLater) }
                         Box(Modifier.weight(1f)) { OtaButton("COBA LAGI", GlassColors.AccentRed, onUpdate, focusReq) }
                     }
-                } else if (isReady) { OtaButton("INSTALL SEKARANG", GlassColors.AccentGreen, onUpdate, focusReq) }
-                else if (isDownloading) { OtaButton("MENGUNDUH...", GlassColors.SurfaceDark, {}) }
-                else if (isForce) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                } else if (isReady) {
+                    OtaButton("INSTALL SEKARANG", GlassColors.AccentGreen, onUpdate, focusReq)
+                } else if (isDownloading) {
+                    OtaButton("MENGUNDUH...", GlassColors.SurfaceDark, {})
+                } else if (isForce) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Box(Modifier.weight(1f)) { OtaButton("NANTI", GlassColors.SurfaceDark, onLater) }
                         Box(Modifier.weight(1f)) { OtaButton("UPDATE", GlassColors.AccentGlow, onUpdate, focusReq) }
                     }
@@ -275,14 +317,17 @@ fun UpdateDialog(info: UpdateManager.UpdateInfo, progress: Float, isDownloading:
 private fun OtaButton(txt: String, bg: Color, onClick: () -> Unit, focusReq: FocusRequester? = null) {
     var focus by remember { mutableStateOf(false) }
     val requester = focusReq ?: remember { FocusRequester() }
-    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (focus) Color.White else bg)
-        .focusRequester(requester).onFocusChanged { focus = it.isFocused }.focusable().clickable { onClick() }.padding(12.dp), contentAlignment = Alignment.Center) {
-        Text(txt, color = if (focus) Color.Black else Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+    Box(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (focus) Color.White else bg)
+            .focusRequester(requester).onFocusChanged { focus = it.isFocused }.focusable().clickable { onClick() }
+            .padding(vertical = 14.dp), contentAlignment = Alignment.Center
+    ) {
+        Text(txt, color = if (focus) Color.Black else Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
     }
 }
 
 // ============================================================
-// 5. APK FILE LIST SECTION (DENGAN POPUP OTOMATIS)
+// 5. APK FILE LIST SECTION
 // ============================================================
 @Composable
 fun ApkFileListSection() {
@@ -296,7 +341,6 @@ fun ApkFileListSection() {
     var checkResult by remember { mutableStateOf<String?>(null) }
     var isErrorResult by remember { mutableStateOf(false) }
 
-    // State untuk Pop-up Update Lokal
     var showUpdateDialog by remember { mutableStateOf(false) }
     var localUpdateInfo by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
     var downloadProgress by remember { mutableFloatStateOf(0f) }
@@ -304,7 +348,6 @@ fun ApkFileListSection() {
     var downloadReady by remember { mutableStateOf(false) }
     var isError by remember { mutableStateOf(false) }
 
-    // Dengarkan progress download
     DisposableEffect(Unit) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(c: Context?, intent: Intent?) {
@@ -343,7 +386,6 @@ fun ApkFileListSection() {
 
         Spacer(Modifier.height(16.dp))
 
-        // Tombol Cek Update
         var isFocused by remember { mutableStateOf(false) }
         Box(
             Modifier.fillMaxWidth(0.8f).clip(RoundedCornerShape(16.dp))
@@ -359,7 +401,7 @@ fun ApkFileListSection() {
                             isErrorResult = false
                             checkResult = "✅ Update tersedia: ${info.latestVersion}"
                             localUpdateInfo = info
-                            showUpdateDialog = true // Tampilkan Dialog
+                            showUpdateDialog = true
                         } else {
                             isErrorResult = true
                             val msg = if (info.errorType != null) "Gagal cek: ${info.errorType}" else "Aplikasi sudah versi terbaru (${info.currentVersion})"
@@ -383,7 +425,6 @@ fun ApkFileListSection() {
             }
         }
 
-        // Hasil Cek
         checkResult?.let { msg ->
             Text(
                 text = msg,
@@ -394,7 +435,6 @@ fun ApkFileListSection() {
 
         Spacer(Modifier.height(16.dp))
 
-        // Daftar File APK
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("📦 RIWAYAT UNDUHAN", color = GlassColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Box(Modifier.clip(RoundedCornerShape(8.dp)).background(GlassColors.GlassTint).border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(8.dp))
@@ -426,7 +466,6 @@ fun ApkFileListSection() {
         }
     }
 
-    // Render Pop-up Lokal
     if (showUpdateDialog && localUpdateInfo != null) {
         UpdateDialog(
             info = localUpdateInfo!!,
