@@ -8,6 +8,9 @@ import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.widget.Toast
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -24,6 +27,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -89,8 +95,6 @@ fun HomeScreen(
     }
 
     var memInfo by remember { mutableStateOf(SystemUtils.getMemoryInfo(context)) }
-    
-    // FIX BUG #13: Auto-Boost RAM hanya saat cold start (mencegah trigger tiap ubah setting)
     LaunchedEffect(Unit) {
         if (config.isAutoRamBoostEnabled) memInfo = SystemUtils.boostRam(context)
     }
@@ -107,7 +111,6 @@ fun HomeScreen(
         AppContextMenuDialog(
             app = app, isFavorite = isFav,
             onToggleFavorite = { pkg ->
-                // FIX BUG #51: Anti-race condition
                 if (isFav) {
                     onSaveConfig(config.copy(favoritePackages = config.favoritePackages.filter { it != pkg }))
                 } else {
@@ -127,7 +130,6 @@ fun HomeScreen(
         if (isSideloadOnly) allApps.filter { it.isSideloaded } else allApps
     }
 
-    // FIX BUG #24: Terapkan Safe Area padding
     val safePadding = (config.safeAreaPercent * 10).dp
 
     Box(Modifier.fillMaxSize()) {
@@ -150,7 +152,6 @@ fun HomeScreen(
 
             Spacer(Modifier.width(14.dp))
 
-            // FIX BUG #18 & #43: Hapus width(780.dp), gunakan weight responsif
             Row(Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
                 Column(Modifier.fillMaxHeight(), verticalArrangement = Arrangement.SpaceBetween) {
                     TopStatusBar(
@@ -338,7 +339,6 @@ fun FavoriteAppsSection(favoriteApps: List<AppItem>, onAppClick: (AppItem) -> Un
     }
 }
 
-// FIX BUG #27 & #40: Ubah Row menjadi LazyRow untuk mencegah OOM
 @Composable
 fun AllAppsHorizontalSection(apps: List<AppItem>, isSideloadOnly: Boolean, onAppClick: (AppItem) -> Unit, onAppLongClick: (AppItem) -> Unit) {
     Column {
@@ -355,8 +355,22 @@ fun AllAppsHorizontalSection(apps: List<AppItem>, isSideloadOnly: Boolean, onApp
     }
 }
 
+// FIX UI: Menambahkan efek scale (Zoom in) dan Shadow saat kartu aplikasi disorot D-Pad
 @Composable
 fun AppCardItem(app: AppItem, isWide: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit, onLongClick: () -> Unit) {
+    var isFocused by remember { mutableStateOf(false) }
+    
+    val scale by animateFloatAsState(
+        targetValue = if (isFocused) 1.08f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        label = "card_scale"
+    )
+    
+    val shadowElevation by animateFloatAsState(
+        targetValue = if (isFocused) 12f else 0f,
+        label = "card_shadow"
+    )
+
     val bitmap by produceState<Bitmap?>(initialValue = null, app, isWide) {
         value = withContext(Dispatchers.IO) {
             val target = if (isWide && app.banner != null) app.banner else app.icon
@@ -365,7 +379,19 @@ fun AppCardItem(app: AppItem, isWide: Boolean, modifier: Modifier = Modifier, on
     }
 
     Box(
-        modifier.height(84.dp).liquidGlass(cornerRadius = 20.dp).combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(8.dp),
+        modifier = modifier
+            .scale(scale)
+            .height(84.dp)
+            .shadow(
+                elevation = shadowElevation.dp,
+                shape = RoundedCornerShape(20.dp),
+                ambientColor = GlassColors.AccentGlow,
+                spotColor = GlassColors.AccentGlow
+            )
+            .liquidGlass(cornerRadius = 20.dp, isFocused = isFocused)
+            .onFocusChanged { isFocused = it.isFocused }
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(8.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize()) {
