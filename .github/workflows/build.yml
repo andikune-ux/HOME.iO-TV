@@ -60,7 +60,15 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "✅ Detected Version: $VERSION"
 
-      # 1. BUAT RELEASE DENGAN GITHUB_TOKEN BAWAAN
+      - name: Force Clean Up Old Tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          echo "Menghapus release & tag lama jika ada..."
+          gh release delete "$VERSION" --yes 2>/dev/null || true
+          git push origin :refs/tags/"$VERSION" 2>/dev/null || true
+
       - name: Create Draft Release
         id: create_draft
         env:
@@ -74,9 +82,6 @@ jobs:
           fi
 
           echo "🚀 Membuat DRAFT Release untuk tag: $VERSION"
-          
-          gh release delete "$VERSION" --yes 2>/dev/null || true
-          
           gh release create "$VERSION" \
             --draft \
             --title "Home.io $VERSION" \
@@ -84,17 +89,22 @@ jobs:
             
           echo "✅ Draft Release $VERSION berhasil dibuat."
 
-      # 2. UPLOAD APK KE DRAFT
       - name: Upload APK to Draft Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ steps.get_version.outputs.VERSION }}"
-          echo "📦 Meng-upload APK ke Draft $VERSION..."
-          gh release upload "$VERSION" app/build/outputs/apk/debug/*.apk --clobber
+          APK_PATH=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          
+          if [ -z "$APK_PATH" ]; then
+            echo "❌ File APK tidak ditemukan!"
+            exit 1
+          fi
+          
+          echo "📦 Meng-upload APK ($APK_PATH) ke Draft $VERSION..."
+          gh release upload "$VERSION" "$APK_PATH" --clobber
           echo "✅ APK berhasil di-upload."
 
-      # 3. PUBLISH DRAFT MENJADI PUBLISHED
       - name: Publish Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
