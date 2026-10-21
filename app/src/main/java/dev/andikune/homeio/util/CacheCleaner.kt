@@ -81,10 +81,11 @@ object CacheCleaner {
 
             packages.forEach { pkg ->
                 if (pkg.packageName == ctx.packageName) return@forEach
+                // FIX: Null-check applicationInfo (bisa null untuk paket sistem/shared lib)
+                val appInfo: ApplicationInfo = pkg.applicationInfo ?: return@forEach
                 try {
                     val stats = sm.queryStatsForPackage(StorageManager.UUID_DEFAULT, pkg.packageName, Process.myUserHandle())
                     if (stats.cacheBytes >= 1_000_000L) {
-                        val appInfo = pkg.applicationInfo
                         result.add(AppCacheInfo(
                             packageName = pkg.packageName,
                             appName = pm.getApplicationLabel(appInfo).toString(),
@@ -210,10 +211,19 @@ object CacheCleaner {
 
     fun openStorageSettings(ctx: Context) {
         try {
-            val intents = listOf(Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS), Intent(Settings.ACTION_SETTINGS), Intent("android.settings.STORAGE_SETTINGS"))
+            val intents = listOf(
+                Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS),
+                Intent(Settings.ACTION_SETTINGS),
+                Intent("android.settings.STORAGE_SETTINGS")
+            )
             for (intent in intents) {
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                try { if (intent.resolveActivity(ctx.packageManager) != null) { ctx.startActivity(intent); return } } catch (_: Exception) {}
+                try {
+                    if (intent.resolveActivity(ctx.packageManager) != null) {
+                        ctx.startActivity(intent)
+                        return
+                    }
+                } catch (_: Exception) {}
             }
         } catch (_: Exception) {}
     }
