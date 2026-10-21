@@ -13,7 +13,11 @@ import java.util.Locale
 object BackupBiasaManager {
     private const val TAG = "BackupBiasa"
     private const val FOLDER = "HomeiO/Backup"
-    private val jsonFormat = Json { prettyPrint = true; ignoreUnknownKeys = true }
+    private val jsonFormat = Json { 
+        prettyPrint = true
+        ignoreUnknownKeys = true // FIX BUG #29 & #45: Abaikan field baru/asing saat restore versi lama
+        isLenient = true 
+    }
 
     data class BackupResult(val success: Boolean, val path: String? = null, val msg: String? = null)
 
@@ -41,7 +45,8 @@ object BackupBiasaManager {
         return try {
             val file = File(filePath)
             if (!file.exists()) return null
-            jsonFormat.decodeFromString(SettingsConfig.serializer(), file.readText(Charsets.UTF_8))
+            val jsonString = file.readText(Charsets.UTF_8)
+            jsonFormat.decodeFromString(SettingsConfig.serializer(), jsonString)
         } catch (e: Exception) {
             Log.e(TAG, "Gagal restore: ${e.message}")
             null
