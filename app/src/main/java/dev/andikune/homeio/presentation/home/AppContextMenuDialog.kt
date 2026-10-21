@@ -100,20 +100,27 @@ fun AppContextMenuDialog(
                     }
                 )
 
-                ContextMenuOption(
-                    icon = Icons.Default.Delete,
-                    title = stringResource(R.string.action_uninstall),
-                    tint = GlassColors.AccentRed,
-                    onClick = {
-                        SoundFeedback.playClick(context)
-                        val intent = Intent(Intent.ACTION_DELETE).apply {
-                            data = Uri.parse("package:${app.packageName}")
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                // FIX: Sembunyikan tombol uninstall jika aplikasi sistem
+                if (!app.isSystemApp) {
+                    ContextMenuOption(
+                        icon = Icons.Default.Delete,
+                        title = stringResource(R.string.action_uninstall),
+                        tint = GlassColors.AccentRed,
+                        onClick = {
+                            SoundFeedback.playClick(context)
+                            try {
+                                val intent = Intent(Intent.ACTION_DELETE).apply {
+                                    data = Uri.parse("package:${app.packageName}")
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                // Ignore
+                            }
+                            onDismiss()
                         }
-                        context.startActivity(intent)
-                        onDismiss()
-                    }
-                )
+                    )
+                }
             }
         },
         confirmButton = {
