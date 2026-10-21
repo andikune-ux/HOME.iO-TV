@@ -2,7 +2,8 @@ package dev.andikune.homeio.data
 
 /**
  * AppKnowledge — Memory Knowledge & Instruction untuk Home.io
- * File ini dibaca oleh BackupManager untuk export ke .txt
+ * File ini dibaca oleh BackupManager untuk export ke .txt.
+ * Versi ini mencakup seluruh evolusi dari Batch 0 hingga Final QA.
  */
 object AppKnowledge {
 
@@ -20,112 +21,148 @@ object AppKnowledge {
     val APP_STRUCTURE = """
 app/src/main/java/dev/andikune/homeio/
 ├── HomeIoApplication.kt
-├── MainActivity.kt
-├── di/AppContainer.kt
+├── MainActivity.kt                    -> Activity Utama (Splash, Navigasi, Dialog, OTA, Kiosk)
+├── di/AppContainer.kt                 -> Dependency Injection
 ├── data/
-│   ├── local/         -> DataStore, FileProvider, Backup
-│   ├── remote/        -> Retrofit GitHub Releases, Open-Meteo
-│   ├── model/         -> Model data aplikasi
-│   └── repository/    -> Implementasi repository
+│   ├── local/                         -> DataStore & Prefs
+│   ├── remote/                        -> Retrofit (GitHub API, Open-Meteo)
+│   └── AppKnowledge.kt                -> File ini (Memory AI)
 ├── domain/
-│   ├── model/         -> Domain entities
-│   ├── repository/    -> Interface
-│   └── usecase/       -> Business logic
+│   ├── model/                         -> Model data (SettingsConfig, dll)
+│   └── repository/                    -> Interface
 ├── presentation/
-│   ├── home/          -> HomeScreen (horizontal-only)
-│   ├── settings/      -> SettingsScreen (2-pane glass)
-│   ├── wallpaper/     -> WallpaperEngine (foto/video)
-│   ├── screensaver/   -> ScreensaverActivity (OLED)
-│   ├── crashlog/      -> UI crash log
-│   ├── splash/        -> Splash animation
-│   └── components/    -> GlassCard, FocusableRow, dll
-├── service/           -> DownloadService (OTA), BootReceiver
-└── util/              -> CrashHandler, BackupManager, BlurEffect
+│   ├── home/
+│   │   └── HomeScreen.kt              -> UI Utama (Horizontal Only, Widget, App Grid)
+│   ├── settings/
+│   │   ├── SettingsScreen.kt          -> 2-Pane Layout (8 Kategori)
+│   │   ├── WallpaperSection.kt
+│   │   ├── ScreensaverSection.kt
+│   │   ├── PerformanceSection.kt      -> Cache Cleaner & RAM Booster
+│   │   ├── LanguageSection.kt
+│   │   ├── TvDisplaySection.kt        -> Safe Area & Brightness
+│   │   ├── BackupBiasaSection.kt      -> Backup Tema (JSON)
+│   │   ├── InfoAppSection.kt          -> Identitas, Backup Aman, Medsos, AI Prompt
+│   │   ├── AppCacheDialog.kt          -> Dialog list cache app lain
+│   │   └── (File Section lainnya)
+│   ├── wallpaper/
+│   │   ├── WallpaperView.kt           -> ExoPlayer (Video) & Image
+│   │   └── FileManagerDialog.kt
+│   ├── screensaver/
+│   │   └── ScreensaverActivity.kt
+│   ├── onboarding/
+│   │   └── OnboardingPermissionDialog.kt
+│   └── components/
+│       ├── GlassTheme.kt              -> Modifier Liquid Glass (Real Blur API 31+)
+│       ├── NeonFocusBorder.kt         -> Efek Glow Berputar D-Pad
+│       ├── TvSlider.kt & TvToggle.kt  -> Komponen D-Pad friendly
+│       └── (Komponen UI lainnya)
+├── service/
+│   ├── UpdateDownloadService.kt       -> Foreground Service untuk OTA
+│   └── (Service lainnya)
+├── kiosk/
+│   ├── KioskManager.kt                -> Lock Task Mode
+│   ├── WatchdogService.kt             -> Auto-restart jika crash
+│   └── AutoStartService.kt            -> Buka saat boot
+├── receiver/
+│   ├── BootReceiver.kt                -> Deteksi boot
+│   └── UsbReceiver.kt                 -> Deteksi flashdisk
+└── util/
+    ├── OtaUpdate.kt                   -> Logic OTA (UpdateManager, ApkDownloader, UI Dialog)
+    ├── CacheCleaner.kt                -> Logic RAM & Cache (Usage Access)
+    ├── BackupBiasaManager.kt          -> Export/Import JSON
+    ├── BackupManager.kt               -> Export TXT (AppKnowledge)
+    ├── DateTimeFormatter.kt           -> Format Jam (WIB, 24H/12H) & Tanggal (ID/EN)
+    ├── LauncherHelper.kt              -> Pengecekan Default Launcher
+    ├── CrashHandler.kt                -> Penangkap Error
+    └── (Util lainnya)
     """.trimIndent()
 
     val APP_FEATURES = """
 1. UI/UX iOS 26 Liquid Glass
-   - Efek blur (RenderEffect API 31+)
-   - Sudut membulat, glowing shadow
-   - Fallback solid transparan (API < 31)
+   - Efek Blur asli (RenderEffect API 31+) via GlassTheme.kt.
+   - Fallback solid transparan (API < 31).
+   - Border Glow berputar (NeonFocusBorder) saat disorot D-Pad.
+   - Suara klik (SoundFeedback) saat navigasi.
 
 2. Home Screen HORIZONTAL-ONLY
-   - Panel kiri: Jam, Search, Home, System & Utils
-   - Panel kanan: Widget Cuaca, Info Sistem, Favorite Apps (3), All Apps
-   - Context Menu (Long Press 500ms)
-   - Smart Icon Handler (TV banner vs HP icon)
-   - Full D-Pad + Touch support
-   - Sound Feedback saat navigasi
+   - Panel Kiri: Navigasi (Search, Home, System Utils, Settings).
+   - Panel Kanan: Widget Cuaca, Widget RAM, Favorite Apps (3), All Apps (Horizontal).
+   - Context Menu (Long Press 500ms): Pin, App Info, Uninstall.
+   - Safe Launch: Anti-crash saat membuka app yang sudah di-uninstall.
 
-3. Widget Real-time
-   - Cuaca (GPS + Open-Meteo, tanpa API key)
-   - Info Sistem (RAM, Storage)
-   - NTP Time Check
+3. Wallpaper Engine
+   - Foto & Video (ExoPlayer Mute + Seamless Loop).
+   - Mode Skala: FIT, FILL, ZOOM, CROP.
+   - Anti Memory Leak (Player dilepas saat ganti video).
 
-4. Wallpaper Engine
-   - Foto/Video kustom
-   - ExoPlayer Mute + Seamless Loop
-   - Scale Mode: Fit/Fill/Zoom/Crop
-   - In-App File Manager + Gallery intent
+4. Pengaturan 2-Pane Glass (8 Kategori)
+   - Wallpaper, Screensaver, Performa, Bahasa, Tampilan TV, Pembaruan, Backup, Info.
+   - Auto-save (Debounce) dan Force Save saat keluar layar.
+   - Scroll berfungsi penuh via D-Pad & Touchscreen.
 
-5. Pengaturan 2-Pane Glass Split Screen
-   - Kategori kiri, Kontrol kanan
-   - Semua submenu bisa scroll (kecuali Home)
+5. OTA Update via GitHub (Full Otomatis)
+   - Auto-check saat splash selesai (Cooldown 6 jam).
+   - Dialog Kaca (UpdateDialog): Changelog, Progress Bar, Tombol Skip/Nanti/Update.
+   - Force Update: Jika tag release mengandung 'FORCE_UPDATE=true'.
+   - Download via Foreground Service (Anti putus, notifikasi interaktif).
+   - Simpan di /HomeiO/Pembaharuan/ (Tidak auto-hapus).
+   - Retry Download jika koneksi putus.
 
-6. OTA Update via GitHub
-   - Foreground Service (tidak batal saat Back)
-   - Retry dialog jika gagal
-   - Path: /HomeiO/Pembaharuan/
-   - In-App Package Installer
+6. Manajemen RAM & Cache
+   - Widget RAM di Home dengan tombol Boost.
+   - Clear cache app sendiri (100% works).
+   - Kill background apps (butuh izin KILL_BACKGROUND_PROCESSES).
+   - Baca ukuran cache app lain (butuh izin Usage Access).
+   - Tombol pintas ke Storage Settings TV.
 
-7. Backup Aman & Backup Biasa
-   - Backup Aman: Export AppKnowledge + Prefs ke .txt
-   - Backup Biasa: Export SettingsConfig ke .json (Tema)
-   - Path: /HomeiO/Backup aman/ & /HomeiO/Backup/
+7. Kiosk & System
+   - Lock Task Mode (cegah keluar aplikasi).
+   - Watchdog Service (auto-restart jika crash).
+   - Auto-Start saat TV booting.
+   - Default Launcher Prompt (memandu user jadikan launcher utama).
+   - Brightness Schedule & Safe Area.
+   - USB OTG Popup (buka File Manager otomatis).
 
-8. Screensaver OLED
-   - Brightness 0% + Timer slider
-   - Wake-up via remote/touch
+8. Backup & Restore
+   - Backup Biasa (JSON): Menyimpan tema, wallpaper, bahasa, dll.
+   - Backup Aman (TXT): Menyimpan AppKnowledge (memory AI) + semua prefs.
+   - Lokasi terpusat di /HomeiO/.
 
-9. System Utilities
-   - Auto-start (BOOT_COMPLETED)
-   - USB OTG Popup
-   - RAM Booster otomatis on Home
-   - Splash Screen animasi kaca
-
-10. Debugging
-    - UncaughtExceptionHandler
-    - UI Crash Log + Salin Stack Trace
+9. Info Aplikasi & Tools
+   - Identitas App & Versi.
+   - Tombol Salin Prompt AI (untuk handoff ke AI baru).
+   - Link Media Sosial.
+   - Crash Log UI (Salin stack trace jika app error).
     """.trimIndent()
 
     val WORKFLOW_RULES = """
 === ATURAN FORMAT RESPON ===
-1. Visualisasi folder (emoji + indentasi)
-2. Path lengkap file (code block)
-3. Nama file (code block)
-4. URL edit / URL new (code block)
-5. Kode TIMPA FULL (jangan suruh user edit manual)
-6. Pesan commit
+1. Visualisasi folder (emoji + indentasi).
+2. Path lengkap file (code block).
+3. Nama file (code block).
+4. URL edit / URL new (code block).
+5. Kode TIMPA FULL (jangan suruh user edit manual).
+6. Pesan commit.
 
 === ANTI-TRUNCATION ===
-- Batas aman copy-paste: 400-600 baris per bubble
-- Jika < 600 baris: kirim 1 BAGIAN
-- Jika > 600 baris: WAJIB 2 BAGIAN dalam 1 bubble
-- JANGAN potong di tengah fungsi
+- Batas aman copy-paste: 400-600 baris per bubble.
+- Jika < 600 baris: kirim 1 BAGIAN.
+- Jika > 600 baris: WAJIB 2 BAGIAN dalam 1 bubble.
+- JANGAN potong di tengah fungsi.
 
 === ATURAN KERJA ===
-1. Konfirmasi sebelum eksekusi
-2. JANGAN hapus fitur lama tanpa izin
-3. Lihat kode asli dulu sebelum timpa
-4. Kerjakan PER FILE (bukan per fitur)
-5. Konfirmasi sebelum lanjut batch
+1. Konfirmasi sebelum eksekusi.
+2. JANGAN hapus fitur lama tanpa izin.
+3. Lihat kode asli dulu sebelum timpa.
+4. Kerjakan PER FILE (bukan per fitur).
+5. Konfirmasi sebelum lanjut batch.
 
 === ATURAN KERAS (JANGAN DILANGGAR) ===
-- JANGAN UBAH debug.keystore
-- JANGAN UBAH blok signingConfigs di build.gradle.kts
-- JANGAN UBAH .github/workflows/build.yml (bagian signing)
-- Build HANYA via GitHub Actions
-- JANGAN install APK dari AI Studio
+- JANGAN UBAH debug.keystore.
+- JANGAN UBAH blok signingConfigs di build.gradle.kts.
+- JANGAN UBAH .github/workflows/build.yml (bagian signing).
+- Build HANYA via GitHub Actions.
+- JANGAN install APK dari AI Studio (bentrok signature).
     """.trimIndent()
 
     val DEVELOPER_INSTRUCTION = """
@@ -140,30 +177,36 @@ APLIKASI:
 - Platform       : Android TV / STB
 - Min SDK        : 24 (Android 7.0)
 - Target SDK     : 35 (Android 15)
-- Stack          : Kotlin, Jetpack Compose, Compose TV
+- Stack          : Kotlin, Jetpack Compose, Compose TV, Media3 ExoPlayer.
 
 REPO: https://github.com/andikune-ux/HOME.iO-TV
     """.trimIndent()
 
     val KNOWN_ISSUES = """
-=== SUDAH DIPERBAIKI ===
-1. Build error compileSdk (eksperimental -> 35)
-2. AGP 8.5.0 -> 8.6.0 (wajib untuk tv-material 1.1.0)
-3. Compose BOM 2024.06.00 -> 2024.10.01
-4. tv-material 1.0.0-alpha11 -> 1.1.0
-5. Manifest kosong -> lengkap dengan permissions & service
-6. themes.xml kosong -> Theme.HomeIo valid
-7. debug.keystore -> permanen di repo via workflow
+=== SUDAH DIPERBAIKI (SELESAI) ===
+1. Build error compileSdk, AGP, dan versi library.
+2. Manifest & themes.xml kosong.
+3. File keystore hilang (sudah otomatis via GitHub Actions).
+4. Memory Leak pada Video Wallpaper.
+5. OOM / Lag saat scroll App Grid (Bitmap dialihkan ke IO thread).
+6. Data Loss saat keluar Settings (Force Save ditambahkan).
+7. Force Update bisa di-bypass dengan tombol Back.
+8. Crash saat membuka aplikasi yang sudah di-uninstall (Safe Launch).
+9. Kiosk Mode crash (ditambahkan try-catch).
+10. Cuaca tidak update (sekarang loop tiap 30 menit).
+11. Auto-Focus D-Pad nyangkut (diperbaiki di SettingsScreen).
+12. Notifikasi download tidak bisa diklik (PendingIntent ditambahkan).
+13. Path fallback (Android/data) tidak terdeteksi (Warning UI ditambahkan).
+14. Error parsing JSON GitHub (Null safety ditambahkan).
+15. Release Tag kosong di GitHub Actions (Logika Bash timezone Jakarta).
+16. NullPointer di CacheCleaner (applicationInfo null check).
+17. Scroll macet di Settings & OTA (verticalScroll ditambahkan).
+18. Format Tanggal/Jam menggunakan titik dua (:) bukan titik (.) (DateTimeFormatter WIB).
+19. Progress Download Error tidak reset (fix di OtaUpdate).
 
-=== BELUM DIPERBAIKI ===
-1. Liquid Glass blur asli (RenderEffect API 31+)
-2. HomeScreen masih scroll vertikal (harus horizontal-only)
-3. Wallpaper Engine (foto/video) belum ada
-4. DownloadService OTA belum fungsional
-5. ScreensaverActivity belum ada
-6. Crash Log UI belum ada
-7. Widget Cuaca masih dummy
-8. RAM Booster belum ada
+=== BELUM DIPERBAIKI (BATASAN ANDROID) ===
+1. Hapus cache aplikasi LAIN secara otomatis tanpa root (Hanya bisa via list app + buka Settings App Info per app).
+2. Notifikasi Foreground Service bisa gagal jika user menolak izin POST_NOTIFICATIONS (sudah ada handling, tapi butuh kesadaran user).
     """.trimIndent()
 
     val BUILD_ERROR_HISTORY = """
@@ -180,6 +223,15 @@ Solusi: naikkan compileSdk & targetSdk ke 35, AGP ke 8.6.0
 
 [20-10-2026] debug.keystore not found
 Solusi: jalankan workflow setup-keystore.yml (sekali saja)
+
+[21-10-2026] Unresolved reference 'background' di MainActivity
+Solusi: hapus import androidx.compose.ui.background (salah package).
+
+[21-10-2026] Argument type mismatch ApplicationInfo? di CacheCleaner
+Solusi: tambahkan null-check (val appInfo: ApplicationInfo = pkg.applicationInfo ?: return@forEach).
+
+[21-10-2026] HTTP 422 Validation Failed (tag_name is not valid)
+Solusi: GitHub Actions tidak mengenali variabel Kotlin. Ubah logika build.yml menggunakan Bash (date + TZ=Asia/Jakarta).
     """.trimIndent()
 
     val BACKUP_INFO = """
@@ -188,10 +240,12 @@ Backup Aman (TXT): /sdcard/HomeiO/Backup aman/
 Backup Biasa (JSON): /sdcard/HomeiO/Backup/
 Format Backup Aman: Backup Aman-Home.io-dd-MM-yyyy-HHmmss.txt
 Format Backup Biasa: Backup_HomeIO_HHmmss_ddMMyyyy.json
-Fallback: context.filesDir/HomeiO/...
+Fallback (jika izin storage ditolak):
+- context.filesDir/HomeiO/...
+- context.getExternalFilesDir(null)/HomeiO/...
     """.trimIndent()
 
-    // PROMPT UNTUK SALIN CEPAT KE AI LAIN
+    // PROMPT UNTUK SALIN CEPAT KE AI LAIN (HANDOFF)
     val AI_PROMPT = """
 Halo AI. Saya pakai aplikasi Home.io (Android TV, Jetpack Compose).
 Tolong baca konteks di bawah ini dulu sebelum saya kasih tugas.
@@ -202,7 +256,7 @@ Setelah paham, konfirmasi ke saya, baru kita mulai kerja.
 - Platform      : Android TV / STB (Jetpack Compose)
 - Repo          : https://github.com/andikune-ux/HOME.iO-TV
 - Package       : dev.andikune.homeio
-- Versi Saat Ini: v.1.21.N
+- Versi Saat Ini: (Cek BuildConfig.VERSION_NAME)
 - User          : Andi (HP Android, GitHub Mobile)
 
 === ATURAN FORMAT RESPON (WAJIB) ===
