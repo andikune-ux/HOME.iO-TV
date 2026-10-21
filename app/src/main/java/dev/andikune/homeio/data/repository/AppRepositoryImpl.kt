@@ -2,7 +2,7 @@ package dev.andikune.homeio.data.repository
 
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
+import android.content.pm.ApplicationInfo
 import dev.andikune.homeio.domain.model.AppItem
 import dev.andikune.homeio.domain.repository.AppRepository
 import kotlinx.coroutines.Dispatchers
@@ -21,12 +21,8 @@ class AppRepositoryImpl(
     override suspend fun refreshApps() = withContext(Dispatchers.IO) {
         val pm = context.packageManager
 
-        // Query TV Leanback Launcher apps
         val tvIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
         val tvResolveInfos = pm.queryIntentActivities(tvIntent, 0)
-        val tvPackageMap = tvResolveInfos.associateBy { it.activityInfo.packageName }
-
-        // Query Standard Launcher apps
         val phoneIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val phoneResolveInfos = pm.queryIntentActivities(phoneIntent, 0)
 
@@ -34,47 +30,42 @@ class AppRepositoryImpl(
         val appList = mutableListOf<AppItem>()
         val seenPackages = mutableSetOf<String>()
 
-        // Process TV Apps first
         for (info in tvResolveInfos) {
             val pkg = info.activityInfo.packageName
             if (pkg == selfPackage) continue
             seenPackages.add(pkg)
-
-            val label = info.loadLabel(pm).toString()
-            val banner = info.activityInfo.loadBanner(pm)
-            val icon = info.loadIcon(pm)
+            val isSystem = try {
+                (pm.getApplicationInfo(pkg, 0).flags and ApplicationInfo.FLAG_SYSTEM) != 0
+            } catch (e: Exception) { false }
 
             appList.add(
                 AppItem(
                     packageName = pkg,
                     activityName = info.activityInfo.name,
-                    label = label,
-                    icon = icon,
-                    banner = banner,
+                    label = info.loadLabel(pm).toString(),
                     isTvApp = true,
-                    isSideloaded = false
+                    isSideloaded = false,
+                    isSystemApp = isSystem
                 )
             )
         }
 
-        // Process Phone/Tablet or Sideloaded Apps (No Leanback Launcher)
         for (info in phoneResolveInfos) {
             val pkg = info.activityInfo.packageName
             if (pkg == selfPackage || seenPackages.contains(pkg)) continue
             seenPackages.add(pkg)
-
-            val label = info.loadLabel(pm).toString()
-            val icon = info.loadIcon(pm)
+            val isSystem = try {
+                (pm.getApplicationInfo(pkg, 0).flags and ApplicationInfo.FLAG_SYSTEM) != 0
+            } catch (e: Exception) { false }
 
             appList.add(
                 AppItem(
                     packageName = pkg,
                     activityName = info.activityInfo.name,
-                    label = label,
-                    icon = icon,
-                    banner = null,
+                    label = info.loadLabel(pm).toString(),
                     isTvApp = false,
-                    isSideloaded = true
+                    isSideloaded = true,
+                    isSystemApp = isSystem
                 )
             )
         }
