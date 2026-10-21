@@ -1,4 +1,4 @@
-name: Build Home.io APK
+name: Build & Auto Release
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -30,18 +30,47 @@ jobs:
         run: |
           if [ ! -f debug.keystore ]; then
             echo "❌ debug.keystore TIDAK ADA di repo!"
-            echo "Jalankan dulu workflow 'Setup Keystore' dari tab Actions."
             exit 1
           fi
-          echo "✅ Keystore ditemukan: $(wc -c < debug.keystore) bytes"
+          echo "✅ Keystore ditemukan"
 
       - name: Build Debug APK
         run: gradle assembleDebug --stacktrace --no-daemon --no-configuration-cache
 
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: HomeIO-Debug-APK
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 30
+      - name: Extract Version Name
+        id: get_version
+        run: |
+          # Mengambil nilai versionName dari app/build.gradle.kts
+          VERSION=$(grep -oP 'val versionNameValue = "\K[^"]+' app/build.gradle.kts)
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "✅ Detected Version: $VERSION"
+
+      - name: Check for FORCE_UPDATE in Commit
+        id: check_force
+        run: |
+          # Jika commit message mengandung [force], otomatis jadikan Force Update
+          if [[ "${{ github.event.head_commit.message }}" == *"[force]"* ]]; then
+            echo "NOTES=FORCE_UPDATE=true" >> $GITHUB_OUTPUT
+            echo "✅ Force Update AKTIF"
+          else
+            echo "NOTES=Auto-release dari commit terbaru." >> $GITHUB_OUTPUT
+            echo "ℹ️ Release Normal"
+          fi
+
+      - name: Create GitHub Release & Upload APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          NOTES="${{ steps.check_force.outputs.NOTES }}"
+          
+          echo "🚀 Membuat Release untuk tag: $VERSION"
+          
+          # Hapus release lama jika ada (opsional, agar tidak error saat re-run)
+          gh release delete "$VERSION" --yes 2>/dev/null || true
+          
+          # Buat release baru dan upload APK
+          gh release create "$VERSION" \
+            --title "Home.io $VERSION" \
+            --notes "$NOTES" \
+            app/build/outputs/apk/debug/*.apk
