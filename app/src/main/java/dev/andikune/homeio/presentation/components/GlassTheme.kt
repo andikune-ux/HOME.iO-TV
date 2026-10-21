@@ -47,7 +47,7 @@ fun Modifier.liquidGlass(
 ): Modifier {
     val shape = RoundedCornerShape(cornerRadius)
     
-    // FIX BUG ANDROID 12: Hanya izinkan Blur untuk Android 13 (TIRAMISU) ke atas
+    // FIX: Hanya izinkan Blur untuk Android 13 (TIRAMISU) ke atas
     val supportsBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
     
     val backgroundColor = if (useBlur && supportsBlur) {
@@ -57,6 +57,8 @@ fun Modifier.liquidGlass(
     val currentBorderColor = if (isFocused) GlassColors.AccentGlow else GlassColors.GlassBorder
     val effectiveBorderWidth = if (isFocused) 2.dp else borderWidth
 
+    // FIX: Urutan Modifier harus benar (clip -> background -> border -> blur)
+    // Jangan menaruh .clickable() di dalam Modifier ini agar efek ripple tidak tertutup.
     return this
         .clip(shape)
         .then(
@@ -71,9 +73,9 @@ fun Modifier.liquidGlass(
                 }
             } else Modifier
         )
+        .background(backgroundColor, shape)
+        .border(BorderStroke(effectiveBorderWidth, currentBorderColor), shape)
         .then(
             if (useBlur && supportsBlur) Modifier.blur(24.dp) else Modifier
         )
-        .background(backgroundColor, shape)
-        .border(BorderStroke(effectiveBorderWidth, currentBorderColor), shape)
 }
