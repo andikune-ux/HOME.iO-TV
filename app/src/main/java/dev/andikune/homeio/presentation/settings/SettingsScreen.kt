@@ -7,7 +7,9 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -70,7 +72,7 @@ fun SettingsScreen(
     Box(Modifier.fillMaxSize().background(GlassColors.DeepBackgroundGradient)) {
         Row(Modifier.fillMaxSize().padding(16.dp)) {
             
-            // PANE KIRI (SIDEBAR GLASS)
+            // PANE KIRI (SIDEBAR GLASS) - Ada verticalScroll & rememberScrollState
             Column(
                 Modifier.weight(0.28f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp)
                     .padding(16.dp).verticalScroll(rememberScrollState()).focusGroup(),
@@ -111,7 +113,6 @@ fun SettingsScreen(
             // PANE KANAN (KONTEN GLASS)
             Box(Modifier.weight(0.72f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp).padding(24.dp)) {
                 AutoFocusPane(paneKey = selectedCategory, modifier = Modifier.fillMaxSize().focusRequester(paneFocusRequester)) {
-                    // FIX DEFINITIF: Menggunakan LazyColumn, bukan Column(verticalScroll)
                     LazyColumn(Modifier.fillMaxSize()) {
                         item {
                             when (selectedCategory) {
