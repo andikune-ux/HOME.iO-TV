@@ -1,4 +1,4 @@
-package dev.andikune.homeio
+lpackage dev.andikune.homeio
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -54,6 +54,7 @@ import dev.andikune.homeio.domain.model.WeatherInfo
 import dev.andikune.homeio.kiosk.KioskManager
 import dev.andikune.homeio.kiosk.WatchdogService
 import dev.andikune.homeio.presentation.components.GlassColors
+import dev.andikune.homeio.presentation.components.NeonFocusBorder
 import dev.andikune.homeio.presentation.components.ResponsiveProvider
 import dev.andikune.homeio.presentation.components.liquidGlass
 import dev.andikune.homeio.presentation.home.HomeScreen
@@ -220,7 +221,6 @@ class MainActivity : ComponentActivity() {
                     onDispose { context.unregisterReceiver(receiver) }
                 }
 
-                // FIX: BackHandler untuk menutup dialog, mencegah aplikasi force close
                 BackHandler(enabled = isSettingsOpen || showUpdateDialog || showOnboarding) { 
                     if (showUpdateDialog && updateInfo?.isForceUpdate == true) return@BackHandler
                     if (showOnboarding) return@BackHandler
@@ -328,14 +328,21 @@ class MainActivity : ComponentActivity() {
     override fun dispatchTouchEvent(ev: MotionEvent?): Boolean { lastUserInteractionTime = System.currentTimeMillis(); return super.dispatchTouchEvent(ev) }
 }
 
+// FIX: Gunakan NeonFocusBorder untuk fokus yang jelas di TV
 @Composable
 fun DefaultLauncherDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val focusReq = remember { FocusRequester() }
-    LaunchedEffect(Unit) { delay(300); runCatching { focusReq.requestFocus() } }
+    var isFocusedBtn by remember { mutableStateOf(false) }
+    var isFocusedSkip by remember { mutableStateOf(false) }
+    
+    LaunchedEffect(Unit) { 
+        delay(400); 
+        runCatching { focusReq.requestFocus() } 
+    }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
             Column(
                 Modifier.fillMaxWidth(0.85f).liquidGlass(cornerRadius = 20.dp).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -346,20 +353,26 @@ fun DefaultLauncherDialog(onDismiss: () -> Unit) {
                 Spacer(Modifier.height(8.dp))
                 Text("Agar tombol HOME di remote selalu membuka Home.io.", fontSize = 13.sp, color = GlassColors.TextSecondary, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(24.dp))
-                var isFocusedBtn by remember { mutableStateOf(false) }
-                Box(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                        .background(if (isFocusedBtn) Color.White else GlassColors.AccentGlow)
-                        .focusRequester(focusReq).onFocusChanged { isFocusedBtn = it.isFocused }.focusable().clickable {
-                            LauncherHelper.openLauncherChooser(context); onDismiss()
-                        }.padding(14.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("JADIKAN LAUNCHER SEKARANG", color = if (isFocusedBtn) Color.Black else GlassColors.DeepBackground, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                
+                NeonFocusBorder(focused = isFocusedBtn, cornerRadius = 12.dp, modifier = Modifier.fillMaxWidth()) {
+                    Box(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                            .background(if (isFocusedBtn) GlassColors.AccentGlow else GlassColors.GlassTint)
+                            .focusRequester(focusReq).onFocusChanged { isFocusedBtn = it.isFocused }.focusable().clickable {
+                                LauncherHelper.openLauncherChooser(context); onDismiss()
+                            }.padding(14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("JADIKAN LAUNCHER SEKARANG", color = if (isFocusedBtn) GlassColors.DeepBackground else Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
                 }
+                
                 Spacer(modifier = Modifier.height(12.dp))
-                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { onDismiss() }.padding(12.dp), contentAlignment = Alignment.Center) {
-                    Text("NANTI SAJA", color = GlassColors.TextSecondary, fontSize = 13.sp)
+                
+                NeonFocusBorder(focused = isFocusedSkip, cornerRadius = 12.dp, modifier = Modifier.fillMaxWidth()) {
+                    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (isFocusedSkip) Color(0x33FFFFFF) else Color.Transparent).onFocusChanged { isFocusedSkip = it.isFocused }.focusable().clickable { onDismiss() }.padding(12.dp), contentAlignment = Alignment.Center) {
+                        Text("NANTI SAJA", color = if (isFocusedSkip) Color.White else GlassColors.TextSecondary, fontSize = 13.sp)
+                    }
                 }
             }
         }
