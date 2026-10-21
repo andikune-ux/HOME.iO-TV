@@ -1,8 +1,6 @@
 package dev.andikune.homeio
 
 import android.content.BroadcastReceiver
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -16,8 +14,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -49,48 +45,53 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.background
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.testTag
 import dev.andikune.homeio.domain.model.SettingsConfig
 import dev.andikune.homeio.domain.model.WeatherInfo
 import dev.andikune.homeio.presentation.components.GlassColors
 import dev.andikune.homeio.presentation.components.liquidGlass
 import dev.andikune.homeio.presentation.home.HomeScreen
+import dev.andikune.homeio.presentation.onboarding.OnboardingPermissionDialog
 import dev.andikune.homeio.presentation.screensaver.ScreensaverActivity
 import dev.andikune.homeio.presentation.settings.SettingsScreen
 import dev.andikune.homeio.service.UpdateDownloadService
 import dev.andikune.homeio.util.ApkDownloader
 import dev.andikune.homeio.util.CrashHandler
+import dev.andikune.homeio.util.OnboardingPrefs
 import dev.andikune.homeio.util.SoundFeedback
 import dev.andikune.homeio.util.UpdateDialog
 import dev.andikune.homeio.util.UpdateManager
 import dev.andikune.homeio.util.UpdatePrefs
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
-
     private var lastUserInteractionTime = System.currentTimeMillis()
     private var screensaverTimeoutMs = 5 * 60 * 1000L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Strict landscape orientation enforcement for TV & Tablet 16:9 view
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         enableEdgeToEdge()
 
@@ -100,115 +101,125 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             val scope = rememberCoroutineScope()
 
-            var crashLog by remember { mutableStateOf(CrashHandler.getLastCrashLog(context)) }
+            var crashLog by remember { mutableStateOf<String?>(null) }
             var isSplashFinished by remember { mutableStateOf(false) }
             var isSettingsOpen by remember { mutableStateOf(false) }
+            var showOnboarding by remember { mutableStateOf(false) }
 
-            // ============================================================
-            // OTA UPDATE STATE
-            // ============================================================
+            // FIX #49: Load crash log ASYNC
+            LaunchedEffect(Unit) {
+                crashLog = withContext(Dispatchers.IO) { CrashHandler.getLastCrashLog(context) }
+            }
+
+            // FIX #3, #23: Onboarding permission check
+            LaunchedEffect(Unit) {
+                if (!OnboardingPrefs.isCompleted(context)) {
+                    showOnboarding = true
+                }
+            }
+
+            // OTA state
             var updateInfo by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
             var showUpdateDialog by remember { mutableStateOf(false) }
             var downloadProgress by remember { mutableFloatStateOf(0f) }
             var isDownloading by remember { mutableStateOf(false) }
             var downloadReady by remember { mutableStateOf(false) }
+            var isError by remember { mutableStateOf(false) }
 
-            // Observe Settings
             val config by appContainer.preferencesManager.settingsFlow.collectAsState(
                 initial = SettingsConfig()
             )
 
-            // Update screensaver timeout
-            screensaverTimeoutMs = (config.screensaverTimeoutMinutes * 60 * 1000L).coerceAtLeast(60000L)
+            // FIX #12: Respect screensaver disable (0 = disabled)
+            screensaverTimeoutMs = if (!config.screensaverEnabled) 0L
+                else (config.screensaverTimeoutMinutes * 60 * 1000L).coerceAtLeast(0L)
 
-            // Observe Installed Apps
             val installedApps by appContainer.appRepository.getInstalledApps().collectAsState(
                 initial = emptyList()
             )
 
-            // Refresh apps on startup
+            // FIX #50: Debounce refreshApps (min 5 detik antar refresh)
+            var lastRefreshTime by remember { mutableLongStateOf(0L) }
             LaunchedEffect(Unit) {
-                appContainer.appRepository.refreshApps()
+                if (System.currentTimeMillis() - lastRefreshTime > 5000L) {
+                    lastRefreshTime = System.currentTimeMillis()
+                    appContainer.appRepository.refreshApps()
+                }
             }
 
-            // Realtime Weather from Open-Meteo
+            // FIX #53: Weather — retry setiap splashFinished
             var weatherInfo by remember { mutableStateOf<WeatherInfo?>(null) }
-            LaunchedEffect(Unit) {
+            LaunchedEffect(isSplashFinished) {
+                if (!isSplashFinished) return@LaunchedEffect
                 try {
                     val response = appContainer.weatherApiService.getCurrentWeather()
                     val cw = response.currentWeather
                     if (cw != null) {
                         val desc = when (cw.weathercode) {
-                            0 -> "Clear Sky"
-                            1, 2, 3 -> "Partly Cloudy"
-                            45, 48 -> "Foggy"
-                            51, 53, 55 -> "Drizzle"
-                            61, 63, 65 -> "Rain"
-                            71, 73, 75 -> "Snow"
-                            95, 96, 99 -> "Thunderstorm"
-                            else -> "Clear"
+                            0 -> "Clear Sky"; 1, 2, 3 -> "Partly Cloudy"
+                            45, 48 -> "Foggy"; 51, 53, 55 -> "Drizzle"
+                            61, 63, 65 -> "Rain"; 71, 73, 75 -> "Snow"
+                            95, 96, 99 -> "Thunderstorm"; else -> "Clear"
                         }
-                        weatherInfo = WeatherInfo(
-                            temperature = cw.temperature,
-                            weatherCode = cw.weathercode,
-                            description = desc,
-                            locationName = "Jakarta, ID"
-                        )
+                        weatherInfo = WeatherInfo(cw.temperature, cw.weathercode, desc, config.weatherLocation)
                     }
                 } catch (_: Exception) {
-                    weatherInfo = WeatherInfo(
-                        temperature = 29.0,
-                        weatherCode = 1,
-                        description = "Partly Cloudy",
-                        locationName = "Jakarta, ID"
-                    )
+                    if (weatherInfo == null) {
+                        weatherInfo = WeatherInfo(29.0, 1, "Partly Cloudy", config.weatherLocation)
+                    }
                 }
             }
 
-            // ============================================================
-            // CEK UPDATE OTA — Hanya setelah Splash selesai
-            // ============================================================
+            // FIX #11, #19: Cek update + restore download state setelah splash selesai
             LaunchedEffect(isSplashFinished) {
                 if (!isSplashFinished) return@LaunchedEffect
+
+                // FIX #19: Restore state dari Service kalau app di-kill saat download
+                val savedPath = UpdateDownloadService.getCompletedFilePath(context)
+                if (savedPath != null) {
+                    // Ada APK sudah terunduh tapi belum di-install
+                    val info = try { UpdateManager.checkForUpdate() } catch (_: Exception) { null }
+                    if (info?.available == true) {
+                        updateInfo = info
+                        downloadProgress = 1f
+                        downloadReady = true
+                        isDownloading = false
+                        showUpdateDialog = true
+                    }
+                    return@LaunchedEffect
+                }
+
+                // FIX #11: markChecked SETELAH API success (bukan sebelumnya)
                 if (!UpdatePrefs.shouldCheck(context)) return@LaunchedEffect
-                UpdatePrefs.markChecked(context)
                 try {
                     val info = UpdateManager.checkForUpdate()
                     if (info.available && UpdatePrefs.shouldShow(context, info.latestVersion, info.isForceUpdate)) {
+                        UpdatePrefs.markChecked(context)
                         updateInfo = info
                         showUpdateDialog = true
+                    } else if (info.available) {
+                        UpdatePrefs.markChecked(context)
                     }
-                } catch (_: Exception) { }
+                } catch (_: Exception) {}
             }
 
-            // ============================================================
-            // BROADCAST RECEIVER — Progress download OTA real-time
-            // ============================================================
+            // Broadcast receiver OTA
             DisposableEffect(Unit) {
                 val receiver = object : BroadcastReceiver() {
                     override fun onReceive(ctx: Context?, intent: Intent?) {
                         if (intent?.action == UpdateDownloadService.ACTION_PROGRESS) {
-                            val prefs = context.getSharedPreferences(UpdateDownloadService.PREFS, Context.MODE_PRIVATE)
-                            val status = prefs.getString(UpdateDownloadService.KEY_STATUS, "IDLE") ?: "IDLE"
-                            val prog = prefs.getFloat(UpdateDownloadService.KEY_PROGRESS, 0f)
-                            val err = prefs.getString(UpdateDownloadService.KEY_ERROR, null)
-
-                            downloadProgress = prog
-                            when (status) {
-                                "DOWNLOADING" -> {
-                                    isDownloading = true
-                                    downloadReady = false
-                                }
+                            val state = UpdateDownloadService.readState(context)
+                            downloadProgress = state.progress
+                            when (state.status) {
+                                "DOWNLOADING" -> { isDownloading = true; downloadReady = false; isError = false }
                                 "COMPLETE" -> {
-                                    isDownloading = false
-                                    downloadReady = true
-                                    downloadProgress = 1f
+                                    isDownloading = false; downloadReady = true; isError = false; downloadProgress = 1f
                                     Toast.makeText(context, "Download selesai — klik INSTALL", Toast.LENGTH_SHORT).show()
                                 }
                                 "ERROR" -> {
-                                    isDownloading = false
-                                    downloadReady = false
-                                    Toast.makeText(context, "Download gagal: ${err ?: "unknown"}", Toast.LENGTH_LONG).show()
+                                    // FIX #2: Reset progress saat error
+                                    isDownloading = false; downloadReady = false; isError = true; downloadProgress = 0f
+                                    Toast.makeText(context, "Download gagal: ${state.error ?: "unknown"}", Toast.LENGTH_LONG).show()
                                 }
                             }
                         }
@@ -224,108 +235,100 @@ class MainActivity : ComponentActivity() {
                 onDispose { context.unregisterReceiver(receiver) }
             }
 
-            // Inactivity monitor for OLED Screensaver
+            // FIX #43: Reset timer saat settings screensaver berubah
             LaunchedEffect(screensaverTimeoutMs) {
+                lastUserInteractionTime = System.currentTimeMillis()
+            }
+
+            // Screensaver monitor (FIX #12: skip kalau disabled)
+            LaunchedEffect(screensaverTimeoutMs) {
+                if (screensaverTimeoutMs <= 0L) return@LaunchedEffect
                 while (true) {
                     delay(5000)
                     val elapsed = System.currentTimeMillis() - lastUserInteractionTime
-                    if (elapsed >= screensaverTimeoutMs
-                        && !isSettingsOpen
-                        && crashLog == null
-                        && isSplashFinished
-                        && !showUpdateDialog) {
-                        startActivity(Intent(this@MainActivity, ScreensaverActivity::class.java))
+                    if (elapsed >= screensaverTimeoutMs && !isSettingsOpen && crashLog == null
+                        && isSplashFinished && !showUpdateDialog && !showOnboarding) {
+                        try { startActivity(Intent(this@MainActivity, ScreensaverActivity::class.java)) } catch (_: Exception) {}
                         lastUserInteractionTime = System.currentTimeMillis()
                     }
                 }
             }
 
-            // Back handler
-            BackHandler(enabled = isSettingsOpen) {
-                isSettingsOpen = false
-            }
+            // FIX #6: BackHandler mencegah dismiss dialog saat download aktif
+            BackHandler(enabled = isSettingsOpen) { isSettingsOpen = false }
 
-            // ============================================================
-            // RENDER SCREEN STATE
-            // ============================================================
-            if (crashLog != null) {
-                CrashLogScreen(
+            // Render
+            when {
+                crashLog != null -> CrashLogScreen(
                     crashLog = crashLog!!,
                     onClearAndReload = {
                         CrashHandler.clearCrashLog(context)
                         crashLog = null
                     }
                 )
-            } else if (!isSplashFinished) {
-                SplashScreen(onFinish = { isSplashFinished = true })
-            } else if (isSettingsOpen) {
-                // PERBAIKAN: Hanya passing onBack karena SettingsScreen versi 2-Pane kita hanya menerima onBack
-                SettingsScreen(
-                    onBack = { isSettingsOpen = false }
+                showOnboarding -> OnboardingPermissionDialog(
+                    onDismiss = {
+                        OnboardingPrefs.markCompleted(context)
+                        showOnboarding = false
+                    }
                 )
-            } else {
-                HomeScreen(
+                !isSplashFinished -> SplashScreen(onFinish = { isSplashFinished = true })
+                isSettingsOpen -> SettingsScreen(onBack = { isSettingsOpen = false })
+                else -> HomeScreen(
                     config = config,
                     allApps = installedApps,
                     weatherInfo = weatherInfo,
                     onOpenSettings = { isSettingsOpen = true },
-                    onSaveConfig = { updated ->
-                        scope.launch {
-                            appContainer.preferencesManager.updateSettings(updated)
-                        }
-                    }
+                    onSaveConfig = { updated -> scope.launch { appContainer.preferencesManager.updateSettings(updated) } }
                 )
             }
 
-            // ============================================================
-            // UPDATE DIALOG OVERLAY — Skenario A
-            // ============================================================
+            // Update Dialog (FIX #6: no-op back saat download, FIX #46: retry install)
             if (showUpdateDialog && updateInfo != null) {
                 UpdateDialog(
                     info = updateInfo!!,
                     progress = downloadProgress,
                     isDownloading = isDownloading,
                     isReady = downloadReady,
+                    isError = isError,
                     onUpdate = {
-                        if (downloadReady) {
-                            val prefs = context.getSharedPreferences(UpdateDownloadService.PREFS, Context.MODE_PRIVATE)
-                            val path = prefs.getString(UpdateDownloadService.KEY_PATH, null)
-                            if (path != null) {
-                                val ok = ApkDownloader.install(context, path)
-                                if (!ok) {
-                                    Toast.makeText(context, "Gagal membuka installer. Pastikan izin diberikan.", Toast.LENGTH_LONG).show()
+                        if (downloadReady || isError) {
+                            // INSTALL atau COBA LAGI
+                            if (isError) {
+                                isError = false
+                                downloadProgress = 0f
+                                isDownloading = true
+                                val url = updateInfo!!.downloadUrl
+                                if (!url.isNullOrBlank()) {
+                                    UpdateDownloadService.start(context, url, "HomeIO_${System.currentTimeMillis()}.apk")
                                 }
                             } else {
-                                Toast.makeText(context, "File tidak ditemukan", Toast.LENGTH_LONG).show()
-                                downloadReady = false
+                                val path = UpdateDownloadService.readState(context).filePath
+                                if (path != null) {
+                                    val ok = ApkDownloader.install(context, path)
+                                    if (!ok) Toast.makeText(context, "Gagal install. Beri izin 'Install unknown apps' dulu.", Toast.LENGTH_LONG).show()
+                                } else {
+                                    downloadReady = false
+                                    isError = true
+                                }
                             }
                         } else {
                             val url = updateInfo!!.downloadUrl
-                            if (url.isNullOrBlank()) {
-                                Toast.makeText(context, "URL download tidak tersedia", Toast.LENGTH_LONG).show()
-                                return@UpdateDialog
-                            }
-                            isDownloading = true
-                            downloadProgress = 0f
-                            downloadReady = false
-                            val safeName = "HomeIO_Update_${System.currentTimeMillis()}.apk"
-                            UpdateDownloadService.start(context, url, safeName)
+                            if (url.isNullOrBlank()) { Toast.makeText(context, "URL download kosong", Toast.LENGTH_LONG).show(); return@UpdateDialog }
+                            isDownloading = true; downloadProgress = 0f; downloadReady = false; isError = false
+                            UpdateDownloadService.start(context, url, "HomeIO_${System.currentTimeMillis()}.apk")
                         }
                     },
                     onLater = {
-                        if (updateInfo!!.isForceUpdate) return@UpdateDialog
+                        if (updateInfo!!.isForceUpdate || isDownloading) return@UpdateDialog
                         showUpdateDialog = false
-                        isDownloading = false
-                        downloadReady = false
-                        downloadProgress = 0f
+                        if (!downloadReady && !isDownloading) { downloadProgress = 0f; isError = false }
                     },
                     onSkip = {
-                        if (updateInfo!!.isForceUpdate) return@UpdateDialog
+                        if (updateInfo!!.isForceUpdate || isDownloading) return@UpdateDialog
                         UpdatePrefs.setSkipped(context, updateInfo!!.latestVersion)
                         showUpdateDialog = false
-                        isDownloading = false
-                        downloadReady = false
-                        downloadProgress = 0f
+                        downloadProgress = 0f; downloadReady = false; isError = false
                     }
                 )
             }
@@ -335,10 +338,6 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         lastUserInteractionTime = System.currentTimeMillis()
-        val appContainer = (application as HomeIoApplication).container
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-            appContainer.appRepository.refreshApps()
-        }
     }
 
     override fun onUserInteraction() {
@@ -350,12 +349,9 @@ class MainActivity : ComponentActivity() {
         lastUserInteractionTime = System.currentTimeMillis()
         if (event.action == KeyEvent.ACTION_DOWN) {
             when (event.keyCode) {
-                KeyEvent.KEYCODE_DPAD_UP,
-                KeyEvent.KEYCODE_DPAD_DOWN,
-                KeyEvent.KEYCODE_DPAD_LEFT,
-                KeyEvent.KEYCODE_DPAD_RIGHT -> SoundFeedback.playClick(this)
-                KeyEvent.KEYCODE_DPAD_CENTER,
-                KeyEvent.KEYCODE_ENTER -> SoundFeedback.playClick(this)
+                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> SoundFeedback.playClick(this)
             }
         }
         return super.dispatchKeyEvent(event)
@@ -371,19 +367,17 @@ class MainActivity : ComponentActivity() {
 fun SplashScreen(onFinish: () -> Unit) {
     val alphaAnim = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        alphaAnim.animateTo(1f, animationSpec = tween(400))
-        delay(600)
-        alphaAnim.animateTo(0f, animationSpec = tween(400))
-        onFinish()
+        alphaAnim.animateTo(1f, tween(400)); delay(600)
+        alphaAnim.animateTo(0f, tween(400)); onFinish()
     }
-    Box(modifier = Modifier.fillMaxSize().background(GlassColors.DeepBackground), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxSize().background(GlassColors.DeepBackground), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.alpha(alphaAnim.value)) {
-            Box(modifier = Modifier.size(110.dp).liquidGlass(cornerRadius = 32.dp, isFocused = true), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Home, "Home.io Logo", tint = GlassColors.AccentGlow, modifier = Modifier.size(56.dp))
+            Box(Modifier.size(110.dp).liquidGlass(cornerRadius = 32.dp, isFocused = true), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Home, "Logo", tint = GlassColors.AccentGlow, modifier = Modifier.size(56.dp))
             }
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(Modifier.height(20.dp))
             Text("Home.io", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(Modifier.height(6.dp))
             Text("Liquid Glass Launcher", color = GlassColors.TextSecondary, fontSize = 14.sp)
         }
     }
@@ -392,43 +386,43 @@ fun SplashScreen(onFinish: () -> Unit) {
 @Composable
 fun CrashLogScreen(crashLog: String, onClearAndReload: () -> Unit) {
     val context = LocalContext.current
-    Box(modifier = Modifier.fillMaxSize().background(GlassColors.DeepBackground).padding(24.dp)) {
-        Column(modifier = Modifier.fillMaxSize().liquidGlass(cornerRadius = 24.dp).padding(24.dp)) {
+    Box(Modifier.fillMaxSize().background(GlassColors.DeepBackground).padding(24.dp)) {
+        Column(Modifier.fillMaxSize().liquidGlass(cornerRadius = 24.dp).padding(24.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.Warning, null, tint = GlassColors.AccentRed, modifier = Modifier.size(32.dp))
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
                     Text(stringResource(R.string.crash_detected_title), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     Text(stringResource(R.string.crash_detected_desc), color = GlassColors.TextSecondary, fontSize = 13.sp)
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
-            Box(modifier = Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFF000000)).border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(16.dp)).padding(16.dp).verticalScroll(rememberScrollState())) {
+            Spacer(Modifier.height(16.dp))
+            Box(Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.Black).border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(16.dp)).padding(16.dp).verticalScroll(rememberScrollState())) {
                 Text(crashLog, color = Color(0xFFFF8080), fontSize = 12.sp, fontFamily = FontFamily.Monospace)
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                 Button(
                     onClick = {
                         SoundFeedback.playClick(context)
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboard.setPrimaryClip(ClipData.newPlainText("Crash Log", crashLog))
+                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("Crash Log", crashLog))
                         Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = GlassColors.GlassTint),
                     modifier = Modifier.border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(20.dp))
                 ) {
                     Icon(Icons.Default.ContentCopy, null, tint = Color.White)
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.btn_quick_copy), color = Color.White)
                 }
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(Modifier.width(12.dp))
                 Button(
                     onClick = { SoundFeedback.playClick(context); onClearAndReload() },
                     colors = ButtonDefaults.buttonColors(containerColor = GlassColors.AccentGlow)
                 ) {
                     Icon(Icons.Default.Refresh, null, tint = Color.Black)
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.btn_return_home), color = Color.Black, fontWeight = FontWeight.Bold)
                 }
             }
