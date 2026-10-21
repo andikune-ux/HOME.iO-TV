@@ -11,9 +11,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -62,7 +59,7 @@ jobs:
 
       - name: Create and Publish Release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}  # <-- PAKAI PAT, BUKAN GITHUB_TOKEN
         run: |
           VERSION="${{ steps.get_version.outputs.VERSION }}"
           NOTES="Auto-release dari commit terbaru."
@@ -76,7 +73,7 @@ jobs:
           # Hapus release lama jika ada (untuk re-run)
           gh release delete "$VERSION" --yes 2>/dev/null || true
           
-          # Buat release LANGSUNG PUBLISHED (bukan draft)
+          # Buat release LANGSUNG PUBLISHED
           gh release create "$VERSION" \
             --title "Home.io $VERSION" \
             --notes "$NOTES" \
