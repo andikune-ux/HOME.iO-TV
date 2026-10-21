@@ -1,12 +1,15 @@
 @file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 package dev.andikune.homeio.presentation.home
 
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.os.Build
+import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -15,7 +18,9 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -41,6 +46,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.andikune.homeio.R
@@ -50,6 +56,7 @@ import dev.andikune.homeio.domain.model.WeatherInfo
 import dev.andikune.homeio.presentation.components.*
 import dev.andikune.homeio.presentation.wallpaper.FileManagerDialog
 import dev.andikune.homeio.presentation.wallpaper.WallpaperView
+import dev.andikune.homeio.service.LauncherNotificationService
 import dev.andikune.homeio.util.DateTimeFormatter
 import dev.andikune.homeio.util.SoundFeedback
 import dev.andikune.homeio.util.SystemUtils
@@ -74,12 +81,16 @@ fun HomeScreen(
 
     var isPaneOpen by remember { mutableStateOf(false) }
     val paneFocusRequester = remember { FocusRequester() }
+    val firstMenuItemFocusRequester = remember { FocusRequester() }
 
     var selectedNav by remember { mutableStateOf("home") }
     var showSearchDialog by remember { mutableStateOf(false) }
     var showFileManager by remember { mutableStateOf(false) }
     var selectedAppForContextMenu by remember { mutableStateOf<AppItem?>(null) }
     var isSideloadOnly by remember { mutableStateOf(false) }
+
+    // Notifikasi Asli
+    val notifications by LauncherNotificationService.notifications.collectAsState()
 
     LaunchedEffect(openFileManagerTrigger) {
         if (openFileManagerTrigger) {
@@ -105,6 +116,14 @@ fun HomeScreen(
         if (config.isAutoRamBoostEnabled) memInfo = SystemUtils.boostRam(context)
     }
 
+    // Cek izin notifikasi
+    fun openNotificationSettings() {
+        val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try { context.startActivity(intent) } catch (_: Exception) {}
+    }
+
     if (showSearchDialog) SearchDialog(allApps, { safeLaunchApp(context, it) }, { showSearchDialog = false })
     if (showFileManager) FileManagerDialog(onFileSelected = { showFileManager = false }, onDismiss = { showFileManager = false })
     if (selectedAppForContextMenu != null) {
@@ -123,7 +142,7 @@ fun HomeScreen(
 
     val favoriteApps = remember(allApps, config.favoritePackages) {
         val favs = allApps.filter { config.favoritePackages.contains(it.packageName) }
-        if (favs.isNotEmpty()) favs.take(3) else allApps.take(3)
+        if (favs.isNotEmpty()) favs.take(4) else allApps.take(4)
     }
     val displayApps = remember(allApps, isSideloadOnly) {
         if (isSideloadOnly) allApps.filter { it.isSideloaded } else allApps
@@ -133,17 +152,39 @@ fun HomeScreen(
 
     Box(Modifier.fillMaxSize()) {
         WallpaperView(config = config)
-        // FIX: Tambahkan scrim (gradien gelap) agar teks tetap terbaca di wallpaper terang
+        // Scrim Gradient
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)))
 
+        // LAYAR UTAMA (TERKUNCI)
         Box(Modifier.fillMaxSize().padding(safePadding)) {
-            // JAM, CUACA, RAM (Minimalis tanpa border di Kanan Atas)
+            
+            // WIDGET JAM, TANGGAL, CUACA, RAM, SETTINGS
             Column(
                 modifier = Modifier.align(Alignment.TopEnd).padding(top = 16.dp, end = 24.dp),
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(currentTimeString, color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Light, letterSpacing = 1.sp)
+                // Baris Jam & Tombol Settings
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(currentTimeString, color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Light, letterSpacing = 1.sp)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    
+                    // Tombol Settings
+                    var isSettingsFocused by remember { mutableStateOf(false) }
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(if (isSettingsFocused) GlassColors.GlassTintLighter else GlassColors.GlassTint)
+                            .onFocusChanged { isSettingsFocused = it.isFocused }
+                            .focusable()
+                            .clickable { SoundFeedback.playClick(context); onOpenSettings() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Settings, "Pengaturan", tint = if (isSettingsFocused) GlassColors.AccentGlow else Color.White, modifier = Modifier.size(28.dp))
+                    }
+                }
+                
                 Text(currentDateString, color = GlassColors.TextSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -158,32 +199,29 @@ fun HomeScreen(
                 }
             }
 
-            // APLIKASI (Terkunci di Bawah Kiri)
+            // DAFTAR APLIKASI
             Column(
                 modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 80.dp, end = 24.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                FavoriteAppsSection(favoriteApps, { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) }, { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app })
-                AllAppsHorizontalSection(displayApps, isSideloadOnly, { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) }, { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app })
+                FavoriteAppsSection(favoriteApps, config.appIconSizeMultiplier, { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) }, { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app })
+                AllAppsHorizontalSection(displayApps, config.appIconSizeMultiplier, isSideloadOnly, { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) }, { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app })
             }
         }
 
-        // TOMBOL PEMICU (Hamburger Menu) DI TENGAH KIRI
+        // TOMBOL PEMICU (Tengah Kiri)
         var isTriggerFocused by remember { mutableStateOf(false) }
         Box(
             modifier = Modifier
                 .align(Alignment.CenterStart).padding(start = 16.dp).size(48.dp)
                 .clip(CircleShape)
                 .background(if (isTriggerFocused) GlassColors.GlassTintLighter else GlassColors.GlassTint)
-                .onFocusChanged { 
-                    isTriggerFocused = it.isFocused 
-                    if (it.isFocused && !isPaneOpen) isPaneOpen = true
-                }
+                .onFocusChanged { isTriggerFocused = it.isFocused }
                 .focusable()
                 .combinedClickable(onClick = {
                     SoundFeedback.playClick(context)
                     isPaneOpen = !isPaneOpen
-                    if (isPaneOpen) scope.launch { delay(100); runCatching { paneFocusRequester.requestFocus() } }
+                    if (isPaneOpen) scope.launch { delay(350); runCatching { firstMenuItemFocusRequester.requestFocus() } }
                 }),
             contentAlignment = Alignment.Center
         ) {
@@ -194,19 +232,51 @@ fun HomeScreen(
         AnimatedVisibility(
             visible = isPaneOpen,
             enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(),
-            exit = slideOutHorizontally(targetOffsetX = { -it }) + fadeOut(),
-            modifier = Modifier.align(Alignment.CenterStart)
+            exit = slideOutHorizontally(targetOffsetX = { -it }) + fadeOut()
         ) {
-            Box(Modifier.fillMaxHeight().width(260.dp).focusRequester(paneFocusRequester)) {
-                LeftNavigationGlassPanel(
-                    selectedNav, isSideloadOnly,
-                    onSearchClick = { SoundFeedback.playClick(context); showSearchDialog = true },
-                    onHomeClick = { SoundFeedback.playClick(context); selectedNav = "home"; isSideloadOnly = false },
-                    onRamBoostClick = { SoundFeedback.playClick(context); memInfo = SystemUtils.boostRam(context) },
-                    onFileManagerClick = { SoundFeedback.playClick(context); showFileManager = true },
-                    onSideloadToggleClick = { SoundFeedback.playClick(context); isSideloadOnly = !isSideloadOnly },
-                    onSettingsClick = { SoundFeedback.playClick(context); onOpenSettings() },
-                    onPaneClose = { isPaneOpen = false }
+            Row(Modifier.fillMaxSize()) {
+                // Panel Kiri (Focus Trap)
+                Box(
+                    Modifier
+                        .fillMaxHeight()
+                        .width(280.dp)
+                        .focusGroup()
+                        .focusRequester(paneFocusRequester)
+                ) {
+                    LeftNavigationGlassPanel(
+                        selectedNav, isSideloadOnly,
+                        notifications = notifications,
+                        firstItemFocusRequester = firstMenuItemFocusRequester,
+                        onSearchClick = { SoundFeedback.playClick(context); showSearchDialog = true },
+                        onNotificationClick = { sbn ->
+                            SoundFeedback.playClick(context)
+                            try {
+                                // Coba kirim PendingIntent dari notifikasi
+                                val intent = sbn.notification.contentIntent
+                                if (intent != null) {
+                                    intent.send()
+                                    isPaneOpen = false // Tutup pane setelah buka notif
+                                }
+                            } catch (e: PendingIntent.CanceledException) {
+                                Toast.makeText(context, "Gagal membuka notifikasi", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onHomeClick = { SoundFeedback.playClick(context); selectedNav = "home"; isSideloadOnly = false },
+                        onRamBoostClick = { SoundFeedback.playClick(context); memInfo = SystemUtils.boostRam(context) },
+                        onFileManagerClick = { SoundFeedback.playClick(context); showFileManager = true },
+                        onSideloadToggleClick = { SoundFeedback.playClick(context); isSideloadOnly = !isSideloadOnly },
+                        onSettingsClick = { SoundFeedback.playClick(context); onOpenSettings() },
+                        onPaneClose = { isPaneOpen = false }
+                    )
+                }
+                
+                // Scrim (Area Gelap Transparan untuk Menutup Pane di HP)
+                Box(
+                    Modifier
+                        .fillMaxHeight()
+                        .weight(1f)
+                        .background(Color.Black.copy(alpha = 0.5f))
+                        .clickable { isPaneOpen = false } // Klik di luar untuk menutup
                 )
             }
         }
@@ -224,7 +294,11 @@ fun safeLaunchApp(context: Context, app: AppItem) {
 @Composable
 fun LeftNavigationGlassPanel(
     selectedNav: String, isSideloadActive: Boolean,
-    onSearchClick: () -> Unit, onHomeClick: () -> Unit,
+    notifications: List<android.service.notification.StatusBarNotification>,
+    firstItemFocusRequester: FocusRequester,
+    onSearchClick: () -> Unit, 
+    onNotificationClick: (android.service.notification.StatusBarNotification) -> Unit,
+    onHomeClick: () -> Unit,
     onRamBoostClick: () -> Unit, onFileManagerClick: () -> Unit,
     onSideloadToggleClick: () -> Unit, onSettingsClick: () -> Unit, onPaneClose: () -> Unit
 ) {
@@ -237,18 +311,55 @@ fun LeftNavigationGlassPanel(
             Spacer(Modifier.width(10.dp))
             Column { Text("Home.io", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp); Text("Liquid Glass", color = GlassColors.TextSecondary, fontSize = 10.sp) }
         }
-        GlassNavButton(Icons.Default.Search, stringResource(R.string.nav_search), false, onSearchClick)
+        
+        // Search (Beri FocusRequester untuk item pertama)
+        Box(Modifier.focusRequester(firstItemFocusRequester)) {
+            GlassNavButton(Icons.Default.Search, stringResource(R.string.nav_search), false, onSearchClick)
+        }
+
+        // Notifikasi
+        if (notifications.isNotEmpty()) {
+            Text("NOTIFIKASI", color = GlassColors.TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 6.dp, top = 8.dp))
+            notifications.take(3).forEach { sbn ->
+                NotificationItem(sbn, onClick = { onNotificationClick(sbn) })
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
         GlassNavButton(Icons.Default.Home, stringResource(R.string.nav_home), selectedNav == "home" && !isSideloadActive, onHomeClick)
+        
         Spacer(Modifier.height(4.dp))
         Text(stringResource(R.string.nav_system_utils), color = GlassColors.TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 6.dp))
         GlassNavButton(Icons.Default.CleaningServices, stringResource(R.string.ram_booster), false, onRamBoostClick)
         GlassNavButton(Icons.Default.Folder, stringResource(R.string.file_manager), false, onFileManagerClick)
         GlassNavButton(Icons.Default.Build, stringResource(R.string.sideloaded_apps), isSideloadActive, onSideloadToggleClick)
+        
         Spacer(Modifier.height(16.dp))
         GlassNavButton(Icons.Default.Settings, stringResource(R.string.settings_title), false, onSettingsClick)
+        
         Spacer(Modifier.height(8.dp))
         Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0x33FF5252)).combinedClickable(onClick = onPaneClose).padding(12.dp), contentAlignment = Alignment.Center) {
             Text("TUTUP MENU", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+fun NotificationItem(sbn: android.service.notification.StatusBarNotification, onClick: () -> Unit) {
+    var isFocused by remember { mutableStateOf(false) }
+    val title = sbn.notification.extras.getCharSequence("android.title")?.toString() ?: ""
+    val text = sbn.notification.extras.getCharSequence("android.text")?.toString() ?: ""
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().liquidGlass(cornerRadius = 14.dp, isFocused = isFocused)
+            .onFocusChanged { isFocused = it.isFocused }.combinedClickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        Icon(Icons.Default.Notifications, "Notif", tint = if (isFocused) GlassColors.AccentGlow else GlassColors.TextSecondary, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            if (title.isNotBlank()) Text(title, color = if (isFocused) Color.White else GlassColors.TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (text.isNotBlank()) Text(text, color = GlassColors.TextSecondary, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -268,17 +379,17 @@ fun GlassNavButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label:
 }
 
 @Composable
-fun FavoriteAppsSection(favoriteApps: List<AppItem>, onAppClick: (AppItem) -> Unit, onAppLongClick: (AppItem) -> Unit) {
+fun FavoriteAppsSection(favoriteApps: List<AppItem>, iconSizeMultiplier: Float, onAppClick: (AppItem) -> Unit, onAppLongClick: (AppItem) -> Unit) {
     Column {
-        Text("${stringResource(R.string.favorite_apps)} (3 Utama)", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
+        Text("${stringResource(R.string.favorite_apps)} (4 Utama)", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
-            favoriteApps.forEach { app -> AppCardItem(app, false, Modifier.weight(1f), { onAppClick(app) }, { onAppLongClick(app) }) }
+            favoriteApps.forEach { app -> AppCardItem(app, false, iconSizeMultiplier, Modifier.weight(1f), { onAppClick(app) }, { onAppLongClick(app) }) }
         }
     }
 }
 
 @Composable
-fun AllAppsHorizontalSection(apps: List<AppItem>, isSideloadOnly: Boolean, onAppClick: (AppItem) -> Unit, onAppLongClick: (AppItem) -> Unit) {
+fun AllAppsHorizontalSection(apps: List<AppItem>, iconSizeMultiplier: Float, isSideloadOnly: Boolean, onAppClick: (AppItem) -> Unit, onAppLongClick: (AppItem) -> Unit) {
     Column {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text(if (isSideloadOnly) stringResource(R.string.sideloaded_apps) else stringResource(R.string.all_apps), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
@@ -286,18 +397,24 @@ fun AllAppsHorizontalSection(apps: List<AppItem>, isSideloadOnly: Boolean, onApp
         }
         Spacer(Modifier.height(12.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
-            items(apps) { app -> AppCardItem(app, false, Modifier.width(90.dp), { onAppClick(app) }, { onAppLongClick(app) }) }
+            items(apps) { app -> 
+                // Menggunakan ukuran border yang SAMA dengan Favorit (90.dp)
+                AppCardItem(app, false, iconSizeMultiplier, Modifier.width(90.dp), { onAppClick(app) }, { onAppLongClick(app) }) 
+            }
         }
     }
 }
 
 @Composable
-fun AppCardItem(app: AppItem, isWide: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit, onLongClick: () -> Unit) {
+fun AppCardItem(app: AppItem, isWide: Boolean, iconSizeMultiplier: Float, modifier: Modifier = Modifier, onClick: () -> Unit, onLongClick: () -> Unit) {
     var isFocused by remember { mutableStateOf(false) }
     val scale = if (isFocused) 1.1f else 1f
     val context = LocalContext.current
 
-    // FIX: Memuat ikon secara asinkron HANYA saat item ini dirender (mencegah OOM)
+    // Hitung ukuran ikon berdasarkan slider
+    val baseIconSize = 48.dp
+    val currentIconSize = (baseIconSize * iconSizeMultiplier).coerceIn(24.dp, 80.dp)
+
     val bitmap by produceState<Bitmap?>(initialValue = null, app.packageName) {
         value = withContext(Dispatchers.IO) {
             try { drawableToBitmap(context.packageManager.getApplicationIcon(app.packageName)) } catch (e: Exception) { null }
@@ -305,20 +422,25 @@ fun AppCardItem(app: AppItem, isWide: Boolean, modifier: Modifier = Modifier, on
     }
 
     Box(
-        modifier = modifier.scale(scale).liquidGlass(cornerRadius = 16.dp, isFocused = isFocused)
+        modifier = modifier.scale(scale).height(84.dp).liquidGlass(cornerRadius = 16.dp, isFocused = isFocused)
             .onFocusChanged { isFocused = it.isFocused }.combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(8.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             if (bitmap != null) {
-                Image(bitmap = bitmap!!.asImageBitmap(), contentDescription = app.label, contentScale = ContentScale.Fit, modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)))
+                Image(
+                    bitmap = bitmap!!.asImageBitmap(), 
+                    contentDescription = app.label, 
+                    contentScale = ContentScale.Fit, 
+                    modifier = Modifier.size(currentIconSize).clip(RoundedCornerShape(12.dp))
+                )
             } else {
-                Box(Modifier.size(56.dp).background(Color(0x33FFFFFF), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(currentIconSize).background(Color(0x33FFFFFF), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
                     Text(app.label.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 24.sp)
                 }
             }
             Spacer(Modifier.height(8.dp))
-            Text(app.label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            Text(app.label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
