@@ -39,6 +39,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import dev.andikune.homeio.BuildConfig
 import dev.andikune.homeio.presentation.components.GlassColors
+import dev.andikune.homeio.presentation.components.liquidGlass
 import dev.andikune.homeio.service.UpdateDownloadService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -141,36 +142,40 @@ fun UpdateDialog(info: UpdateManager.UpdateInfo, progress: Float, isDownloading:
     val isForce = info.isForceUpdate
     val focusReq = remember { FocusRequester() }
     BackHandler(enabled = isForce || isDownloading) { }
-    LaunchedEffect(Unit) { delay(500); if (isActive) runCatching { focusReq.requestFocus() } }
+    LaunchedEffect(Unit) { delay(300); if (isActive) runCatching { focusReq.requestFocus() } }
 
     Dialog(onDismissRequest = { if (!isForce && !isDownloading) onLater() }, properties = DialogProperties(dismissOnBackPress = !isForce && !isDownloading, usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            // FIX BUG #42: focusGroup agar tidak bocor ke belakang
-            Column(Modifier.fillMaxWidth(0.9f).fillMaxHeight(0.9f).clip(RoundedCornerShape(18.dp)).background(GlassColors.DeepBackground).border(2.dp, GlassColors.AccentGlow, RoundedCornerShape(18.dp)).padding(16.dp).verticalScroll(rememberScrollState()).focusGroup(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.SystemUpdate, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(48.dp))
-                Spacer(Modifier.height(10.dp))
-                Text("UPDATE TERSEDIA", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = GlassColors.AccentGlow)
-                Text("Versi: ${info.latestVersion}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = GlassColors.TextPrimary)
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)), contentAlignment = Alignment.Center) {
+            Column(Modifier.fillMaxWidth(0.85f).fillMaxHeight(0.9f).liquidGlass(cornerRadius = 24.dp).padding(24.dp).verticalScroll(rememberScrollState()).focusGroup(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.size(72.dp).background(GlassColors.AccentGlow.copy(alpha = 0.15f), RoundedCornerShape(36.dp)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.SystemUpdate, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(40.dp))
+                }
                 Spacer(Modifier.height(16.dp))
-                Column(Modifier.fillMaxWidth().background(GlassColors.GlassTint, RoundedCornerShape(12.dp)).padding(14.dp)) {
-                    Text("📋 Rincian Pembaruan:", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = GlassColors.AccentGlow)
+                Text("PEMBARUAN TERSEDIA", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = GlassColors.AccentGlow, letterSpacing = 1.sp)
+                Spacer(Modifier.height(4.dp))
+                Text("Versi baru: ${info.latestVersion}", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = GlassColors.TextPrimary)
+                Spacer(Modifier.height(20.dp))
+                Column(Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(12.dp)).border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(12.dp)).padding(16.dp)) {
+                    Text("📋 Rincian Pembaruan:", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GlassColors.AccentGlow)
                     Spacer(Modifier.height(8.dp))
-                    Box(Modifier.height(120.dp).verticalScroll(rememberScrollState())) { Text(info.releaseNotes ?: "-", fontSize = 13.sp, color = GlassColors.TextPrimary, lineHeight = 18.sp) }
+                    Box(Modifier.height(100.dp).verticalScroll(rememberScrollState())) { Text(info.releaseNotes ?: "-", fontSize = 13.sp, color = GlassColors.TextPrimary, lineHeight = 18.sp) }
                 }
                 if (isDownloading || isReady || isError) {
-                    Spacer(Modifier.height(16.dp))
-                    val label = when { isError -> "❌ Download gagal"; isReady -> "✅ Download selesai"; else -> "⬇️ Mengunduh... ${(progress * 100).toInt()}%" }
+                    Spacer(Modifier.height(20.dp))
+                    val label = when { isError -> "❌ Download gagal"; isReady -> "✅ Siap Dipasang"; else -> "⬇️ Mengunduh... ${(progress * 100).toInt()}%" }
                     val labelColor = when { isError -> GlassColors.AccentRed; isReady -> GlassColors.AccentGreen; else -> GlassColors.AccentGlow }
                     Text(label, color = labelColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(8.dp))
-                    Box(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)).background(Color.Gray)) { Box(Modifier.fillMaxWidth(progress).fillMaxHeight().background(when { isError -> GlassColors.AccentRed; isReady -> GlassColors.AccentGreen; else -> GlassColors.AccentGlow })) }
+                    Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(GlassColors.GlassBorder)) {
+                        Box(Modifier.fillMaxWidth(progress).fillMaxHeight().background(when { isError -> GlassColors.AccentRed; isReady -> GlassColors.AccentGreen; else -> GlassColors.AccentGlow }))
+                    }
                 }
-                Spacer(Modifier.height(20.dp))
-                if (isError) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { Box(Modifier.weight(1f)) { OtaButton("TUTUP", GlassColors.SurfaceDark, onLater) }; Box(Modifier.weight(1f)) { OtaButton("COBA LAGI", GlassColors.AccentRed, onUpdate, focusReq) } } }
+                Spacer(Modifier.height(24.dp))
+                if (isError) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) { Box(Modifier.weight(1f)) { OtaButton("TUTUP", GlassColors.GlassTint, onLater) }; Box(Modifier.weight(1f)) { OtaButton("COBA LAGI", GlassColors.AccentRed, onUpdate, focusReq) } } }
                 else if (isReady) { OtaButton("INSTALL SEKARANG", GlassColors.AccentGreen, onUpdate, focusReq) }
-                else if (isDownloading) { OtaButton("MENGUNDUH...", GlassColors.SurfaceDark, {}) }
-                else if (isForce) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { Box(Modifier.weight(1f)) { OtaButton("NANTI", GlassColors.SurfaceDark, onLater) }; Box(Modifier.weight(1f)) { OtaButton("UPDATE", GlassColors.AccentGlow, onUpdate, focusReq) } } }
-                else { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { Box(Modifier.weight(1f)) { OtaButton("SKIP", GlassColors.SurfaceDark, onSkip) }; Box(Modifier.weight(1f)) { OtaButton("NANTI", GlassColors.SurfaceDark, onLater) }; Box(Modifier.weight(1f)) { OtaButton("UPDATE", GlassColors.AccentGlow, onUpdate, focusReq) } } }
+                else if (isDownloading) { OtaButton("MOHON TUNGGU...", GlassColors.GlassTint, {}) }
+                else if (isForce) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) { Box(Modifier.weight(1f)) { OtaButton("TIDAK", GlassColors.GlassTint, onLater) }; Box(Modifier.weight(1f)) { OtaButton("UPDATE", GlassColors.AccentGlow, onUpdate, focusReq) } } }
+                else { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { Box(Modifier.weight(1f)) { OtaButton("SKIP", GlassColors.GlassTint, onSkip) }; Box(Modifier.weight(1f)) { OtaButton("NANTI", GlassColors.GlassTint, onLater) }; Box(Modifier.weight(1f)) { OtaButton("UPDATE", GlassColors.AccentGlow, onUpdate, focusReq) } } }
             }
         }
     }
@@ -180,8 +185,8 @@ fun UpdateDialog(info: UpdateManager.UpdateInfo, progress: Float, isDownloading:
 private fun OtaButton(txt: String, bg: Color, onClick: () -> Unit, focusReq: FocusRequester? = null) {
     var focus by remember { mutableStateOf(false) }
     val requester = focusReq ?: remember { FocusRequester() }
-    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (focus) Color.White else bg).focusRequester(requester).onFocusChanged { focus = it.isFocused }.focusable().clickable { onClick() }.padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
-        Text(txt, color = if (focus) Color.Black else Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (focus) GlassColors.AccentGlow else bg).border(if (focus) 2.dp else 0.dp, Color.White, RoundedCornerShape(12.dp)).focusRequester(requester).onFocusChanged { focus = it.isFocused }.focusable().clickable { onClick() }.padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
+        Text(txt, color = if (focus) GlassColors.DeepBackground else Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
     }
 }
 
@@ -220,7 +225,7 @@ fun ApkFileListSection() {
         onDispose { ctx.unregisterReceiver(receiver) }
     }
 
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (usingFallback) { Row(Modifier.fillMaxWidth().background(GlassColors.AccentAmber.copy(alpha = 0.15f), RoundedCornerShape(8.dp)).border(1.dp, GlassColors.AccentAmber, RoundedCornerShape(8.dp)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Warning, null, tint = GlassColors.AccentAmber, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Izin storage belum diberikan. File tersimpan di lokasi internal.", color = GlassColors.AccentAmber, fontSize = 11.sp) } }
         Spacer(Modifier.height(16.dp))
         var isFocused by remember { mutableStateOf(false) }
