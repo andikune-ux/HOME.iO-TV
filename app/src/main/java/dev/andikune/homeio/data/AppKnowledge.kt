@@ -12,6 +12,11 @@ object AppKnowledge {
     const val REPO_OWNER = "andikune-ux"
     const val REPO_NAME = "HOME.iO-TV"
 
+    // MEDIA SOSIAL (Diambil dari Masjid.io)
+    const val SOCIAL_WA = "https://chat.whatsapp.com/ErJpG34fdzwL9FOmoh4fNN"
+    const val SOCIAL_TIKTOK = "https://www.tiktok.com/@nayyra.une"
+    const val SOCIAL_IG = "https://www.instagram.com/nayyra.une"
+
     val APP_STRUCTURE = """
 app/src/main/java/dev/andikune/homeio/
 ├── HomeIoApplication.kt
@@ -73,9 +78,10 @@ app/src/main/java/dev/andikune/homeio/
    - Path: /HomeiO/Pembaharuan/
    - In-App Package Installer
 
-7. Backup Aman
-   - Export AppKnowledge + Prefs ke .txt
-   - Path: /HomeiO/Backup aman/
+7. Backup Aman & Backup Biasa
+   - Backup Aman: Export AppKnowledge + Prefs ke .txt
+   - Backup Biasa: Export SettingsConfig ke .json (Tema)
+   - Path: /HomeiO/Backup aman/ & /HomeiO/Backup/
 
 8. Screensaver OLED
    - Brightness 0% + Timer slider
@@ -177,9 +183,55 @@ Solusi: jalankan workflow setup-keystore.yml (sekali saja)
     """.trimIndent()
 
     val BACKUP_INFO = """
-=== BACKUP AMAN ===
-Path: /sdcard/HomeiO/Backup aman/
-Format Nama: Backup Aman-Home.io-dd-MM-yyyy-HHmmss.txt
-Fallback: context.filesDir/HomeiO/Backup aman/
+=== BACKUP AMAN & BACKUP BIASA ===
+Backup Aman (TXT): /sdcard/HomeiO/Backup aman/
+Backup Biasa (JSON): /sdcard/HomeiO/Backup/
+Format Backup Aman: Backup Aman-Home.io-dd-MM-yyyy-HHmmss.txt
+Format Backup Biasa: Backup_HomeIO_HHmmss_ddMMyyyy.json
+Fallback: context.filesDir/HomeiO/...
+    """.trimIndent()
+
+    // PROMPT UNTUK SALIN CEPAT KE AI LAIN
+    val AI_PROMPT = """
+Halo AI. Saya pakai aplikasi Home.io (Android TV, Jetpack Compose).
+Tolong baca konteks di bawah ini dulu sebelum saya kasih tugas.
+Setelah paham, konfirmasi ke saya, baru kita mulai kerja.
+
+=== IDENTITAS PROYEK ===
+- Nama Aplikasi : Home.io
+- Platform      : Android TV / STB (Jetpack Compose)
+- Repo          : https://github.com/andikune-ux/HOME.iO-TV
+- Package       : dev.andikune.homeio
+- Versi Saat Ini: v.1.21.N
+- User          : Andi (HP Android, GitHub Mobile)
+
+=== ATURAN FORMAT RESPON (WAJIB) ===
+Setiap respon harus ada 6 elemen:
+1. Visualisasi folder (emoji + indentasi)
+2. Path lengkap file (code block)
+3. Nama file (code block)
+4. URL Edit (file lama) / URL New (file baru) (code block)
+5. Kode TIMPA FULL (jangan suruh user edit manual)
+6. Pesan commit
+
+KETENTUAN:
+- Pakai code block (3 backtick) untuk path/URL/nama file.
+- Batas aman copy-paste: 400-600 baris. Jika > 600, bagi 2 BAGIAN dalam 1 bubble.
+- JANGAN potong di tengah fungsi.
+
+=== ATURAN KERJA ===
+1. Konfirmasi dulu sebelum eksekusi.
+2. Jujur kalau belum tahu, jangan menebak.
+3. JANGAN hapus fitur lama tanpa izin.
+4. Lihat kode asli dulu sebelum timpa.
+5. Kerjakan per file (bukan per fitur).
+
+=== ATURAN KERAS ===
+- JANGAN PERNAH ubah debug.keystore.
+- JANGAN PERNAH ubah signingConfigs.
+- JANGAN PERNAH ubah build.yml (bagian signing).
+- Build HANYA via GitHub Actions. JANGAN install APK dari AI Studio.
+
+(Tulis tugas di sini)
     """.trimIndent()
 }
