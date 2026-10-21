@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -36,7 +37,6 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import dev.andikune.homeio.BuildConfig
 import dev.andikune.homeio.presentation.components.GlassColors
-import dev.andikune.homeio.presentation.components.NeonFocusBorder
 import dev.andikune.homeio.service.UpdateDownloadService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -56,7 +56,6 @@ import java.net.URL
 // 1. UPDATE MANAGER
 // ============================================================
 object UpdateManager {
-    private const val TAG = "UpdateManager"
     private const val GITHUB_API = "https://api.github.com/repos/andikune-ux/HOME.iO-TV/releases/latest"
 
     data class UpdateInfo(
@@ -100,7 +99,6 @@ object UpdateManager {
             }
             UpdateInfo(isNewer, current, latest, dlUrl, notes, isForce)
         } catch (e: Exception) {
-            Log.e(TAG, "checkForUpdate: ${e.message}")
             noUpdate(current, "NETWORK")
         }
     }
@@ -143,7 +141,6 @@ object UpdatePrefs {
 // 3. APK DOWNLOADER
 // ============================================================
 object ApkDownloader {
-    private const val TAG = "ApkDownloader"
     private const val FOLDER = "HomeiO/Pembaharuan"
 
     data class State(val isDownloading: Boolean = false, val progress: Float = 0f, val savedFilePath: String? = null, val error: String? = null, val isFinished: Boolean = false)
@@ -284,7 +281,7 @@ private fun OtaButton(txt: String, bg: Color, onClick: () -> Unit, focusReq: Foc
 }
 
 // ============================================================
-// 5. APK FILE LIST SECTION (DENGAN TOMBOL CEK UPDATE MANUAL)
+// 5. APK FILE LIST SECTION (TAMPILAN BARU: CENTER + LIST)
 // ============================================================
 @Composable
 fun ApkFileListSection() {
@@ -295,8 +292,14 @@ fun ApkFileListSection() {
     val usingFallback = remember { ApkDownloader.isUsingFallbackPath(ctx) }
 
     var isChecking by remember { mutableStateOf(false) }
+    var checkResult by remember { mutableStateOf<String?>(null) }
+    var isErrorResult by remember { mutableStateOf(false) }
 
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(
+        Modifier.fillMaxWidth().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
         if (usingFallback) {
             Row(Modifier.fillMaxWidth().background(GlassColors.AccentAmber.copy(alpha = 0.15f), RoundedCornerShape(8.dp)).border(1.dp, GlassColors.AccentAmber, RoundedCornerShape(8.dp)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Warning, null, tint = GlassColors.AccentAmber, modifier = Modifier.size(18.dp))
@@ -305,54 +308,76 @@ fun ApkFileListSection() {
             }
         }
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("📦 FILE PEMBARUAN", color = GlassColors.AccentGlow, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // TOMBOL CEK UPDATE MANUAL
-                Box(Modifier.clip(RoundedCornerShape(8.dp)).background(GlassColors.AccentGlow.copy(alpha = 0.15f))
-                    .border(1.dp, GlassColors.AccentGlow, RoundedCornerShape(8.dp))
-                    .clickable(enabled = !isChecking) {
-                        isChecking = true
-                        scope.launch {
-                            val info = UpdateManager.checkForUpdate()
-                            isChecking = false
-                            if (info.available) {
-                                Toast.makeText(ctx, "Update tersedia: ${info.latestVersion}\nBuka Home untuk melihat dialog.", Toast.LENGTH_LONG).show()
-                            } else {
-                                val msg = if (info.errorType != null) "Gagal cek: ${info.errorType}" else "Sudah versi terbaru (${info.currentVersion})"
-                                Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
-                            }
-                        }
-                    }.padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (isChecking) {
-                            CircularProgressIndicator(color = GlassColors.AccentGlow, modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(6.dp))
-                            Text("CEK...", color = GlassColors.AccentGlow, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(16.dp))
+
+        // --- TOMBOL BESAR CEK UPDATE (TENGAH) ---
+        var isFocused by remember { mutableStateOf(false) }
+        Box(
+            Modifier.fillMaxWidth(0.8f).clip(RoundedCornerShape(16.dp))
+                .background(if (isFocused) GlassColors.AccentGlow.copy(alpha = 0.3f) else GlassColors.GlassTint)
+                .border(if (isFocused) 3.dp else 2.dp, GlassColors.AccentGlow, RoundedCornerShape(16.dp))
+                .onFocusChanged { isFocused = it.isFocused }.focusable()
+                .clickable(enabled = !isChecking) {
+                    isChecking = true; checkResult = null
+                    scope.launch {
+                        val info = UpdateManager.checkForUpdate()
+                        isChecking = false
+                        if (info.available) {
+                            isErrorResult = false
+                            checkResult = "✅ Update tersedia: ${info.latestVersion}"
                         } else {
-                            Icon(Icons.Default.Refresh, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(14.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("CEK UPDATE", color = GlassColors.AccentGlow, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            isErrorResult = true
+                            val msg = if (info.errorType != null) "Gagal cek: ${info.errorType}" else "Aplikasi sudah versi terbaru (${info.currentVersion})"
+                            checkResult = "❌ $msg"
                         }
                     }
-                }
-
-                // Tombol Refresh List
-                Box(Modifier.clip(RoundedCornerShape(8.dp)).background(GlassColors.GlassTint).border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(8.dp))
-                    .clickable { refreshKey++ }.padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Icon(Icons.Default.Refresh, null, tint = GlassColors.TextPrimary, modifier = Modifier.size(14.dp))
+                }.padding(20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                if (isChecking) {
+                    CircularProgressIndicator(color = GlassColors.AccentGlow, modifier = Modifier.size(32.dp), strokeWidth = 3.dp)
+                    Spacer(Modifier.height(10.dp))
+                    Text("MENGHUBUNGI GITHUB...", color = GlassColors.AccentGlow, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                } else {
+                    Icon(Icons.Default.Refresh, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(32.dp))
+                    Spacer(Modifier.height(8.dp))
+                    Text("CEK PEMBARUAN APLIKASI", color = GlassColors.AccentGlow, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text("Tekan untuk memeriksa versi terbaru di GitHub", color = GlassColors.TextSecondary, fontSize = 11.sp)
                 }
             }
         }
 
+        // Hasil Cek
+        checkResult?.let { msg ->
+            Text(
+                text = msg,
+                color = if (isErrorResult) GlassColors.AccentRed else GlassColors.AccentGreen,
+                fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
+            )
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // --- DAFTAR FILE APK ---
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("📦 RIWAYAT UNDUHAN", color = GlassColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Box(Modifier.clip(RoundedCornerShape(8.dp)).background(GlassColors.GlassTint).border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(8.dp))
+                .clickable { refreshKey++ }.padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Icon(Icons.Default.Refresh, null, tint = GlassColors.TextPrimary, modifier = Modifier.size(14.dp))
+            }
+        }
+
         if (list.isEmpty()) {
-            Text("Belum ada file APK tersimpan.", color = GlassColors.TextSecondary, fontSize = 12.sp)
+            Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
+                Text("Belum ada file APK yang diunduh.", color = GlassColors.TextSecondary, fontSize = 12.sp)
+            }
         } else {
             list.forEach { file ->
-                Row(Modifier.fillMaxWidth().background(GlassColors.GlassTint, RoundedCornerShape(8.dp)).border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(8.dp)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().background(GlassColors.GlassTint, RoundedCornerShape(8.dp)).border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(8.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Folder, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text(file.name, color = GlassColors.TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         Text("${file.length() / 1024} KB", color = GlassColors.TextSecondary, fontSize = 10.sp)
