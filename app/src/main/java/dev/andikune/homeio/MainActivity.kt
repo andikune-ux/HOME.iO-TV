@@ -18,17 +18,9 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -37,32 +29,25 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import dev.andikune.homeio.domain.model.SettingsConfig
 import dev.andikune.homeio.domain.model.WeatherInfo
 import dev.andikune.homeio.kiosk.KioskManager
@@ -75,13 +60,7 @@ import dev.andikune.homeio.presentation.screensaver.ScreensaverActivity
 import dev.andikune.homeio.presentation.settings.SettingsScreen
 import dev.andikune.homeio.receiver.UsbReceiver
 import dev.andikune.homeio.service.UpdateDownloadService
-import dev.andikune.homeio.util.ApkDownloader
-import dev.andikune.homeio.util.CrashHandler
-import dev.andikune.homeio.util.OnboardingPrefs
-import dev.andikune.homeio.util.SoundFeedback
-import dev.andikune.homeio.util.UpdateDialog
-import dev.andikune.homeio.util.UpdateManager
-import dev.andikune.homeio.util.UpdatePrefs
+import dev.andikune.homeio.util.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -90,8 +69,6 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity() {
     private var lastUserInteractionTime = System.currentTimeMillis()
     private var screensaverTimeoutMs = 5 * 60 * 1000L
-
-    // State yang bisa di-trigger dari USB notification
     private var pendingFileManagerTrigger by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -99,9 +76,7 @@ class MainActivity : ComponentActivity() {
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         enableEdgeToEdge()
 
-        // Cek intent awal (dibuka dari notifikasi USB)
         intent?.let { handleUsbIntent(it) }
-
         val appContainer = (application as HomeIoApplication).container
 
         setContent {
@@ -112,6 +87,9 @@ class MainActivity : ComponentActivity() {
             var isSplashFinished by remember { mutableStateOf(false) }
             var isSettingsOpen by remember { mutableStateOf(false) }
             var showOnboarding by remember { mutableStateOf(false) }
+            
+            // State untuk Default Launcher Prompt
+            var showLauncherPrompt by remember { mutableStateOf(!LauncherHelper.isDefaultLauncher(context)) }
 
             LaunchedEffect(Unit) {
                 crashLog = withContext(Dispatchers.IO) { CrashHandler.getLastCrashLog(context) }
@@ -256,6 +234,13 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
+            // Tampilkan Dialog Launcher Default
+            if (showLauncherPrompt && isSplashFinished && !showOnboarding) {
+                DefaultLauncherDialog(
+                    onDismiss = { showLauncherPrompt = false }
+                )
+            }
+
             if (showUpdateDialog && updateInfo != null) {
                 UpdateDialog(
                     info = updateInfo!!, progress = downloadProgress, isDownloading = isDownloading, isReady = downloadReady, isError = isError,
@@ -284,9 +269,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Tangkap intent USB saat app di-launch ulang (singleTask mode).
-     */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -313,6 +295,69 @@ class MainActivity : ComponentActivity() {
         return super.dispatchKeyEvent(event)
     }
     override fun dispatchTouchEvent(ev: MotionEvent?): Boolean { lastUserInteractionTime = System.currentTimeMillis(); return super.dispatchTouchEvent(ev) }
+}
+
+// ============================================================
+// KOMPONEN BARU: DIALOG DEFAULT LAUNCHER
+// ============================================================
+@Composable
+fun DefaultLauncherDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val focusReq = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) { delay(300); runCatching { focusReq.requestFocus() } }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(
+                Modifier.fillMaxWidth(0.85f).clip(RoundedCornerShape(20.dp))
+                    .background(GlassColors.DeepBackground)
+                    .border(2.dp, GlassColors.AccentGlow, RoundedCornerShape(20.dp))
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(Icons.Default.Home, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(56.dp))
+                Spacer(Modifier.height(16.dp))
+                Text("JADIKAN LAUNCHER UTAMA", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = GlassColors.AccentGlow)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Agar tombol HOME di remote selalu membuka Home.io, izinkan aplikasi ini menjadi launcher default TV Anda.",
+                    fontSize = 13.sp, color = GlassColors.TextSecondary, textAlign = TextAlign.Center, lineHeight = 18.sp
+                )
+                Spacer(Modifier.height(24.dp))
+
+                // Tombol Jadikan Default
+                var isFocusedBtn by remember { mutableStateOf(false) }
+                Box(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                        .background(if (isFocusedBtn) Color.White else GlassColors.AccentGlow)
+                        .focusRequester(focusReq)
+                        .onFocusChanged { isFocusedBtn = it.isFocused }
+                        .focusable().clickable {
+                            LauncherHelper.openLauncherChooser(context)
+                            onDismiss() // Tutup dialog setelah membuka setting
+                        }.padding(14.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("JADIKAN LAUNCHER SEKARANG", color = if (isFocusedBtn) Color.Black else GlassColors.DeepBackground, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // Tombol Nanti
+                Box(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                        .clickable { onDismiss() }.padding(12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("NANTI SAJA", color = GlassColors.TextSecondary, fontSize = 13.sp)
+                }
+            }
+        }
+    }
 }
 
 @Composable
