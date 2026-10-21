@@ -220,7 +220,13 @@ class MainActivity : ComponentActivity() {
                     onDispose { context.unregisterReceiver(receiver) }
                 }
 
-                BackHandler(enabled = isSettingsOpen) { isSettingsOpen = false }
+                // FIX: BackHandler untuk menutup dialog, mencegah aplikasi force close
+                BackHandler(enabled = isSettingsOpen || showUpdateDialog || showOnboarding) { 
+                    if (showUpdateDialog && updateInfo?.isForceUpdate == true) return@BackHandler
+                    if (showOnboarding) return@BackHandler
+                    if (isSettingsOpen) isSettingsOpen = false
+                    else if (showUpdateDialog) showUpdateDialog = false
+                }
 
                 when {
                     crashLog != null -> CrashLogScreen(crashLog!!) { CrashHandler.clearCrashLog(context); crashLog = null }
@@ -351,7 +357,7 @@ fun DefaultLauncherDialog(onDismiss: () -> Unit) {
                 ) {
                     Text("JADIKAN LAUNCHER SEKARANG", color = if (isFocusedBtn) Color.Black else GlassColors.DeepBackground, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { onDismiss() }.padding(12.dp), contentAlignment = Alignment.Center) {
                     Text("NANTI SAJA", color = GlassColors.TextSecondary, fontSize = 13.sp)
                 }
