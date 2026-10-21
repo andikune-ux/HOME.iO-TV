@@ -71,7 +71,17 @@
                 android:value="auto_start_launcher" />
         </service>
 
-        <!-- FIX BUG #32: Receiver dibatasi hanya menerima aksi dari sistem -->
+        <!-- TAMBAHAN: Service Notifikasi -->
+        <service
+            android:name=".service.LauncherNotificationService"
+            android:exported="true"
+            android:label="Home.io Notifications"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name=".receiver.BootReceiver"
             android:enabled="true"
