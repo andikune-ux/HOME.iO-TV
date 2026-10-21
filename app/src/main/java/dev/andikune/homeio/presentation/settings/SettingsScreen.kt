@@ -1,7 +1,5 @@
 package dev.andikune.homeio.presentation.settings
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,7 +17,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -113,15 +110,20 @@ fun SettingsScreen(
         // ============================================================
         Box(Modifier.weight(0.72f).fillMaxHeight().padding(24.dp)) {
             AutoFocusPane(paneKey = selectedCategory, modifier = Modifier.fillMaxSize().focusRequester(paneFocusRequester)) {
-                when (selectedCategory) {
-                    SettingsCategory.WALLPAPER -> WallpaperSection(draftConfig) { draftConfig = it }
-                    SettingsCategory.SCREENSAVER -> ScreensaverSection(draftConfig) { draftConfig = it }
-                    SettingsCategory.PERFORMANCE -> PerformanceSection(draftConfig) { draftConfig = it }
-                    SettingsCategory.LANGUAGE -> LanguageSection(draftConfig) { draftConfig = it }
-                    SettingsCategory.TV_DISPLAY -> TvDisplaySection(draftConfig) { draftConfig = it }
-                    SettingsCategory.UPDATER -> ApkFileListSection()
-                    SettingsCategory.BACKUP -> BackupBiasaSection(draftConfig) { draftConfig = it }
-                    SettingsCategory.INFO -> InfoAppSection()
+                // TAMBAHKAN VERTICAL SCROLL DI SINI AGAR SEMUA SECTION BISA DIGESER
+                Column(
+                    Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                ) {
+                    when (selectedCategory) {
+                        SettingsCategory.WALLPAPER -> WallpaperSection(draftConfig) { draftConfig = it }
+                        SettingsCategory.SCREENSAVER -> ScreensaverSection(draftConfig) { draftConfig = it }
+                        SettingsCategory.PERFORMANCE -> PerformanceSection(draftConfig) { draftConfig = it }
+                        SettingsCategory.LANGUAGE -> LanguageSection(draftConfig) { draftConfig = it }
+                        SettingsCategory.TV_DISPLAY -> TvDisplaySection(draftConfig) { draftConfig = it }
+                        SettingsCategory.UPDATER -> ApkFileListSection()
+                        SettingsCategory.BACKUP -> BackupBiasaSection(draftConfig) { draftConfig = it }
+                        SettingsCategory.INFO -> InfoAppSection()
+                    }
                 }
             }
         }
