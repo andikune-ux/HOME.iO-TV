@@ -16,10 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -50,8 +47,9 @@ fun InfoAppSection() {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var isBackingUp by remember { mutableStateOf(false) }
+    var lastBackupPath by remember { mutableStateOf<String?>(null) }
+    var wasFallback by remember { mutableStateOf(false) }
 
-    // Fungsi Backup Aman (TXT)
     fun doBackupAman() {
         if (isBackingUp) return
         isBackingUp = true
@@ -60,7 +58,14 @@ fun InfoAppSection() {
             val res = withContext(Dispatchers.IO) { BackupManager.saveBackupToFile(ctx, content) }
             isBackingUp = false
             if (res.success) {
-                Toast.makeText(ctx, "Backup Aman berhasil:\n${res.filePath}", Toast.LENGTH_LONG).show()
+                lastBackupPath = res.filePath
+                wasFallback = res.isFallbackPath
+                val msg = if (res.isFallbackPath) {
+                    "Backup Aman tersimpan (fallback path).\nIzin storage belum diberikan."
+                } else {
+                    "Backup Aman berhasil:\n${res.filePath}"
+                }
+                Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
             } else {
                 Toast.makeText(ctx, "Gagal: ${res.errorMessage}", Toast.LENGTH_LONG).show()
             }
@@ -68,11 +73,11 @@ fun InfoAppSection() {
     }
 
     Column(
-        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+        Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // === IDENTITAS APP ===
+        // IDENTITAS APP
         Image(
             painter = painterResource(id = R.mipmap.ic_launcher),
             contentDescription = "Icon",
@@ -98,9 +103,13 @@ fun InfoAppSection() {
 
         Spacer(Modifier.height(16.dp))
 
-        // === BACKUP AMAN (TXT) ===
-        SectionTitle("BACKUP AMAN (FULL)")
-        Text("Menyimpan semua file + memory AI (AppKnowledge.kt) ke format .txt.", color = GlassColors.TextSecondary, fontSize = 11.sp, textAlign = TextAlign.Center)
+        // BACKUP AMAN
+        SectionTitle("BACKUP AMAN (FULL TXT)")
+        Text(
+            "Menyimpan semua file + memory AI (AppKnowledge.kt) ke format .txt untuk backup lengkap.",
+            color = GlassColors.TextSecondary, fontSize = 11.sp, textAlign = TextAlign.Center
+        )
+        Text("Lokasi: /sdcard/HomeiO/Backup aman/", color = GlassColors.TextSecondary, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
         
         ActionButtonLarge(
             icon = Icons.Default.Folder,
@@ -109,9 +118,29 @@ fun InfoAppSection() {
             onClick = { doBackupAman() }
         )
 
+        // FIX: Tampilkan hasil terakhir
+        if (lastBackupPath != null) {
+            val color = if (wasFallback) GlassColors.AccentAmber else GlassColors.AccentGreen
+            Row(
+                Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(color.copy(alpha = 0.15f))
+                    .border(1.dp, color, RoundedCornerShape(8.dp))
+                    .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(if (wasFallback) Icons.Default.Warning else Icons.Default.CheckCircle, null, tint = color, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (wasFallback) "Tersimpan di fallback (izin storage belum ada)." else "Backup berhasil disimpan.",
+                    color = color, fontSize = 11.sp
+                )
+            }
+        }
+
         Spacer(Modifier.height(16.dp))
 
-        // === MEDIA SOSIAL ===
+        // MEDIA SOSIAL
         SectionTitle("MEDIA SOSIAL")
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SocialButton("WhatsApp", Color(0xFF25D366), Modifier.weight(1f)) {
@@ -127,9 +156,12 @@ fun InfoAppSection() {
 
         Spacer(Modifier.height(16.dp))
 
-        // === SALIN PROMPT AI ===
+        // PROMPT AI
         SectionTitle("PROMPT AI")
-        Text("Salin instruksi untuk AI baru (handoff) ke clipboard.", color = GlassColors.TextSecondary, fontSize = 11.sp, textAlign = TextAlign.Center)
+        Text(
+            "Salin instruksi untuk AI baru (handoff) ke clipboard.",
+            color = GlassColors.TextSecondary, fontSize = 11.sp, textAlign = TextAlign.Center
+        )
         
         ActionButtonLarge(
             icon = Icons.Default.ContentCopy,
@@ -141,6 +173,8 @@ fun InfoAppSection() {
                 Toast.makeText(ctx, "✅ Prompt tersalin ke clipboard", Toast.LENGTH_SHORT).show()
             }
         )
+
+        Spacer(Modifier.height(24.dp))
     }
 }
 
