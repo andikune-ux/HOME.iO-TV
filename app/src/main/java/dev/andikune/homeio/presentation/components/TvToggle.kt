@@ -1,10 +1,9 @@
 package dev.andikune.homeio.presentation.components
 
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -29,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -50,22 +48,11 @@ fun TvToggle(
     val isPressed by interactionSource.collectIsPressedAsState()
     val isHighlighted = (isFocused || isPressed) && enabled
 
+    // FIX: Animasi scale ringan (tanpa shadow yang membebani GPU)
     val scale by animateFloatAsState(
         targetValue = if (isHighlighted) 1.02f else 1f,
         animationSpec = spring(dampingRatio = 0.6f, stiffness = 800f),
         label = "toggle_scale"
-    )
-
-    val borderWidth by animateDpAsState(
-        targetValue = if (isHighlighted) 2.dp else 1.dp,
-        animationSpec = tween(200),
-        label = "toggle_border_width"
-    )
-
-    val shadowElevation by animateDpAsState(
-        targetValue = if (isHighlighted) 10.dp else 0.dp,
-        animationSpec = tween(200),
-        label = "toggle_shadow"
     )
 
     val borderColor = when {
@@ -74,24 +61,19 @@ fun TvToggle(
         else -> GlassColors.GlassBorder
     }
 
+    val bgColor = when {
+        isHighlighted -> GlassColors.GlassTintLighter
+        !enabled -> Color(0x11000000)
+        else -> GlassColors.GlassTint
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
             .scale(scale)
-            .shadow(
-                elevation = shadowElevation,
-                shape = RoundedCornerShape(14.dp),
-                ambientColor = GlassColors.AccentGlow.copy(alpha = 0.5f),
-                spotColor = GlassColors.AccentGlow.copy(alpha = 0.5f)
-            )
             .clip(RoundedCornerShape(14.dp))
-            .background(
-                when {
-                    isHighlighted -> GlassColors.GlassTint.copy(alpha = 0.5f)
-                    !enabled -> Color(0x11000000)
-                    else -> GlassColors.GlassTint
-                }
-            )
+            .background(bgColor)
+            .border(if (isHighlighted) 2.dp else 1.dp, borderColor, RoundedCornerShape(14.dp))
             .onFocusChanged { isFocused = it.isFocused }
             .focusable(enabled)
             .clickable(
