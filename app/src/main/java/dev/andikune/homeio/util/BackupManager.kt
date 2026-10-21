@@ -24,7 +24,8 @@ object BackupManager {
         val success: Boolean,
         val filePath: String? = null,
         val errorMessage: String? = null,
-        val needPermission: Boolean = false
+        val needPermission: Boolean = false,
+        val isFallbackPath: Boolean = false
     )
 
     fun needsStoragePermission(): Boolean {
@@ -33,31 +34,32 @@ object BackupManager {
         } else false
     }
 
+    fun isUsingFallbackPath(): Boolean {
+        val external = File(Environment.getExternalStorageDirectory(), "$FOLDER_APP/$FOLDER_BACKUP")
+        return !external.exists() || !external.canWrite()
+    }
+
     fun openPermissionSettings(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
-                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                context.startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
                     data = Uri.parse("package:${context.packageName}")
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                context.startActivity(intent)
+                })
             } catch (e: Exception) {
                 try {
-                    context.startActivity(
-                        Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    )
-                } catch (e2: Exception) {
-                    Log.e(TAG, "Gagal buka permission: ${e2.message}")
-                }
+                    context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    })
+                } catch (_: Exception) {}
             }
         }
     }
 
     fun generateBackupContent(context: Context): String {
         val timestamp = SimpleDateFormat("dd-MM-yyyy HH:mm:ss", Locale.getDefault()).format(Date())
-        val version = try { BuildConfig.VERSION_NAME } catch (e: Exception) { "Unknown" }
-        val versionCode = try { BuildConfig.VERSION_CODE } catch (e: Exception) { 0 }
+        val version = try { BuildConfig.VERSION_NAME } catch (_: Exception) { "Unknown" }
+        val versionCode = try { BuildConfig.VERSION_CODE } catch (_: Exception) { 0 }
 
         return buildString {
             appendLine("=".repeat(60))
@@ -98,6 +100,14 @@ object BackupManager {
             appendLine()
             appendLine(AppKnowledge.BACKUP_INFO)
             appendLine()
+            appendLine("=== MEDIA SOSIAL ===")
+            appendLine("WhatsApp : ${AppKnowledge.SOCIAL_WA}")
+            appendLine("TikTok   : ${AppKnowledge.SOCIAL_TIKTOK}")
+            appendLine("Instagram: ${AppKnowledge.SOCIAL_IG}")
+            appendLine()
+            appendLine("=== AI PROMPT (SALIN UNTUK AI BARU) ===")
+            appendLine(AppKnowledge.AI_PROMPT)
+            appendLine()
 
             appendLine("=".repeat(60))
             appendLine("END OF BACKUP")
@@ -108,9 +118,7 @@ object BackupManager {
     private fun dumpAllPrefs(context: Context): String {
         return try {
             val dataDir = File(context.applicationInfo.dataDir, "shared_prefs")
-            if (!dataDir.exists() || !dataDir.isDirectory) {
-                return "(Tidak ada SharedPreferences)"
-            }
+            if (!dataDir.exists() || !dataDir.isDirectory) return "(Tidak ada SharedPreferences)"
             val files = dataDir.listFiles()?.filter { it.extension == "xml" }.orEmpty()
             if (files.isEmpty()) return "(kosong)"
 
@@ -147,7 +155,7 @@ object BackupManager {
             val file = File(backupDir, fileName)
             file.writeText(content, Charsets.UTF_8)
             Log.d(TAG, "Backup tersimpan: ${file.absolutePath}")
-            BackupResult(success = true, filePath = file.absolutePath)
+            BackupResult(success = true, filePath = file.absolutePath, isFallbackPath = false)
         } catch (e: Exception) {
             Log.e(TAG, "Backup gagal: ${e.message}", e)
             saveFallback(context, content, "Backup Aman-Home.io-fallback.txt")
@@ -161,7 +169,7 @@ object BackupManager {
             val file = File(appDir, fileName)
             file.writeText(content, Charsets.UTF_8)
             Log.d(TAG, "Backup (fallback) tersimpan: ${file.absolutePath}")
-            BackupResult(success = true, filePath = file.absolutePath)
+            BackupResult(success = true, filePath = file.absolutePath, isFallbackPath = true)
         } catch (e: Exception) {
             BackupResult(success = false, errorMessage = e.message ?: "Gagal menyimpan file")
         }
