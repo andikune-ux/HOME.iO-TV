@@ -6,30 +6,16 @@ import java.util.Locale
 import java.util.TimeZone
 
 object DateTimeFormatter {
+    // FIX: Zona waktu otomatis mengikuti perangkat (TV/HP)
+    private val DEFAULT_TZ = TimeZone.getDefault()
 
-    // Zona waktu dipaksa WIB (Asia/Jakarta)
-    private val WIB = TimeZone.getTimeZone("Asia/Jakarta")
-
-    private val BULAN_ID = arrayOf(
-        "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-        "Juli", "Agustus", "September", "Oktober", "November", "Desember"
-    )
-
-    private val HARI_ID = arrayOf(
-        "Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"
-    )
-
-    private val MONTH_EN = arrayOf(
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December"
-    )
-
-    private val DAY_EN = arrayOf(
-        "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
-    )
+    private val BULAN_ID = arrayOf("Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember")
+    private val HARI_ID = arrayOf("Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu")
+    private val MONTH_EN = arrayOf("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
+    private val DAY_EN = arrayOf("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
 
     fun formatDate(date: Date = Date(), langCode: String = "in"): String {
-        val cal = Calendar.getInstance(WIB).apply { time = date }
+        val cal = Calendar.getInstance(DEFAULT_TZ).apply { time = date }
         val day = cal.get(Calendar.DAY_OF_MONTH)
         val month = cal.get(Calendar.MONTH)
         val year = cal.get(Calendar.YEAR)
@@ -42,9 +28,8 @@ object DateTimeFormatter {
         }
     }
 
-    // FINAL FIX: Menggunakan titik (.) alih-alih titik dua (:) agar gaya TV Indonesia
     fun formatTime(date: Date = Date(), timeFormat: String = "24H", showSeconds: Boolean = true): String {
-        val cal = Calendar.getInstance(WIB).apply { time = date }
+        val cal = Calendar.getInstance(DEFAULT_TZ).apply { time = date }
         val hour24 = cal.get(Calendar.HOUR_OF_DAY)
         val minute = cal.get(Calendar.MINUTE)
         val second = cal.get(Calendar.SECOND)
@@ -52,34 +37,18 @@ object DateTimeFormatter {
         return when (timeFormat.uppercase()) {
             "12H" -> {
                 val isPM = hour24 >= 12
-                val hour12 = when {
-                    hour24 == 0 -> 12
-                    hour24 > 12 -> hour24 - 12
-                    else -> hour24
-                }
+                val hour12 = when { hour24 == 0 -> 12; hour24 > 12 -> hour24 - 12; else -> hour24 }
                 val timeStr = if (showSeconds) {
-                    String.format(Locale.US, "%02d.%02d.%02d", hour12, minute, second)
+                    String.format(Locale.US, "%02d:%02d:%02d", hour12, minute, second)
                 } else {
-                    String.format(Locale.US, "%02d.%02d", hour12, minute)
+                    String.format(Locale.US, "%02d:%02d", hour12, minute)
                 }
                 "$timeStr ${if (isPM) "PM" else "AM"}"
             }
             else -> {
-                if (showSeconds) {
-                    String.format(Locale.US, "%02d.%02d.%02d", hour24, minute, second)
-                } else {
-                    String.format(Locale.US, "%02d.%02d", hour24, minute)
-                }
+                if (showSeconds) String.format(Locale.US, "%02d:%02d:%02d", hour24, minute, second)
+                else String.format(Locale.US, "%02d:%02d", hour24, minute)
             }
         }
-    }
-
-    fun formatFull(
-        date: Date = Date(),
-        langCode: String = "in",
-        timeFormat: String = "24H",
-        showSeconds: Boolean = true
-    ): Pair<String, String> {
-        return Pair(formatDate(date, langCode), formatTime(date, timeFormat, showSeconds))
     }
 }
