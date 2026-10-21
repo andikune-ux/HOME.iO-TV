@@ -2,7 +2,6 @@ package dev.andikune.homeio.util
 
 import android.app.ActivityManager
 import android.content.Context
-import android.os.SystemClock
 
 object SystemUtils {
     data class MemoryInfo(
@@ -25,25 +24,12 @@ object SystemUtils {
         return MemoryInfo(totalMb, freeMb, usedMb, freePct)
     }
 
+    // FIX: Menghapus System.gc() dan killBackgroundProcesses yang menyebabkan TV freeze/crash
     fun boostRam(context: Context): MemoryInfo {
-        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val pm = context.packageManager
-        val packages = pm.getInstalledPackages(0)
-        val selfPkg = context.packageName
-
-        for (pkg in packages) {
-            if (pkg.packageName != selfPkg) {
-                try {
-                    am.killBackgroundProcesses(pkg.packageName)
-                } catch (_: Exception) {}
-            }
-        }
-        System.gc()
         return getMemoryInfo(context)
     }
 
     fun isTimeSynced(): Boolean {
-        // Simple sanity check: system time should be after Jan 1, 2024
         val currentTime = System.currentTimeMillis()
         val minRealisticTime = 1704067200000L // 2024-01-01
         return currentTime > minRealisticTime
