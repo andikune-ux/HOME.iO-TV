@@ -400,13 +400,13 @@ fun AllAppsCenterCarousel(
             }
         }
 
-        // BORDER STATIS (Di-scale agar pas dengan aplikasi yang membesar)
+        // BORDER STATIS
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
                 .width(cardWidth)
                 .height(120.dp)
-                .scale(1.15f) // Kunci agar border membungkus ikon yang membesar
+                .scale(1.15f)
                 .zIndex(1f),
             contentAlignment = Alignment.Center
         ) {
@@ -544,6 +544,7 @@ fun LeftNavigationGlassPanel(
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp, top = 4.dp)) {
             Box(Modifier.size(34.dp).liquidGlass(cornerRadius = 10.dp, isFocused = true), contentAlignment = Alignment.Center) { Icon(Icons.Default.Home, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(20.dp)) }
             Spacer(Modifier.width(10.dp))
+            // FIX: Text HOME.iO
             Column { Text("HOME.iO", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp); Text("Liquid Glass", color = GlassColors.TextSecondary, fontSize = 10.sp) }
         }
         
