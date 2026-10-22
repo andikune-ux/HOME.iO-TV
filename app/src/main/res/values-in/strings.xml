@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Home.io</string>
+    <string name="app_name">HOME.iO TV</string>
     <string name="search_hint">Cari aplikasi, media, atau suara…</string>
     <string name="nav_search">Pencarian</string>
     <string name="nav_home">Home</string>
@@ -9,7 +9,7 @@
     <string name="sideloaded_apps">Aplikasi Sideload</string>
     <string name="ram_booster">RAM Booster</string>
     <string name="file_manager">File Manager</string>
-    <string name="settings_title">Pengaturan Home.io</string>
+    <string name="settings_title">Pengaturan HOME.iO TV</string>
     
     <!-- Settings categories -->
     <string name="cat_wallpaper">Wallpaper &amp; Skala</string>
@@ -55,7 +55,7 @@
     
     <!-- Crash Log -->
     <string name="crash_detected_title">Layar Crash Log UI</string>
-    <string name="crash_detected_desc">Home.io mendeteksi penghentian tak terduga. Anda dapat menyalin stack trace atau memuat ulang launcher.</string>
+    <string name="crash_detected_desc">HOME.iO TV mendeteksi penghentian tak terduga. Anda dapat menyalin stack trace atau memuat ulang launcher.</string>
     
     <!-- Weather & Status -->
     <string name="weather_loading">Mengambil data cuaca…</string>
