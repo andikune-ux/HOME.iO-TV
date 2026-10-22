@@ -8,9 +8,7 @@ import android.util.Log
 
 /**
  * SoundFeedback — Pemutar suara klik yang dioptimalkan.
- * FIX BUG #23 & #35:
- *   - Menggunakan Singleton ToneGenerator agar tidak bocor memori.
- *   - Throttle (jeda minimal 80ms) agar tidak hang saat D-Pad ditekan cepat.
+ * FIX BUG #8: Ganti STREAM_SYSTEM ke STREAM_MUSIC agar suara tidak diblokir oleh OS TV tertentu.
  */
 object SoundFeedback {
     private var toneGenerator: ToneGenerator? = null
@@ -24,8 +22,8 @@ object SoundFeedback {
 
         try {
             if (toneGenerator == null) {
-                // Gunakan volume 30% agar tidak terlalu nyaring (halus)
-                toneGenerator = ToneGenerator(AudioManager.STREAM_SYSTEM, 30)
+                // Gunakan STREAM_MUSIC agar lebih universal dan tidak diblokir sistem TV
+                toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, 30)
             }
             toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 30)
         } catch (e: Exception) {
@@ -33,9 +31,6 @@ object SoundFeedback {
         }
     }
 
-    /**
-     * WAJIB dipanggil di onDestroy Activity agar tidak memory leak.
-     */
     fun release() {
         try {
             toneGenerator?.release()
