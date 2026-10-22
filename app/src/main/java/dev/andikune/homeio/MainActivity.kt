@@ -59,7 +59,7 @@ import dev.andikune.homeio.presentation.components.ResponsiveProvider
 import dev.andikune.homeio.presentation.components.liquidGlass
 import dev.andikune.homeio.presentation.home.HomeScreen
 import dev.andikune.homeio.presentation.onboarding.OnboardingPermissionDialog
-import dev.andikune.homeio.presentation.onboarding.QrisDonationPopup // IMPORT BARU
+import dev.andikune.homeio.presentation.onboarding.QrisDonationPopup
 import dev.andikune.homeio.presentation.screensaver.ScreensaverActivity
 import dev.andikune.homeio.presentation.settings.SettingsScreen
 import dev.andikune.homeio.receiver.UsbReceiver
@@ -105,10 +105,9 @@ class MainActivity : ComponentActivity() {
                     if (!OnboardingPrefs.isCompleted(context)) showOnboarding = true
                 }
                 
-                // Logika: Munculkan QRIS setelah Onboarding selesai
-                LaunchedEffect(showOnboarding, isSplashFinished) {
-                    if (!showOnboarding && isSplashFinished && !OnboardingPrefs.hasAskedLauncher(context)) {
-                        // Cek apakah ini pertama kali buka (bisa menggunakan pref lain jika mau, sementara ini muncul setiap splash selesai)
+                // FIX 1: Munculkan QRIS SETIAP KALI aplikasi dibuka (setelah onboarding)
+                LaunchedEffect(isSplashFinished, showOnboarding) {
+                    if (isSplashFinished && !showOnboarding) {
                         showQrisPopup = true
                     }
                 }
@@ -184,7 +183,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // CEK UPDATE: Tambahkan syarat !showQrisPopup
+                // CEK UPDATE
                 LaunchedEffect(isSplashFinished, showQrisPopup, showOnboarding) {
                     if (!isSplashFinished || showQrisPopup || showOnboarding) return@LaunchedEffect
                     try {
@@ -234,7 +233,7 @@ class MainActivity : ComponentActivity() {
 
                 BackHandler(enabled = isSettingsOpen || showUpdateDialog || showOnboarding || showQrisPopup) { 
                     if (showUpdateDialog && updateInfo?.isForceUpdate == true) return@BackHandler
-                    if (showQrisPopup) return@BackHandler // Tidak bisa back jika QRIS muncul
+                    if (showQrisPopup) return@BackHandler
                     if (showOnboarding) return@BackHandler
                     if (isSettingsOpen) isSettingsOpen = false
                     else if (showUpdateDialog) showUpdateDialog = false
