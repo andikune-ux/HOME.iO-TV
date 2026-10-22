@@ -20,6 +20,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -43,9 +48,12 @@ fun QrisDonationPopup(
     val context = LocalContext.current
     var isLoading by remember { mutableStateOf(true) }
     val focusRequester = remember { FocusRequester() }
+    val loadingFocusRequester = remember { FocusRequester() }
 
     // Timer 7 detik tanpa menampilkan angka
     LaunchedEffect(Unit) {
+        // Paksa fokus ke box loading dulu agar tidak liar
+        runCatching { loadingFocusRequester.requestFocus() }
         delay(7000)
         isLoading = false
         // Tarik fokus D-Pad setelah tombol muncul
@@ -73,7 +81,7 @@ fun QrisDonationPopup(
                     .fillMaxHeight(0.9f)
                     .liquidGlass(cornerRadius = 24.dp)
                     .padding(24.dp)
-                    .verticalScroll(rememberScrollState()), // Agar bisa di-scroll jika layar kecil
+                    .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
@@ -91,25 +99,37 @@ fun QrisDonationPopup(
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 300.dp) // Batasi tinggi gambar
+                        .heightIn(max = 300.dp)
                         .clip(RoundedCornerShape(12.dp))
                 )
 
                 Spacer(modifier = Modifier.height(20.dp))
 
                 if (isLoading) {
-                    CircularProgressIndicator(
-                        color = GlassColors.AccentGlow,
-                        modifier = Modifier.size(28.dp),
-                        strokeWidth = 3.dp
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Lagi menyiapkan aplikasi, mohon tunggu ya..",
-                        color = GlassColors.TextSecondary,
-                        fontSize = 13.sp,
-                        textAlign = TextAlign.Center
-                    )
+                    // FIX BUG D-PAD: Box transparan yang bisa difokus agar D-Pad tidak liar
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(80.dp)
+                            .focusRequester(loadingFocusRequester)
+                            .focusable(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(
+                                color = GlassColors.AccentGlow,
+                                modifier = Modifier.size(28.dp),
+                                strokeWidth = 3.dp
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Lagi menyiapkan aplikasi, mohon tunggu ya..",
+                                color = GlassColors.TextSecondary,
+                                fontSize = 13.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
                 } else {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
@@ -130,6 +150,13 @@ fun QrisDonationPopup(
                                     .background(if (isFocusedMampir) GlassColors.AccentGlow else GlassColors.GlassTint)
                                     .onFocusChanged { isFocusedMampir = it.isFocused }
                                     .focusable()
+                                    .onPreviewKeyEvent { event ->
+                                        if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) {
+                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(AppKnowledge.SOCIAL_WA))
+                                            context.startActivity(intent)
+                                            true
+                                        } else false
+                                    }
                                     .clickable {
                                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(AppKnowledge.SOCIAL_WA))
                                         context.startActivity(intent)
@@ -157,6 +184,12 @@ fun QrisDonationPopup(
                                     .focusRequester(focusRequester)
                                     .onFocusChanged { isFocusedTutup = it.isFocused }
                                     .focusable()
+                                    .onPreviewKeyEvent { event ->
+                                        if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) {
+                                            onDismiss()
+                                            true
+                                        } else false
+                                    }
                                     .clickable { onDismiss() }
                                     .padding(vertical = 14.dp),
                                 contentAlignment = Alignment.Center
