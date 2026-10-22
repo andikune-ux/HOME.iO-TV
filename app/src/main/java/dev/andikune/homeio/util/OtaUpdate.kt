@@ -40,6 +40,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle // <--- INI YANG TADI HILANG
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -366,7 +367,6 @@ fun UpdateDialog(info: UpdateManager.UpdateInfo, progress: Float, isDownloading:
                     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                         OtaButton("MOHON TUNGGU...", GlassColors.GlassTint, {})
                         Spacer(Modifier.height(8.dp))
-                        // FIX BUG: Tombol darurat jika download macet
                         Text(
                             text = "Batal",
                             color = GlassColors.TextSecondary,
