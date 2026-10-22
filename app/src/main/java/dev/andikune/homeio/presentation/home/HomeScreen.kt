@@ -392,9 +392,9 @@ fun AllAppsCenterCarousel(
                 AppCardItem(
                     app = app,
                     iconSizeMultiplier = iconSizeMultiplier,
-                    modifier = Modifier.width(cardWidth).height(120.dp),
+                    modifier = Modifier.width(cardWidth).height(120.dp), // FIX: Tinggi sudah pas
                     isCenterFocused = isCentered,
-                    useNativeFocus = false, // Carousel pakai logika tengah, bukan native focus
+                    useNativeFocus = false,
                     onClick = { 
                         if (isCentered) onAppClick(app) 
                     },
@@ -404,6 +404,7 @@ fun AllAppsCenterCarousel(
         }
     }
 }
+
 // ============================================================
 // KOMPONEN PENDUKUNG
 // ============================================================
@@ -411,14 +412,19 @@ fun AllAppsCenterCarousel(
 fun FavoriteAppsSection(favoriteApps: List<AppItem>, iconSizeMultiplier: Float, onAppClick: (AppItem) -> Unit, onAppLongClick: (AppItem) -> Unit) {
     Column {
         Text("${stringResource(R.string.favorite_apps)} (3 Utama)", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp), 
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically // FIX: Rata tengah vertikal
+        ) {
             favoriteApps.forEach { app -> 
                 AppCardItem(
                     app = app, 
                     iconSizeMultiplier = iconSizeMultiplier, 
-                    modifier = Modifier.width(110.dp * iconSizeMultiplier), 
+                    // FIX UTAMA: Ditambahkan .height(120.dp) agar tidak melar ke bawah
+                    modifier = Modifier.width(110.dp * iconSizeMultiplier).height(120.dp), 
                     isCenterFocused = false, 
-                    useNativeFocus = true, // Favorit pakai native focus (D-Pad biasa)
+                    useNativeFocus = true,
                     onClick = { onAppClick(app) }, 
                     onLongClick = { onAppLongClick(app) }
                 ) 
@@ -457,11 +463,10 @@ fun AppCardItem(
         }
     }
 
-    // SOLUSI BUG: Interaction Source untuk mendeteksi tombol OK secara real-time
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
-    // BORDER & GLOW DISATUKAN LANGSUNG DI SINI
+    // BORDER & GLOW MENYATU DENGAN IKON
     NeonFocusBorder(
         focused = isEffectivelyFocused,
         pressed = isPressed,
@@ -474,7 +479,7 @@ fun AppCardItem(
     ) {
         Box(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxSize() // Aman, karena modifier di atas sudah punya batas width & height
                 .clip(RoundedCornerShape(16.dp))
                 .background(if (isEffectivelyFocused) GlassColors.GlassTintLighter else GlassColors.GlassTint)
                 .then(if (useNativeFocus) Modifier.onFocusChanged { isNativeFocused = it.isFocused } else Modifier)
@@ -537,9 +542,9 @@ fun AllAppsGridOverlay(
                             AppCardItem(
                                 app = app, 
                                 iconSizeMultiplier = iconSizeMultiplier, 
-                                modifier = Modifier, 
+                                modifier = Modifier.height(120.dp), // FIX: Tambahkan tinggi agar tidak melar
                                 isCenterFocused = false, 
-                                useNativeFocus = true, // Grid pakai native focus
+                                useNativeFocus = true, 
                                 onClick = { onAppClick(app) }, 
                                 onLongClick = { onAppLongClick(app) }
                             )
@@ -550,6 +555,7 @@ fun AllAppsGridOverlay(
         }
     }
 }
+
 // LEFT NAVIGATION PANEL
 @Composable
 fun LeftNavigationGlassPanel(
