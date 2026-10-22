@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Home.io</string>
+    <string name="app_name">HOME.iO</string>
     <string name="search_hint">Search apps, media, or voice…</string>
     <string name="nav_search">Search</string>
     <string name="nav_home">Home</string>
@@ -9,7 +9,7 @@
     <string name="sideloaded_apps">Sideloaded Apps</string>
     <string name="ram_booster">RAM Booster</string>
     <string name="file_manager">File Manager</string>
-    <string name="settings_title">Home.io Settings</string>
+    <string name="settings_title">HOME.iO Settings</string>
     
     <!-- Settings categories -->
     <string name="cat_wallpaper">Wallpaper &amp; Scale</string>
@@ -55,7 +55,7 @@
     
     <!-- Crash Log -->
     <string name="crash_detected_title">Application Crash Log</string>
-    <string name="crash_detected_desc">Home.io caught an unexpected error. You can copy the stack trace or restart the launcher.</string>
+    <string name="crash_detected_desc">HOME.iO caught an unexpected error. You can copy the stack trace or restart the launcher.</string>
     
     <!-- Weather & Status -->
     <string name="weather_loading">Fetching weather…</string>
