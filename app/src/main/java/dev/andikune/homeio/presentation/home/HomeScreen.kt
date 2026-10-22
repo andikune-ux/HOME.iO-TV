@@ -21,7 +21,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border // FIX IMPORT
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusGroup
@@ -511,7 +511,6 @@ fun AllAppsGridOverlay(
                 ) {
                     items(apps, key = { it.packageName }) { app ->
                         var isFirst by remember { mutableStateOf(app == apps.firstOrNull()) }
-                        // FIX: Panggil AppCardItem dengan 6 argumen yang benar
                         Box(modifier = if (isFirst) Modifier.focusRequester(firstFocusRequester) else Modifier) {
                             AppCardItem(app, iconSizeMultiplier, Modifier, false, { onAppClick(app) }, { onAppLongClick(app) })
                         }
@@ -542,7 +541,7 @@ fun LeftNavigationGlassPanel(
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp, top = 4.dp)) {
             Box(Modifier.size(34.dp).liquidGlass(cornerRadius = 10.dp, isFocused = true), contentAlignment = Alignment.Center) { Icon(Icons.Default.Home, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(20.dp)) }
             Spacer(Modifier.width(10.dp))
-            Column { Text("Home.io", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp); Text("Liquid Glass", color = GlassColors.TextSecondary, fontSize = 10.sp) }
+            Column { Text("HOME.iO", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp); Text("Liquid Glass", color = GlassColors.TextSecondary, fontSize = 10.sp) }
         }
         
         Box(Modifier.focusRequester(firstItemFocusRequester)) {
