@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -57,16 +58,17 @@ fun AppContextMenuDialog(
     val context = LocalContext.current
     val firstItemFocusRequester = remember { FocusRequester() }
 
-    // Auto fokus ke tombol pertama saat dialog muncul
+    // FIX BUG 7: Tambahkan BackHandler agar tidak hang saat tombol Back ditekan
+    BackHandler { onDismiss() }
+
     LaunchedEffect(Unit) {
         delay(100)
         runCatching { firstItemFocusRequester.requestFocus() }
     }
 
-    // FIX: Ganti AlertDialog standar dengan Dialog kustom agar TV friendly
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = false)
     ) {
         Box(
             modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)),
@@ -141,7 +143,6 @@ fun AppContextMenuDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                // Tombol Tutup
                 var isFocusedTutup by remember { mutableStateOf(false) }
                 Box(
                     modifier = Modifier
@@ -178,7 +179,6 @@ fun ContextMenuOption(
     val context = LocalContext.current
     var isFocused by remember { mutableStateOf(false) }
     
-    // Hapus playClick di onClick, pindahkan ke sini agar tidak dobel
     val handleClick = {
         SoundFeedback.playClick(context)
         onClick()
