@@ -1,22 +1,22 @@
 package dev.andikune.homeio.data
 
 /**
- * AppKnowledge — Memory Knowledge & Instruction untuk Home.io
+ * AppKnowledge — Memory Knowledge & Instruction untuk HOME.iO
  * File ini dibaca oleh BackupManager untuk export ke .txt.
- * Versi ini mencakup seluruh evolusi dari Batch 0 hingga Final QA.
+ * Versi ini mencakup seluruh evolusi dari Batch 0 hingga Final QA (Carousel & QRIS).
  */
 object AppKnowledge {
 
-    const val APP_NAME = "Home.io"
+    const val APP_NAME = "HOME.iO TV"
     const val APP_DESCRIPTION = "Launcher Android TV & STB dengan UI iOS 26 Liquid Glass"
     const val REPO_URL = "https://github.com/andikune-ux/HOME.iO-TV"
     const val REPO_OWNER = "andikune-ux"
     const val REPO_NAME = "HOME.iO-TV"
 
-    // MEDIA SOSIAL
-const val SOCIAL_WA = "https://chat.whatsapp.com/BAejUrfRW39FOt8biJleUM?s=cl&p=a&mlu=4&ilr=4"
-const val SOCIAL_TIKTOK = "https://www.tiktok.com/@nayyra.une"
-const val SOCIAL_IG = "https://www.instagram.com/nayyra.une"
+    // MEDIA SOSIAL (WA Sudah Diperbarui)
+    const val SOCIAL_WA = "https://chat.whatsapp.com/BAejUrfRW39FOt8biJleUM?s=cl&p=a&mlu=4&ilr=4"
+    const val SOCIAL_TIKTOK = "https://www.tiktok.com/@nayyra.une"
+    const val SOCIAL_IG = "https://www.instagram.com/nayyra.une"
 
     val APP_STRUCTURE = """
 app/src/main/java/dev/andikune/homeio/
@@ -32,14 +32,17 @@ app/src/main/java/dev/andikune/homeio/
 │   └── repository/                    -> Interface
 ├── presentation/
 │   ├── home/
-│   │   └── HomeScreen.kt              -> UI Utama (Sliding Pane Overlay, Layar Terkunci, Widget Minimalis)
+│   │   └── HomeScreen.kt              -> UI Utama (Center-Locked Carousel, Sliding Pane, Widget)
+│   ├── onboarding/
+│   │   ├── OnboardingPermissionDialog.kt -> Dialog Izin Awal
+│   │   └── QrisDonationPopup.kt       -> Dialog Donasi QRIS (7s delay, Mampir/Tutup)
 │   ├── settings/
 │   │   ├── SettingsScreen.kt          -> 2-Pane Layout (8 Kategori)
 │   │   ├── WallpaperSection.kt
 │   │   ├── ScreensaverSection.kt
 │   │   ├── PerformanceSection.kt      -> Cache Cleaner & RAM Booster
 │   │   ├── LanguageSection.kt
-│   │   ├── TvDisplaySection.kt        -> Safe Area & Brightness
+│   │   ├── TvDisplaySection.kt        -> Safe Area, Brightness, App Icon Size
 │   │   ├── BackupBiasaSection.kt      -> Backup Tema (JSON)
 │   │   ├── InfoAppSection.kt          -> Identitas, Backup Aman, Medsos, AI Prompt
 │   │   ├── AppCacheDialog.kt          -> Dialog list cache app lain
@@ -48,17 +51,15 @@ app/src/main/java/dev/andikune/homeio/
 │   │   ├── WallpaperView.kt           -> ExoPlayer (Video) & Image
 │   │   └── FileManagerDialog.kt
 │   ├── screensaver/
-│   │   └── ScreensaverActivity.kt
-│   ├── onboarding/
-│   │   └── OnboardingPermissionDialog.kt
+│   │   └── ScreensaverActivity.kt     -> Fix Layar Hitam 0% Pekat
 │   └── components/
-│       ├── GlassTheme.kt              -> Modifier Liquid Glass (Real Blur API 31+)
-│       ├── NeonFocusBorder.kt         -> Efek Glow Berputar D-Pad (Lightweight Pulse)
+│       ├── GlassTheme.kt              -> Modifier Liquid Glass (Blur API 31+)
+│       ├── NeonFocusBorder.kt         -> Animasi Glow Ringan (Tanpa Rotasi Berat)
 │       ├── TvSlider.kt & TvToggle.kt  -> Komponen D-Pad friendly
 │       └── (Komponen UI lainnya)
 ├── service/
 │   ├── UpdateDownloadService.kt       -> Foreground Service untuk OTA
-│   └── (Service lainnya)
+│   └── LauncherNotificationService.kt -> Listener Notifikasi Sistem Asli
 ├── kiosk/
 │   ├── KioskManager.kt                -> Lock Task Mode
 │   ├── WatchdogService.kt             -> Auto-restart jika crash
@@ -84,56 +85,64 @@ app/src/main/java/dev/andikune/homeio/
    - Animasi Pulse Glow D-Pad (NeonFocusBorder) yang ringan & hemat RAM.
    - Suara klik (SoundFeedback) saat navigasi.
 
-2. Home Screen (Modern Locked Layout)
-   - Layar utama terkunci (Fixed), hanya daftar aplikasi yang bisa scroll horizontal.
-   - Panel kiri model Sliding Pane (Overlay) meluncur dari kiri, dipicu tombol (☰) di tengah layar.
-   - Widget Jam, Cuaca, RAM minimalis (tanpa border) terletak di pojok kanan atas.
-   - Ikon aplikasi standar TV modern (Async Image Loading, anti OOM).
-   - Context Menu (Long Press 500ms): Pin, App Info, Uninstall (kecuali sistem).
-   - Safe Launch: Anti-crash saat membuka app yang sudah di-uninstall.
+2. HOME SCREEN (Modern Center-Locked Carousel)
+   - Layar utama terkunci (Fixed). Hanya daftar aplikasi & Pane yang bisa bergerak.
+   - Widget Jam, Tanggal, Cuaca, dan RAM minimalis (tanpa border) di pojok kanan atas.
+   - Tombol Settings (⚙️) di samping Jam.
+   - Aplikasi Favorit (3 kotak statis).
+   - Semua Aplikasi (Center-Locked Carousel): Border statis di tengah, aplikasi bergeser melewatinya.
+   - Fitur D-Pad Ujung: Menekan Kiri di App 1 membuka Pane. Menekan Kanan di App terakhir membuka Grid Overlay.
+   - Fitur Sentuh (HP): Swipe untuk scroll, Tap App di pinggir untuk ke tengah, Tap App di tengah untuk buka.
+   - D-Pad Bawah membuka Overlay Grid (Semua Aplikasi).
 
-3. Wallpaper Engine
+3. Sliding Pane Kiri (Overlay)
+   - Dipicu oleh tombol Hamburger (☰) di tengah kiri layar.
+   - Overlay transparan dengan Scrim (klik luar untuk tutup di HP).
+   - Focus Trap: D-Pad terkunci di dalam Pane saat terbuka.
+   - Berisi: Search, Notifikasi Asli (Notification Listener), Home, RAM Booster, File Manager, Sideload, Settings.
+   - Jika izin notifikasi belum aktif, muncul tombol pintas untuk ke Pengaturan Android.
+
+4. Pop-up Donasi QRIS (Awal Buka Aplikasi)
+   - Muncul otomatis setelah Onboarding selesai (Sebelum cek update).
+   - Tampil 7 detik dengan loading berputar & teks "Lagi menyiapkan aplikasi...".
+   - Teks di atas gambar: "Donasi buat admin beli kopi".
+   - Tombol "Mampir" (Buka WA) dan "Tutup" (Lanjut App).
+   - D-Pad terkunci di Pop-up.
+
+5. Wallpaper Engine
    - Foto & Video (ExoPlayer Mute + Seamless Loop).
    - Mode Skala: FIT, FILL, ZOOM, CROP.
    - Anti Memory Leak (Player dilepas saat ganti video).
 
-4. Pengaturan 2-Pane Glass (8 Kategori)
+6. Pengaturan 2-Pane Glass (8 Kategori)
    - Wallpaper, Screensaver, Performa, Bahasa, Tampilan TV, Pembaruan, Backup, Info.
    - Auto-save (Debounce) dan Force Save saat keluar layar.
-   - Scroll berfungsi penuh via D-Pad & Touchscreen.
+   - Tampilan TV: Atur Safe Area, Kecerahan, Kiosk Mode, Auto-Start, dan UKURAN IKON APLIKASI (Slider 0.6x - 1.5x).
 
-5. OTA Update via GitHub (Full Otomatis)
+7. OTA Update via GitHub (Full Otomatis)
    - Auto-check saat splash selesai (Cooldown 6 jam).
    - Dialog Kaca (UpdateDialog): Changelog, Progress Bar, Tombol Skip/Nanti/Update.
    - Force Update: Jika tag release mengandung 'FORCE_UPDATE=true'.
    - Download via Foreground Service (Anti putus, notifikasi interaktif).
-   - Simpan di /HomeiO/Pembaharuan/ (Tidak auto-hapus).
-   - Retry Download jika koneksi putus.
 
-6. Manajemen RAM & Cache
-   - Widget RAM di Home dengan tombol Boost.
+8. Manajemen RAM & Cache
+   - Widget RAM di Home dengan tombol Boost (menampilkan Toast sukses).
    - Clear cache app sendiri (100% works).
    - Baca ukuran cache app lain (butuh izin Usage Access).
-   - Tombol pintas ke Storage Settings TV.
 
-7. Kiosk & System
-   - Lock Task Mode (cegah keluar aplikasi).
-   - Watchdog Service (auto-restart jika crash).
-   - Auto-Start saat TV booting.
-   - Default Launcher Prompt (memandu user jadikan launcher utama).
-   - Brightness Schedule & Safe Area.
-   - USB OTG Popup (buka File Manager otomatis).
+9. Kiosk & System
+   - Lock Task Mode, Watchdog Service, Auto-Start saat TV booting.
+   - Default Launcher Prompt.
+   - Screensaver benar-benar 0% (Hitam Pekat).
+   - USB OTG Popup.
 
-8. Backup & Restore
-   - Backup Biasa (JSON): Menyimpan tema, wallpaper, bahasa, dll.
-   - Backup Aman (TXT): Menyimpan AppKnowledge (memory AI) + semua prefs.
-   - Lokasi terpusat di /HomeiO/.
+10. Backup & Restore
+    - Backup Biasa (JSON) & Backup Aman (TXT).
 
-9. Info Aplikasi & Tools
-   - Identitas App & Versi.
-   - Tombol Salin Prompt AI (untuk handoff ke AI baru).
-   - Link Media Sosial.
-   - Crash Log UI (Salin stack trace jika app error).
+11. Info Aplikasi & Tools
+    - Identitas App & Versi.
+    - Tombol Salin Prompt AI.
+    - Link Media Sosial (WA, TikTok, IG).
     """.trimIndent()
 
     val WORKFLOW_RULES = """
@@ -142,21 +151,21 @@ app/src/main/java/dev/andikune/homeio/
 2. Path lengkap file (code block).
 3. Nama file (code block).
 4. URL edit / URL new (code block).
-5. Kode TIMPA FULL (jangan suruh user edit manual, sepanjang apapun itu).
+5. Kode TIMPA FULL (JANGAN SURUH EDIT MANUAL, SEPANJANG APAPUN ITU).
 6. Pesan commit.
 
 === ANTI-TRUNCATION ===
 - Batas aman copy-paste: 400-600 baris per bubble.
 - Jika < 600 baris: kirim 1 BAGIAN.
-- Jika > 600 baris: WAJIB 2 BAGIAN dalam 1 bubble.
+- Jika > 600 baris: WAJIB dibagi menjadi beberapa BAGIAN di dalam 1 bubble.
 - JANGAN potong di tengah fungsi.
 
 === ATURAN KERJA ===
-1. Konfirmasi sebelum eksekusi.
-2. JANGAN hapus fitur lama tanpa izin.
-3. Lihat kode asli dulu sebelum timpa.
-4. Kerjakan PER FILE (bukan per fitur).
-5. Konfirmasi sebelum lanjut batch.
+1. Konfirmasi sebelum eksekusi. TUNGGU aba-aba "EKSEKUSI" dari user.
+2. Jujur kalau belum tahu, jangan menebak.
+3. JANGAN hapus fitur lama tanpa izin.
+4. Lihat kode asli dulu sebelum timpa.
+5. Kerjakan PER FILE (bukan per fitur).
 
 === ATURAN KERAS (JANGAN DILANGGAR) ===
 - JANGAN UBAH debug.keystore.
@@ -173,7 +182,7 @@ IDENTITAS USER:
 - Device: HP Android (GitHub Mobile)
 
 APLIKASI:
-- Nama           : Home.io
+- Nama           : HOME.iO TV
 - Package        : dev.andikune.homeio
 - Platform       : Android TV / STB
 - Min SDK        : 24 (Android 7.0)
@@ -189,7 +198,7 @@ REPO: https://github.com/andikune-ux/HOME.iO-TV
 2. Manifest & themes.xml kosong.
 3. File keystore hilang (sudah otomatis via GitHub Actions).
 4. Memory Leak pada Video Wallpaper.
-5. OOM / Lag saat scroll App Grid (Bitmap dialihkan ke IO thread).
+5. OOM / Lag saat scroll App Grid (Drawable dihapus dari AppItem, ganti Async Image).
 6. Data Loss saat keluar Settings (Force Save ditambahkan).
 7. Force Update bisa di-bypass dengan tombol Back.
 8. Crash saat membuka aplikasi yang sudah di-uninstall (Safe Launch).
@@ -204,16 +213,21 @@ REPO: https://github.com/andikune-ux/HOME.iO-TV
 17. Scroll macet di Settings & OTA (verticalScroll ditambahkan).
 18. Format Tanggal/Jam menggunakan titik dua (:) bukan titik (.) (DateTimeFormatter Auto TZ).
 19. Progress Download Error tidak reset (fix di OtaUpdate).
-20. OOM (Out of Memory) pada AppItem & AppRepository (Drawable dihapus, ganti Async Image).
-21. Layar Blur Total di Android 12 (Fix GlassTheme TIRAMISU).
-22. Animasi NeonFocusBorder terlalu berat (Diganti animasi Pulse ringan).
-23. D-Pad nyangkut saat panel kiri terbuka (Ditambah Focus Trap & Sliding Pane).
-24. System.gc() dan Kill Processes membuat TV Freeze (Dihapus dari SystemUtils).
-25. Format jam titik dua (:) dan zona waktu otomatis (DateTimeFormatter).
+20. Layar Blur Total di Android 12 (Fix GlassTheme, cek API >= TIRAMISU).
+21. Animasi NeonFocusBorder terlalu berat (Diganti animasi Pulse ringan).
+22. D-Pad nyangkut saat panel kiri terbuka (Ditambah Focus Trap & Scrim).
+23. System.gc() dan Kill Processes membuat TV Freeze (Dihapus dari SystemUtils).
+24. Infinite Constraints Crash di SettingsScreen (Ganti Column(verticalScroll) ke LazyColumn).
+25. QRIS Popup tidak muncul (Logic di MainActivity diperbaiki).
+26. QRIS Popup tombol terpotong (Ditambah verticalScroll di dalam Popup).
+27. Border Carousel tidak membungkus ikon (Ditambah scale 1.15f pada Border statis).
+28. Posisi awal Carousel mentok kiri (Set initialFirstVisibleItemIndex = 2).
+29. Notifikasi asli belum ada (Ditambahkan LauncherNotificationService).
+30. Tombol RAM Booster tidak bereaksi (Ditambah Toast feedback).
 
 === BELUM DIPERBAIKI (BATASAN ANDROID) ===
 1. Hapus cache aplikasi LAIN secara otomatis tanpa root (Hanya bisa via list app + buka Settings App Info per app).
-2. Notifikasi Foreground Service bisa gagal jika user menolak izin POST_NOTIFICATIONS (sudah ada handling, tapi butuh kesadaran user).
+2. Notifikasi Foreground Service bisa gagal jika user menolak izin POST_NOTIFICATIONS.
     """.trimIndent()
 
     val BUILD_ERROR_HISTORY = """
@@ -239,6 +253,12 @@ Solusi: tambahkan null-check (val appInfo: ApplicationInfo = pkg.applicationInfo
 
 [21-10-2026] HTTP 422 Validation Failed (tag_name is not valid)
 Solusi: GitHub Actions tidak mengenali variabel Kotlin. Ubah logika build.yml menggunakan Bash (date + TZ=Asia/Jakarta).
+
+[22-10-2026] Unresolved reference 'zIndex' di HomeScreen.kt
+Solusi: Import yang benar adalah `import androidx.compose.ui.zIndex` (bukan ui.draw.zIndex).
+
+[22-10-2026] Syntax error 'Expecting a top level declaration' di MainActivity.kt
+Solusi: File korup akibat paste terpotong atau cache. Timpa ulang file MainActivity.kt dengan Full Kode.
     """.trimIndent()
 
     val BACKUP_INFO = """
@@ -254,12 +274,12 @@ Fallback (jika izin storage ditolak):
 
     // PROMPT UNTUK SALIN CEPAT KE AI LAIN (HANDOFF)
     val AI_PROMPT = """
-Halo AI. Saya pakai aplikasi Home.io (Android TV, Jetpack Compose).
+Halo AI. Saya pakai aplikasi HOME.iO TV (Android TV, Jetpack Compose).
 Tolong baca konteks di bawah ini dulu sebelum saya kasih tugas.
 Setelah paham, konfirmasi ke saya, baru kita mulai kerja.
 
 === IDENTITAS PROYEK ===
-- Nama Aplikasi : Home.io
+- Nama Aplikasi : HOME.iO TV
 - Platform      : Android TV / STB (Jetpack Compose)
 - Repo          : https://github.com/andikune-ux/HOME.iO-TV
 - Package       : dev.andikune.homeio
@@ -272,16 +292,16 @@ Setiap respon harus ada 6 elemen:
 2. Path lengkap file (code block)
 3. Nama file (code block)
 4. URL Edit (file lama) / URL New (file baru) (code block)
-5. Kode TIMPA FULL (sepanjang apapun itu, jangan suruh edit manual)
+5. Kode TIMPA FULL (JANGAN SURUH EDIT MANUAL, SEPANJANG APAPUN ITU)
 6. Pesan commit
 
 KETENTUAN:
 - Pakai code block (3 backtick) untuk path/URL/nama file.
-- Batas aman copy-paste: 400-600 baris. Jika > 600, bagi 2 BAGIAN dalam 1 bubble.
+- Batas aman copy-paste: 400-600 baris. Jika > 600, bagi menjadi beberapa BAGIAN di dalam 1 bubble.
 - JANGAN potong di tengah fungsi.
 
 === ATURAN KERJA ===
-1. Konfirmasi dulu sebelum eksekusi.
+1. Konfirmasi dulu sebelum eksekusi (TUNGGU aba-aba EKSEKUSI).
 2. Jujur kalau belum tahu, jangan menebak.
 3. JANGAN hapus fitur lama tanpa izin.
 4. Lihat kode asli dulu sebelum timpa.
