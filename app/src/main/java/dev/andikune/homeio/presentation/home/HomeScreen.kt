@@ -11,7 +11,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
-import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
@@ -22,6 +21,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border // FIX IMPORT
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusGroup
@@ -46,8 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.draw.zIndex
+import androidx.compose.ui.draw.zIndex // FIX IMPORT
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -222,10 +221,8 @@ fun HomeScreen(
                 modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 80.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                // Favorit (Statis, 3 Item)
                 FavoriteAppsSection(favoriteApps, config.appIconSizeMultiplier, { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) }, { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app })
                 
-                // CAROUSEL SEMUA APLIKASI
                 if (displayApps.isNotEmpty()) {
                     AllAppsCenterCarousel(
                         apps = displayApps,
@@ -240,14 +237,14 @@ fun HomeScreen(
             }
         }
 
-        // TOMBOL HAMBURGER (Z-INDEX 10 agar tidak tertutup aplikasi)
+        // TOMBOL HAMBURGER
         var isTriggerFocused by remember { mutableStateOf(false) }
         Box(
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .padding(start = 16.dp)
                 .size(48.dp)
-                .zIndex(10f) // FIX BUG #10: Z-Index
+                .zIndex(10f)
                 .clip(CircleShape)
                 .background(if (isTriggerFocused) GlassColors.GlassTintLighter else GlassColors.GlassTint)
                 .onFocusChanged { isTriggerFocused = it.isFocused }
@@ -334,12 +331,10 @@ fun AllAppsCenterCarousel(
     val lazyListState = rememberLazyListState()
     val flingBehavior = rememberSnapFlingBehavior(lazyListState = lazyListState)
     
-    // Ukuran Kartu Dasar & Padding Dinamis
     val baseCardWidth = 110.dp
     val cardWidth = (baseCardWidth * iconSizeMultiplier).coerceIn(80.dp, 160.dp)
     val horizontalPadding = (screenWidth - cardWidth) / 2f
 
-    // FIX BUG #3: Menghitung index tengah secara real-time (untuk D-Pad maupun Touch)
     val centeredIndex by remember {
         derivedStateOf {
             val layoutInfo = lazyListState.layoutInfo
@@ -350,14 +345,12 @@ fun AllAppsCenterCarousel(
         }
     }
 
-    // FIX BUG #4: Animasi D-Pad (Smooth scroll ke tengah saat index berubah)
     LaunchedEffect(centeredIndex) {
         if (lazyListState.isScrollInProgress) return@LaunchedEffect
         lazyListState.animateScrollToItem(centeredIndex)
     }
 
     Box(Modifier.fillMaxWidth().height(140.dp)) {
-        // LazyRow (Aplikasi berjalan di belakang border)
         LazyRow(
             state = lazyListState,
             flingBehavior = flingBehavior,
@@ -399,17 +392,13 @@ fun AllAppsCenterCarousel(
                     isCenterFocused = isCentered,
                     onClick = { 
                         if (isCentered) onAppClick(app) 
-                        else { /* Touch: Tap di pinggir = geser ke tengah */
-                            // Compose LazyList automatically snaps to center due to flingBehavior
-                        }
                     },
                     onLongClick = { onAppLongClick(app) }
                 )
             }
         }
 
-        // FIX BUG #5 & #12: Border Statis di Tengah (Tidak ikut bergeser)
-        // Menggunakan zIndex 1f agar berada di atas aplikasi, tapi di bawah tombol Hamburger
+        // BORDER STATIS
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
@@ -418,7 +407,6 @@ fun AllAppsCenterCarousel(
                 .zIndex(1f),
             contentAlignment = Alignment.Center
         ) {
-            // Kita gunakan NeonFocusBorder yang menyala terus
             NeonFocusBorder(
                 focused = true,
                 cornerRadius = 16.dp,
@@ -453,7 +441,6 @@ fun AppCardItem(
     onClick: () -> Unit, 
     onLongClick: () -> Unit
 ) {
-    // FIX BUG #4 & #5: Animasi skala dan zIndex
     val scale by animateFloatAsState(
         targetValue = if (isCenterFocused) 1.15f else 0.9f,
         label = "carousel_scale"
@@ -471,7 +458,7 @@ fun AppCardItem(
 
     Box(
         modifier = modifier
-            .zIndex(if (isCenterFocused) 2f else 0f) // Yang fokus ada di atas
+            .zIndex(if (isCenterFocused) 2f else 0f)
             .scale(scale)
             .clip(RoundedCornerShape(16.dp))
             .background(if (isCenterFocused) GlassColors.GlassTintLighter else GlassColors.GlassTint)
@@ -524,8 +511,9 @@ fun AllAppsGridOverlay(
                 ) {
                     items(apps, key = { it.packageName }) { app ->
                         var isFirst by remember { mutableStateOf(app == apps.firstOrNull()) }
+                        // FIX: Panggil AppCardItem dengan 6 argumen yang benar
                         Box(modifier = if (isFirst) Modifier.focusRequester(firstFocusRequester) else Modifier) {
-                            AppCardItem(app, iconSizeMultiplier, Modifier, false, { onAppClick(app) }, { onAppLongClick(app) }, isFirst)
+                            AppCardItem(app, iconSizeMultiplier, Modifier, false, { onAppClick(app) }, { onAppLongClick(app) })
                         }
                     }
                 }
