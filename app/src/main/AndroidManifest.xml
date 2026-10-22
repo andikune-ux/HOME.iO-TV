@@ -26,7 +26,7 @@
         android:name=".HomeIoApplication"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="Home.io"
+        android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.HomeIo"
         tools:targetApi="35">
@@ -75,7 +75,7 @@
         <service
             android:name=".service.LauncherNotificationService"
             android:exported="true"
-            android:label="Home.io Notifications"
+            android:label="HOME.iO TV Notifications"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
