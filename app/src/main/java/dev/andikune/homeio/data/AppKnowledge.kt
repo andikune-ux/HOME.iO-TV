@@ -13,10 +13,10 @@ object AppKnowledge {
     const val REPO_OWNER = "andikune-ux"
     const val REPO_NAME = "HOME.iO-TV"
 
-    // MEDIA SOSIAL (Diambil dari Masjid.io)
-    const val SOCIAL_WA = "https://chat.whatsapp.com/ErJpG34fdzwL9FOmoh4fNN"
-    const val SOCIAL_TIKTOK = "https://www.tiktok.com/@nayyra.une"
-    const val SOCIAL_IG = "https://www.instagram.com/nayyra.une"
+    // MEDIA SOSIAL
+const val SOCIAL_WA = "https://chat.whatsapp.com/BAejUrfRW39FOt8biJleUM?s=cl&p=a&mlu=4&ilr=4"
+const val SOCIAL_TIKTOK = "https://www.tiktok.com/@nayyra.une"
+const val SOCIAL_IG = "https://www.instagram.com/nayyra.une"
 
     val APP_STRUCTURE = """
 app/src/main/java/dev/andikune/homeio/
