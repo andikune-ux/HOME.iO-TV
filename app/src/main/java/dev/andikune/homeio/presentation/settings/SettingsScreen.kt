@@ -24,6 +24,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -56,7 +61,7 @@ fun SettingsScreen(
     var selectedCategory by remember { mutableStateOf(SettingsCategory.WALLPAPER) }
     var draftConfig by remember { mutableStateOf(currentConfig) }
     val scope = rememberCoroutineScope()
-    val paneFocusRequester = remember { FocusRequester() }
+    val firstContentFocusRequester = remember { FocusRequester() }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -72,7 +77,7 @@ fun SettingsScreen(
     Box(Modifier.fillMaxSize().background(GlassColors.DeepBackgroundGradient)) {
         Row(Modifier.fillMaxSize().padding(16.dp)) {
             
-            // PANE KIRI (SIDEBAR GLASS) - Ada verticalScroll & rememberScrollState
+            // PANE KIRI (SIDEBAR GLASS)
             Column(
                 Modifier.weight(0.28f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp)
                     .padding(16.dp).verticalScroll(rememberScrollState()).focusGroup(),
@@ -82,6 +87,12 @@ fun SettingsScreen(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                         .background(GlassColors.GlassTintLighter)
                         .border(1.dp, GlassColors.AccentGlow.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                        .focusable()
+                        .onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) {
+                                onBack(); true
+                            } else false
+                        }
                         .clickable { onBack() }.padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -101,7 +112,8 @@ fun SettingsScreen(
                             selectedCategory = cat
                             scope.launch {
                                 delay(150)
-                                try { paneFocusRequester.requestFocus() } catch (_: Exception) {}
+                                // FIX: Pindah fokus langsung ke konten kanan
+                                runCatching { firstContentFocusRequester.requestFocus() }
                             }
                         }
                     )
@@ -112,8 +124,8 @@ fun SettingsScreen(
 
             // PANE KANAN (KONTEN GLASS)
             Box(Modifier.weight(0.72f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp).padding(24.dp)) {
-                AutoFocusPane(paneKey = selectedCategory, modifier = Modifier.fillMaxSize().focusRequester(paneFocusRequester)) {
-                    LazyColumn(Modifier.fillMaxSize()) {
+                AutoFocusPane(paneKey = selectedCategory, modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(Modifier.fillMaxSize().focusRequester(firstContentFocusRequester)) {
                         item {
                             when (selectedCategory) {
                                 SettingsCategory.WALLPAPER -> WallpaperSection(draftConfig) { draftConfig = it }
@@ -152,7 +164,14 @@ private fun SidebarItem(category: SettingsCategory, isSelected: Boolean, onClick
                     color = if (isSelected) GlassColors.AccentGlow else Color.Transparent,
                     shape = RoundedCornerShape(14.dp)
                 )
-                .onFocusChanged { isFocused = it.isFocused }.focusable().clickable { onClick() }.padding(14.dp),
+                .onFocusChanged { isFocused = it.isFocused }
+                .focusable()
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) {
+                        onClick(); true
+                    } else false
+                }
+                .clickable { onClick() }.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
