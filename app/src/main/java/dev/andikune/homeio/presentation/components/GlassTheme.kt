@@ -7,7 +7,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
@@ -26,6 +25,8 @@ object GlassColors {
     )
     val GlassTint = Color(0x1AFFFFFF) // 10% white
     val GlassTintLighter = Color(0x33FFFFFF) // 20% white (saat fokus)
+    
+    // Perbaikan warna fallback agar lebih solid dan tidak transparan berlebihan
     val GlassSolidFallback = Color(0xE60F172A) 
     val GlassBorder = Color(0x26FFFFFF) // 15% white
     val AccentGlow = Color(0xFF4DA3FF)
@@ -47,18 +48,20 @@ fun Modifier.liquidGlass(
 ): Modifier {
     val shape = RoundedCornerShape(cornerRadius)
     
-    // FIX: Hanya izinkan Blur untuk Android 13 (TIRAMISU) ke atas
-    val supportsBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+    // FIX BUG #1: Efek Blur dimatikan total (supportsBlur = false) 
+    // karena hardware TV sering gagal render blur dan malah membuat layar ngeblur total/hitam.
+    val supportsBlur = false 
     
     val backgroundColor = if (useBlur && supportsBlur) {
         if (isFocused) GlassColors.GlassTintLighter else GlassColors.GlassTint
-    } else GlassColors.GlassSolidFallback
+    } else {
+        // Gunakan Solid Fallback yang lebih gelap dan tajam
+        if (isFocused) Color(0xCC1E293B) else GlassColors.GlassSolidFallback
+    }
     
     val currentBorderColor = if (isFocused) GlassColors.AccentGlow else GlassColors.GlassBorder
     val effectiveBorderWidth = if (isFocused) 2.dp else borderWidth
 
-    // FIX: Urutan Modifier harus benar (clip -> background -> border -> blur)
-    // Jangan menaruh .clickable() di dalam Modifier ini agar efek ripple tidak tertutup.
     return this
         .clip(shape)
         .then(
@@ -75,7 +78,5 @@ fun Modifier.liquidGlass(
         )
         .background(backgroundColor, shape)
         .border(BorderStroke(effectiveBorderWidth, currentBorderColor), shape)
-        .then(
-            if (useBlur && supportsBlur) Modifier.blur(24.dp) else Modifier
-        )
+        // Modifier.blur() dihapus total dari sini
 }
