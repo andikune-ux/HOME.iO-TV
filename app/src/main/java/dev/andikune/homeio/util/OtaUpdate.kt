@@ -29,7 +29,15 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -77,9 +85,15 @@ object UpdateManager {
             conn.disconnect()
             val latest = json.optString("tag_name", "Versi Baru").trim().ifEmpty { "Versi Baru" }
             val rawNotes = json.optString("body", "").trim()
-            val notes = if (rawNotes.isEmpty()) "Tidak ada catatan rilis." else rawNotes
+            
+            val cleanNotes = rawNotes.lines()
+                .filterNot { it.contains("**Full Changelog**", ignoreCase = true) }
+                .joinToString("\n")
+                .trim()
+                .ifEmpty { "Tidak ada rincian pembaruan." }
+
             val isNewer = compareVersions(latest, current) > 0
-            val isForce = isNewer && notes.lines().any { it.trim().uppercase().startsWith("FORCE_UPDATE=TRUE") }
+            val isForce = isNewer && cleanNotes.lines().any { it.trim().uppercase().startsWith("FORCE_UPDATE=TRUE") }
             var dlUrl: String? = null
             json.optJSONArray("assets")?.let { arr ->
                 for (i in 0 until arr.length()) {
@@ -90,7 +104,7 @@ object UpdateManager {
                     }
                 }
             }
-            UpdateInfo(isNewer, current, latest, dlUrl, notes, isForce)
+            UpdateInfo(isNewer, current, latest, dlUrl, cleanNotes, isForce)
         } catch (e: Exception) {
             noUpdate(current, "NETWORK: ${e.message}")
         }
@@ -279,12 +293,27 @@ object ApkDownloader {
     }
 }
 
+private fun parseMarkdownToAnnotatedString(text: String): AnnotatedString {
+    return buildAnnotatedString {
+        var currentIndex = 0
+        val regex = Regex("\\*\\*(.*?)\\*\\*")
+        val matches = regex.findAll(text)
+        for (match in matches) {
+            append(text.substring(currentIndex, match.range.first))
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Color.White)) {
+                append(match.groupValues[1])
+            }
+            currentIndex = match.range.last + 1
+        }
+        append(text.substring(currentIndex))
+    }
+}
+
 @Composable
 fun UpdateDialog(info: UpdateManager.UpdateInfo, progress: Float, isDownloading: Boolean, isReady: Boolean, isError: Boolean = false, onUpdate: () -> Unit, onLater: () -> Unit, onSkip: () -> Unit) {
     val isForce = info.isForceUpdate
     val focusReq = remember { FocusRequester() }
     
-    // FIX: Auto-focus ke tombol pertama saat dialog muncul
     LaunchedEffect(Unit) { 
         delay(400); 
         if (isActive) runCatching { focusReq.requestFocus() } 
@@ -306,7 +335,14 @@ fun UpdateDialog(info: UpdateManager.UpdateInfo, progress: Float, isDownloading:
                 Column(Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(12.dp)).border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(12.dp)).padding(16.dp)) {
                     Text("📋 Rincian Pembaruan:", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GlassColors.AccentGlow)
                     Spacer(Modifier.height(8.dp))
-                    Box(Modifier.height(100.dp).verticalScroll(rememberScrollState())) { Text(info.releaseNotes ?: "-", fontSize = 13.sp, color = GlassColors.TextPrimary, lineHeight = 18.sp) }
+                    Box(Modifier.heightIn(max = 150.dp).verticalScroll(rememberScrollState())) { 
+                        Text(
+                            text = parseMarkdownToAnnotatedString(info.releaseNotes ?: "-"), 
+                            fontSize = 13.sp, 
+                            color = GlassColors.TextPrimary, 
+                            lineHeight = 18.sp
+                        ) 
+                    }
                 }
                 if (isDownloading || isReady || isError) {
                     Spacer(Modifier.height(20.dp))
@@ -326,7 +362,19 @@ fun UpdateDialog(info: UpdateManager.UpdateInfo, progress: Float, isDownloading:
                     } 
                 }
                 else if (isReady) { OtaButton("INSTALL SEKARANG", GlassColors.AccentGreen, onUpdate, focusReq) }
-                else if (isDownloading) { OtaButton("MOHON TUNGGU...", GlassColors.GlassTint, {}) }
+                else if (isDownloading) { 
+                    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                        OtaButton("MOHON TUNGGU...", GlassColors.GlassTint, {})
+                        Spacer(Modifier.height(8.dp))
+                        // FIX BUG: Tombol darurat jika download macet
+                        Text(
+                            text = "Batal",
+                            color = GlassColors.TextSecondary,
+                            fontSize = 12.sp,
+                            modifier = Modifier.clickable { onLater() }.padding(8.dp)
+                        )
+                    }
+                }
                 else if (isForce) { 
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) { 
                         Box(Modifier.weight(1f)) { OtaButton("TIDAK", GlassColors.GlassTint, onLater) }; 
@@ -345,11 +393,9 @@ fun UpdateDialog(info: UpdateManager.UpdateInfo, progress: Float, isDownloading:
     }
 }
 
-// FIX: Gunakan NeonFocusBorder agar fokus terlihat jelas
 @Composable
 private fun OtaButton(txt: String, bg: Color, onClick: () -> Unit, focusReq: FocusRequester? = null) {
     var focus by remember { mutableStateOf(false) }
-    val requester = focusReq ?: remember { FocusRequester() }
     
     NeonFocusBorder(
         focused = focus,
@@ -364,6 +410,12 @@ private fun OtaButton(txt: String, bg: Color, onClick: () -> Unit, focusReq: Foc
                 .background(if (focus) GlassColors.AccentGlow else bg)
                 .onFocusChanged { focus = it.isFocused }
                 .focusable()
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) {
+                        onClick()
+                        true
+                    } else false
+                }
                 .clickable { onClick() }
                 .padding(vertical = 14.dp),
             contentAlignment = Alignment.Center
@@ -413,7 +465,37 @@ fun ApkFileListSection() {
         Spacer(Modifier.height(16.dp))
         var isFocused by remember { mutableStateOf(false) }
         NeonFocusBorder(focused = isFocused, cornerRadius = 16.dp, modifier = Modifier.fillMaxWidth(0.8f)) {
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(if (isFocused) GlassColors.AccentGlow.copy(alpha = 0.3f) else GlassColors.GlassTint).border(if (isFocused) 3.dp else 2.dp, GlassColors.AccentGlow, RoundedCornerShape(16.dp)).onFocusChanged { isFocused = it.isFocused }.focusable().clickable(enabled = !isChecking) {
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(if (isFocused) GlassColors.AccentGlow.copy(alpha = 0.3f) else GlassColors.GlassTint).border(if (isFocused) 3.dp else 2.dp, GlassColors.AccentGlow, RoundedCornerShape(16.dp)).onFocusChanged { isFocused = it.isFocused }.focusable().onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) {
+                    if (!isChecking) {
+                        isChecking = true; checkResult = null
+                        scope.launch {
+                            val info = UpdateManager.checkForUpdate(); isChecking = false
+                            if (info.available) {
+                                isErrorResult = false
+                                checkResult = "✅ Update tersedia: ${info.latestVersion}"
+                                localUpdateInfo = info
+                                val saved = UpdateDownloadService.getCompletedFilePath(ctx, info.latestVersion)
+                                if (saved != null) {
+                                    downloadReady = true
+                                    downloadProgress = 1f
+                                    isDownloading = false
+                                } else {
+                                    downloadReady = false
+                                    downloadProgress = 0f
+                                    isDownloading = false
+                                }
+                                showUpdateDialog = true
+                            } else {
+                                isErrorResult = true
+                                val msg = if (info.errorType != null) "Gagal cek: ${info.errorType}" else "Aplikasi sudah versi terbaru (${info.currentVersion})"
+                                checkResult = "❌ $msg"
+                            }
+                        }
+                    }
+                    true
+                } else false
+            }.clickable(enabled = !isChecking) {
                 isChecking = true; checkResult = null
                 scope.launch {
                     val info = UpdateManager.checkForUpdate(); isChecking = false
