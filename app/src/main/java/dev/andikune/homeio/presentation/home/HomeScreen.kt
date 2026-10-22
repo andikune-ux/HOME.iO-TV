@@ -116,14 +116,6 @@ fun HomeScreen(
         if (config.isAutoRamBoostEnabled) memInfo = SystemUtils.boostRam(context)
     }
 
-    // Cek izin notifikasi
-    fun openNotificationSettings() {
-        val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        try { context.startActivity(intent) } catch (_: Exception) {}
-    }
-
     if (showSearchDialog) SearchDialog(allApps, { safeLaunchApp(context, it) }, { showSearchDialog = false })
     if (showFileManager) FileManagerDialog(onFileSelected = { showFileManager = false }, onDismiss = { showFileManager = false })
     if (selectedAppForContextMenu != null) {
@@ -140,9 +132,10 @@ fun HomeScreen(
         )
     }
 
+    // FIX 1: Kembalikan aturan favorit menjadi 3
     val favoriteApps = remember(allApps, config.favoritePackages) {
         val favs = allApps.filter { config.favoritePackages.contains(it.packageName) }
-        if (favs.isNotEmpty()) favs.take(4) else allApps.take(4)
+        if (favs.isNotEmpty()) favs.take(3) else allApps.take(3)
     }
     val displayApps = remember(allApps, isSideloadOnly) {
         if (isSideloadOnly) allApps.filter { it.isSideloaded } else allApps
@@ -251,11 +244,10 @@ fun HomeScreen(
                         onNotificationClick = { sbn ->
                             SoundFeedback.playClick(context)
                             try {
-                                // Coba kirim PendingIntent dari notifikasi
                                 val intent = sbn.notification.contentIntent
                                 if (intent != null) {
                                     intent.send()
-                                    isPaneOpen = false // Tutup pane setelah buka notif
+                                    isPaneOpen = false
                                 }
                             } catch (e: PendingIntent.CanceledException) {
                                 Toast.makeText(context, "Gagal membuka notifikasi", Toast.LENGTH_SHORT).show()
@@ -276,7 +268,7 @@ fun HomeScreen(
                         .fillMaxHeight()
                         .weight(1f)
                         .background(Color.Black.copy(alpha = 0.5f))
-                        .clickable { isPaneOpen = false } // Klik di luar untuk menutup
+                        .clickable { isPaneOpen = false }
                 )
             }
         }
@@ -312,7 +304,7 @@ fun LeftNavigationGlassPanel(
             Column { Text("Home.io", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp); Text("Liquid Glass", color = GlassColors.TextSecondary, fontSize = 10.sp) }
         }
         
-        // Search (Beri FocusRequester untuk item pertama)
+        // Search
         Box(Modifier.focusRequester(firstItemFocusRequester)) {
             GlassNavButton(Icons.Default.Search, stringResource(R.string.nav_search), false, onSearchClick)
         }
@@ -381,9 +373,12 @@ fun GlassNavButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label:
 @Composable
 fun FavoriteAppsSection(favoriteApps: List<AppItem>, iconSizeMultiplier: Float, onAppClick: (AppItem) -> Unit, onAppLongClick: (AppItem) -> Unit) {
     Column {
-        Text("${stringResource(R.string.favorite_apps)} (4 Utama)", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
+        Text("${stringResource(R.string.favorite_apps)} (3 Utama)", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
-            favoriteApps.forEach { app -> AppCardItem(app, false, iconSizeMultiplier, Modifier.weight(1f), { onAppClick(app) }, { onAppLongClick(app) }) }
+            favoriteApps.forEach { app -> 
+                // FIX 2: Hapus Modifier.weight(1f) agar kotak mengikuti ukuran asli dari AppCardItem
+                AppCardItem(app, false, iconSizeMultiplier, Modifier, { onAppClick(app) }, { onAppLongClick(app) }) 
+            }
         }
     }
 }
@@ -398,8 +393,8 @@ fun AllAppsHorizontalSection(apps: List<AppItem>, iconSizeMultiplier: Float, isS
         Spacer(Modifier.height(12.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
             items(apps) { app -> 
-                // Menggunakan ukuran border yang SAMA dengan Favorit (90.dp)
-                AppCardItem(app, false, iconSizeMultiplier, Modifier.width(90.dp), { onAppClick(app) }, { onAppLongClick(app) }) 
+                // FIX 2: Hapus Modifier.width(90.dp) agar kotak mengikuti ukuran asli dari AppCardItem
+                AppCardItem(app, false, iconSizeMultiplier, Modifier, { onAppClick(app) }, { onAppLongClick(app) }) 
             }
         }
     }
@@ -411,8 +406,13 @@ fun AppCardItem(app: AppItem, isWide: Boolean, iconSizeMultiplier: Float, modifi
     val scale = if (isFocused) 1.1f else 1f
     val context = LocalContext.current
 
-    // Hitung ukuran ikon berdasarkan slider
+    // FIX 3: Kotak (Border) dan Ikon sekarang mengecil/membesar secara proporsional
+    val baseCardWidth = 110.dp
+    val baseCardHeight = 100.dp
     val baseIconSize = 48.dp
+
+    val cardWidth = (baseCardWidth * iconSizeMultiplier).coerceIn(60.dp, 160.dp)
+    val cardHeight = (baseCardHeight * iconSizeMultiplier).coerceIn(60.dp, 140.dp)
     val currentIconSize = (baseIconSize * iconSizeMultiplier).coerceIn(24.dp, 80.dp)
 
     val bitmap by produceState<Bitmap?>(initialValue = null, app.packageName) {
@@ -422,8 +422,14 @@ fun AppCardItem(app: AppItem, isWide: Boolean, iconSizeMultiplier: Float, modifi
     }
 
     Box(
-        modifier = modifier.scale(scale).height(84.dp).liquidGlass(cornerRadius = 16.dp, isFocused = isFocused)
-            .onFocusChanged { isFocused = it.isFocused }.combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(8.dp),
+        modifier = modifier
+            .scale(scale)
+            .width(cardWidth)
+            .height(cardHeight)
+            .liquidGlass(cornerRadius = 16.dp, isFocused = isFocused)
+            .onFocusChanged { isFocused = it.isFocused }
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(8.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
