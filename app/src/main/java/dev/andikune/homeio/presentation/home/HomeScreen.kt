@@ -67,7 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.zIndex // FIX IMPORT YANG BENAR
+import androidx.compose.ui.zIndex
 import dev.andikune.homeio.R
 import dev.andikune.homeio.domain.model.AppItem
 import dev.andikune.homeio.domain.model.SettingsConfig
@@ -328,7 +328,9 @@ fun AllAppsCenterCarousel(
     onEdgeLeftReached: () -> Unit,
     onEdgeRightOrDownReached: () -> Unit
 ) {
-    val lazyListState = rememberLazyListState()
+    // FIX: Posisi awal di index ke-2 (Aplikasi ke-3)
+    val initialIndex = remember { if (apps.size > 2) 2 else 0 }
+    val lazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
     val flingBehavior = rememberSnapFlingBehavior(lazyListState = lazyListState)
     
     val baseCardWidth = 110.dp
@@ -398,12 +400,13 @@ fun AllAppsCenterCarousel(
             }
         }
 
-        // BORDER STATIS
+        // BORDER STATIS (Di-scale agar pas dengan aplikasi yang membesar)
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
                 .width(cardWidth)
                 .height(120.dp)
+                .scale(1.15f) // Kunci agar border membungkus ikon yang membesar
                 .zIndex(1f),
             contentAlignment = Alignment.Center
         ) {
