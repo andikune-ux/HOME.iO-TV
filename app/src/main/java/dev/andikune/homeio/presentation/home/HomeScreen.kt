@@ -1,4 +1,7 @@
-@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@file:OptIn(
+    androidx.compose.foundation.ExperimentalFoundationApi::class,
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class
+)
 package dev.andikune.homeio.presentation.home
 
 import android.app.PendingIntent
@@ -12,6 +15,7 @@ import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -22,9 +26,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,18 +46,29 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.zIndex
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import dev.andikune.homeio.R
 import dev.andikune.homeio.domain.model.AppItem
 import dev.andikune.homeio.domain.model.SettingsConfig
@@ -65,6 +85,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Date
+import kotlin.math.abs
 
 @Composable
 fun HomeScreen(
@@ -78,8 +99,12 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val configuration = LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp.dp
 
     var isPaneOpen by remember { mutableStateOf(false) }
+    var showAllAppsOverlay by remember { mutableStateOf(false) }
+    
     val paneFocusRequester = remember { FocusRequester() }
     val firstMenuItemFocusRequester = remember { FocusRequester() }
 
@@ -89,7 +114,6 @@ fun HomeScreen(
     var selectedAppForContextMenu by remember { mutableStateOf<AppItem?>(null) }
     var isSideloadOnly by remember { mutableStateOf(false) }
 
-    // Notifikasi Asli
     val notifications by LauncherNotificationService.notifications.collectAsState()
 
     LaunchedEffect(openFileManagerTrigger) {
@@ -116,6 +140,13 @@ fun HomeScreen(
         if (config.isAutoRamBoostEnabled) memInfo = SystemUtils.boostRam(context)
     }
 
+    fun openNotificationSettings() {
+        val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try { context.startActivity(intent) } catch (_: Exception) {}
+    }
+
     if (showSearchDialog) SearchDialog(allApps, { safeLaunchApp(context, it) }, { showSearchDialog = false })
     if (showFileManager) FileManagerDialog(onFileSelected = { showFileManager = false }, onDismiss = { showFileManager = false })
     if (selectedAppForContextMenu != null) {
@@ -132,7 +163,6 @@ fun HomeScreen(
         )
     }
 
-    // FIX 1: Kembalikan aturan favorit menjadi 3
     val favoriteApps = remember(allApps, config.favoritePackages) {
         val favs = allApps.filter { config.favoritePackages.contains(it.packageName) }
         if (favs.isNotEmpty()) favs.take(3) else allApps.take(3)
@@ -145,24 +175,19 @@ fun HomeScreen(
 
     Box(Modifier.fillMaxSize()) {
         WallpaperView(config = config)
-        // Scrim Gradient
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)))
 
-        // LAYAR UTAMA (TERKUNCI)
         Box(Modifier.fillMaxSize().padding(safePadding)) {
             
-            // WIDGET JAM, TANGGAL, CUACA, RAM, SETTINGS
+            // WIDGET KANAN ATAS
             Column(
                 modifier = Modifier.align(Alignment.TopEnd).padding(top = 16.dp, end = 24.dp),
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Baris Jam & Tombol Settings
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(currentTimeString, color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Light, letterSpacing = 1.sp)
                     Spacer(modifier = Modifier.width(16.dp))
-                    
-                    // Tombol Settings
                     var isSettingsFocused by remember { mutableStateOf(false) }
                     Box(
                         modifier = Modifier
@@ -192,21 +217,37 @@ fun HomeScreen(
                 }
             }
 
-            // DAFTAR APLIKASI
+            // KONTEN BAWAH (Favorit & Carousel)
             Column(
-                modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 80.dp, end = 24.dp, bottom = 24.dp),
+                modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 80.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
+                // Favorit (Statis, 3 Item)
                 FavoriteAppsSection(favoriteApps, config.appIconSizeMultiplier, { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) }, { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app })
-                AllAppsHorizontalSection(displayApps, config.appIconSizeMultiplier, isSideloadOnly, { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) }, { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app })
+                
+                // CAROUSEL SEMUA APLIKASI
+                if (displayApps.isNotEmpty()) {
+                    AllAppsCenterCarousel(
+                        apps = displayApps,
+                        iconSizeMultiplier = config.appIconSizeMultiplier,
+                        screenWidth = screenWidth,
+                        onAppClick = { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) },
+                        onAppLongClick = { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app },
+                        onEdgeLeftReached = { isPaneOpen = true },
+                        onEdgeRightOrDownReached = { showAllAppsOverlay = true }
+                    )
+                }
             }
         }
 
-        // TOMBOL PEMICU (Tengah Kiri)
+        // TOMBOL HAMBURGER (Z-INDEX 10 agar tidak tertutup aplikasi)
         var isTriggerFocused by remember { mutableStateOf(false) }
         Box(
             modifier = Modifier
-                .align(Alignment.CenterStart).padding(start = 16.dp).size(48.dp)
+                .align(Alignment.CenterStart)
+                .padding(start = 16.dp)
+                .size(48.dp)
+                .zIndex(10f) // FIX BUG #10: Z-Index
                 .clip(CircleShape)
                 .background(if (isTriggerFocused) GlassColors.GlassTintLighter else GlassColors.GlassTint)
                 .onFocusChanged { isTriggerFocused = it.isFocused }
@@ -221,74 +262,286 @@ fun HomeScreen(
             Icon(Icons.Default.Menu, "Menu", tint = if (isTriggerFocused) GlassColors.AccentGlow else Color.White)
         }
 
-        // SLIDING PANE OVERLAY (KIRI)
+        // SLIDING PANE OVERLAY
         AnimatedVisibility(
             visible = isPaneOpen,
             enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(),
             exit = slideOutHorizontally(targetOffsetX = { -it }) + fadeOut()
         ) {
             Row(Modifier.fillMaxSize()) {
-                // Panel Kiri (Focus Trap)
                 Box(
-                    Modifier
-                        .fillMaxHeight()
-                        .width(280.dp)
-                        .focusGroup()
-                        .focusRequester(paneFocusRequester)
+                    Modifier.fillMaxHeight().width(280.dp).focusGroup().focusRequester(paneFocusRequester)
                 ) {
                     LeftNavigationGlassPanel(
                         selectedNav, isSideloadOnly,
                         notifications = notifications,
                         firstItemFocusRequester = firstMenuItemFocusRequester,
                         onSearchClick = { SoundFeedback.playClick(context); showSearchDialog = true },
+                        onNotificationPermissionClick = { openNotificationSettings() },
                         onNotificationClick = { sbn ->
                             SoundFeedback.playClick(context)
                             try {
                                 val intent = sbn.notification.contentIntent
-                                if (intent != null) {
-                                    intent.send()
-                                    isPaneOpen = false
-                                }
+                                if (intent != null) { intent.send(); isPaneOpen = false }
                             } catch (e: PendingIntent.CanceledException) {
                                 Toast.makeText(context, "Gagal membuka notifikasi", Toast.LENGTH_SHORT).show()
                             }
                         },
                         onHomeClick = { SoundFeedback.playClick(context); selectedNav = "home"; isSideloadOnly = false },
-                        onRamBoostClick = { SoundFeedback.playClick(context); memInfo = SystemUtils.boostRam(context) },
+                        onRamBoostClick = { 
+                            SoundFeedback.playClick(context)
+                            memInfo = SystemUtils.boostRam(context)
+                            Toast.makeText(context, "RAM Berhasil Dioptimalkan!", Toast.LENGTH_SHORT).show()
+                        },
                         onFileManagerClick = { SoundFeedback.playClick(context); showFileManager = true },
                         onSideloadToggleClick = { SoundFeedback.playClick(context); isSideloadOnly = !isSideloadOnly },
                         onSettingsClick = { SoundFeedback.playClick(context); onOpenSettings() },
                         onPaneClose = { isPaneOpen = false }
                     )
                 }
-                
-                // Scrim (Area Gelap Transparan untuk Menutup Pane di HP)
                 Box(
-                    Modifier
-                        .fillMaxHeight()
-                        .weight(1f)
-                        .background(Color.Black.copy(alpha = 0.5f))
-                        .clickable { isPaneOpen = false }
+                    Modifier.fillMaxHeight().weight(1f).background(Color.Black.copy(alpha = 0.5f)).clickable { isPaneOpen = false }
                 )
+            }
+        }
+
+        // OVERLAY GRID
+        if (showAllAppsOverlay) {
+            AllAppsGridOverlay(
+                apps = displayApps,
+                iconSizeMultiplier = config.appIconSizeMultiplier,
+                onDismiss = { showAllAppsOverlay = false },
+                onAppClick = { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) },
+                onAppLongClick = { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app }
+            )
+        }
+    }
+}
+
+// ============================================================
+// CAROUSEL COMPONENT (BORDER STATIS DI TENGAH)
+// ============================================================
+@Composable
+fun AllAppsCenterCarousel(
+    apps: List<AppItem>,
+    iconSizeMultiplier: Float,
+    screenWidth: Dp,
+    onAppClick: (AppItem) -> Unit,
+    onAppLongClick: (AppItem) -> Unit,
+    onEdgeLeftReached: () -> Unit,
+    onEdgeRightOrDownReached: () -> Unit
+) {
+    val lazyListState = rememberLazyListState()
+    val flingBehavior = rememberSnapFlingBehavior(lazyListState = lazyListState)
+    
+    // Ukuran Kartu Dasar & Padding Dinamis
+    val baseCardWidth = 110.dp
+    val cardWidth = (baseCardWidth * iconSizeMultiplier).coerceIn(80.dp, 160.dp)
+    val horizontalPadding = (screenWidth - cardWidth) / 2f
+
+    // FIX BUG #3: Menghitung index tengah secara real-time (untuk D-Pad maupun Touch)
+    val centeredIndex by remember {
+        derivedStateOf {
+            val layoutInfo = lazyListState.layoutInfo
+            val visibleItems = layoutInfo.visibleItemsInfo
+            if (visibleItems.isEmpty()) return@derivedStateOf 0
+            val center = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
+            visibleItems.minByOrNull { abs((it.offset + it.size / 2) - center) }?.index ?: 0
+        }
+    }
+
+    // FIX BUG #4: Animasi D-Pad (Smooth scroll ke tengah saat index berubah)
+    LaunchedEffect(centeredIndex) {
+        if (lazyListState.isScrollInProgress) return@LaunchedEffect
+        lazyListState.animateScrollToItem(centeredIndex)
+    }
+
+    Box(Modifier.fillMaxWidth().height(140.dp)) {
+        // LazyRow (Aplikasi berjalan di belakang border)
+        LazyRow(
+            state = lazyListState,
+            flingBehavior = flingBehavior,
+            contentPadding = PaddingValues(horizontal = horizontalPadding),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .focusGroup()
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown) {
+                        when (event.key) {
+                            Key.DirectionLeft -> {
+                                if (centeredIndex == 0) {
+                                    onEdgeLeftReached()
+                                    true
+                                } else false
+                            }
+                            Key.DirectionRight -> {
+                                if (centeredIndex == apps.size - 1) {
+                                    onEdgeRightOrDownReached()
+                                    true
+                                } else false
+                            }
+                            Key.DirectionDown -> {
+                                onEdgeRightOrDownReached()
+                                true
+                            }
+                            else -> false
+                        }
+                    } else false
+                }
+        ) {
+            items(apps) { app ->
+                val isCentered = app == apps.getOrNull(centeredIndex)
+                AppCardItem(
+                    app = app,
+                    iconSizeMultiplier = iconSizeMultiplier,
+                    modifier = Modifier.width(cardWidth).height(120.dp),
+                    isCenterFocused = isCentered,
+                    onClick = { 
+                        if (isCentered) onAppClick(app) 
+                        else { /* Touch: Tap di pinggir = geser ke tengah */
+                            // Compose LazyList automatically snaps to center due to flingBehavior
+                        }
+                    },
+                    onLongClick = { onAppLongClick(app) }
+                )
+            }
+        }
+
+        // FIX BUG #5 & #12: Border Statis di Tengah (Tidak ikut bergeser)
+        // Menggunakan zIndex 1f agar berada di atas aplikasi, tapi di bawah tombol Hamburger
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .width(cardWidth)
+                .height(120.dp)
+                .zIndex(1f),
+            contentAlignment = Alignment.Center
+        ) {
+            // Kita gunakan NeonFocusBorder yang menyala terus
+            NeonFocusBorder(
+                focused = true,
+                cornerRadius = 16.dp,
+                borderWidth = 4.dp,
+                modifier = Modifier.fillMaxSize()
+            ) {}
+        }
+    }
+}
+
+// ============================================================
+// KOMPONEN PENDUKUNG
+// ============================================================
+@Composable
+fun FavoriteAppsSection(favoriteApps: List<AppItem>, iconSizeMultiplier: Float, onAppClick: (AppItem) -> Unit, onAppLongClick: (AppItem) -> Unit) {
+    Column {
+        Text("${stringResource(R.string.favorite_apps)} (3 Utama)", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
+            favoriteApps.forEach { app -> 
+                AppCardItem(app, iconSizeMultiplier, Modifier.width(110.dp * iconSizeMultiplier), false, { onAppClick(app) }, { onAppLongClick(app) }) 
             }
         }
     }
 }
 
-fun safeLaunchApp(context: Context, app: AppItem) {
-    try {
-        val intent = context.packageManager.getLaunchIntentForPackage(app.packageName)
-        if (intent != null) { intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); context.startActivity(intent) }
-        else Toast.makeText(context, "Aplikasi tidak ditemukan.", Toast.LENGTH_SHORT).show()
-    } catch (e: Exception) { Toast.makeText(context, "Gagal membuka aplikasi.", Toast.LENGTH_SHORT).show() }
+@Composable
+fun AppCardItem(
+    app: AppItem, 
+    iconSizeMultiplier: Float, 
+    modifier: Modifier = Modifier, 
+    isCenterFocused: Boolean, 
+    onClick: () -> Unit, 
+    onLongClick: () -> Unit
+) {
+    // FIX BUG #4 & #5: Animasi skala dan zIndex
+    val scale by animateFloatAsState(
+        targetValue = if (isCenterFocused) 1.15f else 0.9f,
+        label = "carousel_scale"
+    )
+    val context = LocalContext.current
+
+    val baseIconSize = 48.dp
+    val currentIconSize = (baseIconSize * iconSizeMultiplier).coerceIn(24.dp, 80.dp)
+
+    val bitmap by produceState<Bitmap?>(initialValue = null, app.packageName) {
+        value = withContext(Dispatchers.IO) {
+            try { drawableToBitmap(context.packageManager.getApplicationIcon(app.packageName)) } catch (e: Exception) { null }
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .zIndex(if (isCenterFocused) 2f else 0f) // Yang fokus ada di atas
+            .scale(scale)
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (isCenterFocused) GlassColors.GlassTintLighter else GlassColors.GlassTint)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap!!.asImageBitmap(), 
+                    contentDescription = app.label, 
+                    contentScale = ContentScale.Fit, 
+                    modifier = Modifier.size(currentIconSize).clip(RoundedCornerShape(12.dp))
+                )
+            } else {
+                Box(Modifier.size(currentIconSize).background(Color(0x33FFFFFF), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                    Text(app.label.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 24.sp)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(app.label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
 }
 
+// ALL APPS OVERLAY GRID
+@Composable
+fun AllAppsGridOverlay(
+    apps: List<AppItem>, iconSizeMultiplier: Float, onDismiss: () -> Unit, onAppClick: (AppItem) -> Unit, onAppLongClick: (AppItem) -> Unit
+) {
+    val firstFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { delay(150); runCatching { firstFocusRequester.requestFocus() } }
+
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().background(Color(0xE60A0E1A)).padding(32.dp)) {
+            Column(Modifier.fillMaxSize()) {
+                Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("SEMUA APLIKASI (${apps.size})", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    Box(Modifier.size(40.dp).clip(CircleShape).background(GlassColors.GlassTint).clickable { onDismiss() }, contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Close, "Tutup", tint = Color.White)
+                    }
+                }
+                
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = (100.dp * iconSizeMultiplier).coerceAtLeast(80.dp)),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxSize().focusGroup()
+                ) {
+                    items(apps, key = { it.packageName }) { app ->
+                        var isFirst by remember { mutableStateOf(app == apps.firstOrNull()) }
+                        Box(modifier = if (isFirst) Modifier.focusRequester(firstFocusRequester) else Modifier) {
+                            AppCardItem(app, iconSizeMultiplier, Modifier, false, { onAppClick(app) }, { onAppLongClick(app) }, isFirst)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// LEFT NAVIGATION PANEL
 @Composable
 fun LeftNavigationGlassPanel(
     selectedNav: String, isSideloadActive: Boolean,
     notifications: List<android.service.notification.StatusBarNotification>,
     firstItemFocusRequester: FocusRequester,
     onSearchClick: () -> Unit, 
+    onNotificationPermissionClick: () -> Unit,
     onNotificationClick: (android.service.notification.StatusBarNotification) -> Unit,
     onHomeClick: () -> Unit,
     onRamBoostClick: () -> Unit, onFileManagerClick: () -> Unit,
@@ -304,13 +557,24 @@ fun LeftNavigationGlassPanel(
             Column { Text("Home.io", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp); Text("Liquid Glass", color = GlassColors.TextSecondary, fontSize = 10.sp) }
         }
         
-        // Search
         Box(Modifier.focusRequester(firstItemFocusRequester)) {
             GlassNavButton(Icons.Default.Search, stringResource(R.string.nav_search), false, onSearchClick)
         }
 
-        // Notifikasi
-        if (notifications.isNotEmpty()) {
+        if (notifications.isEmpty()) {
+            var isFocusedBtn by remember { mutableStateOf(false) }
+            Box(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (isFocusedBtn) GlassColors.AccentAmber.copy(alpha = 0.3f) else GlassColors.AccentAmber.copy(alpha = 0.15f))
+                    .border(1.dp, GlassColors.AccentAmber, RoundedCornerShape(14.dp))
+                    .onFocusChanged { isFocusedBtn = it.isFocused }.focusable().clickable { onNotificationPermissionClick() }.padding(12.dp)
+            ) {
+                Column {
+                    Text("Izin Notifikasi Belum Aktif", color = GlassColors.AccentAmber, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("Klik untuk mengaktifkan akses notifikasi", color = GlassColors.TextSecondary, fontSize = 10.sp)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        } else {
             Text("NOTIFIKASI", color = GlassColors.TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 6.dp, top = 8.dp))
             notifications.take(3).forEach { sbn ->
                 NotificationItem(sbn, onClick = { onNotificationClick(sbn) })
@@ -348,7 +612,7 @@ fun NotificationItem(sbn: android.service.notification.StatusBarNotification, on
             .onFocusChanged { isFocused = it.isFocused }.combinedClickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
         Icon(Icons.Default.Notifications, "Notif", tint = if (isFocused) GlassColors.AccentGlow else GlassColors.TextSecondary, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(10.dp))
+        Spacer(modifier = Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             if (title.isNotBlank()) Text(title, color = if (isFocused) Color.White else GlassColors.TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (text.isNotBlank()) Text(text, color = GlassColors.TextSecondary, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -365,90 +629,17 @@ fun GlassNavButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label:
             .onFocusChanged { isFocused = it.isFocused }.combinedClickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         Icon(icon, label, tint = if (isFocused || isSelected) GlassColors.AccentGlow else GlassColors.TextSecondary, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(10.dp))
+        Spacer(modifier = Modifier.width(10.dp))
         Text(label, color = if (isFocused || isSelected) Color.White else GlassColors.TextSecondary, fontSize = 13.sp, fontWeight = if (isFocused || isSelected) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1)
     }
 }
 
-@Composable
-fun FavoriteAppsSection(favoriteApps: List<AppItem>, iconSizeMultiplier: Float, onAppClick: (AppItem) -> Unit, onAppLongClick: (AppItem) -> Unit) {
-    Column {
-        Text("${stringResource(R.string.favorite_apps)} (3 Utama)", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
-            favoriteApps.forEach { app -> 
-                // FIX 2: Hapus Modifier.weight(1f) agar kotak mengikuti ukuran asli dari AppCardItem
-                AppCardItem(app, false, iconSizeMultiplier, Modifier, { onAppClick(app) }, { onAppLongClick(app) }) 
-            }
-        }
-    }
-}
-
-@Composable
-fun AllAppsHorizontalSection(apps: List<AppItem>, iconSizeMultiplier: Float, isSideloadOnly: Boolean, onAppClick: (AppItem) -> Unit, onAppLongClick: (AppItem) -> Unit) {
-    Column {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text(if (isSideloadOnly) stringResource(R.string.sideloaded_apps) else stringResource(R.string.all_apps), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-            Text("${apps.size} Aplikasi", color = GlassColors.TextSecondary, fontSize = 11.sp)
-        }
-        Spacer(Modifier.height(12.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
-            items(apps) { app -> 
-                // FIX 2: Hapus Modifier.width(90.dp) agar kotak mengikuti ukuran asli dari AppCardItem
-                AppCardItem(app, false, iconSizeMultiplier, Modifier, { onAppClick(app) }, { onAppLongClick(app) }) 
-            }
-        }
-    }
-}
-
-@Composable
-fun AppCardItem(app: AppItem, isWide: Boolean, iconSizeMultiplier: Float, modifier: Modifier = Modifier, onClick: () -> Unit, onLongClick: () -> Unit) {
-    var isFocused by remember { mutableStateOf(false) }
-    val scale = if (isFocused) 1.1f else 1f
-    val context = LocalContext.current
-
-    // FIX 3: Kotak (Border) dan Ikon sekarang mengecil/membesar secara proporsional
-    val baseCardWidth = 110.dp
-    val baseCardHeight = 100.dp
-    val baseIconSize = 48.dp
-
-    val cardWidth = (baseCardWidth * iconSizeMultiplier).coerceIn(60.dp, 160.dp)
-    val cardHeight = (baseCardHeight * iconSizeMultiplier).coerceIn(60.dp, 140.dp)
-    val currentIconSize = (baseIconSize * iconSizeMultiplier).coerceIn(24.dp, 80.dp)
-
-    val bitmap by produceState<Bitmap?>(initialValue = null, app.packageName) {
-        value = withContext(Dispatchers.IO) {
-            try { drawableToBitmap(context.packageManager.getApplicationIcon(app.packageName)) } catch (e: Exception) { null }
-        }
-    }
-
-    Box(
-        modifier = modifier
-            .scale(scale)
-            .width(cardWidth)
-            .height(cardHeight)
-            .liquidGlass(cornerRadius = 16.dp, isFocused = isFocused)
-            .onFocusChanged { isFocused = it.isFocused }
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap!!.asImageBitmap(), 
-                    contentDescription = app.label, 
-                    contentScale = ContentScale.Fit, 
-                    modifier = Modifier.size(currentIconSize).clip(RoundedCornerShape(12.dp))
-                )
-            } else {
-                Box(Modifier.size(currentIconSize).background(Color(0x33FFFFFF), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                    Text(app.label.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 24.sp)
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            Text(app.label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
+fun safeLaunchApp(context: Context, app: AppItem) {
+    try {
+        val intent = context.packageManager.getLaunchIntentForPackage(app.packageName)
+        if (intent != null) { intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); context.startActivity(intent) }
+        else Toast.makeText(context, "Aplikasi tidak ditemukan.", Toast.LENGTH_SHORT).show()
+    } catch (e: Exception) { Toast.makeText(context, "Gagal membuka aplikasi.", Toast.LENGTH_SHORT).show() }
 }
 
 fun drawableToBitmap(drawable: Drawable): Bitmap {
