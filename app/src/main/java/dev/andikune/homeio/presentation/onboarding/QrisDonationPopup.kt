@@ -7,7 +7,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -68,11 +70,12 @@ fun QrisDonationPopup(
             Column(
                 modifier = Modifier
                     .fillMaxWidth(0.75f)
+                    .fillMaxHeight(0.9f)
                     .liquidGlass(cornerRadius = 24.dp)
-                    .padding(24.dp),
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState()), // Agar bisa di-scroll jika layar kecil
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Teks Tambahan di atas foto
                 Text(
                     text = "Donasi buat admin beli kopi",
                     color = GlassColors.AccentGlow,
@@ -82,21 +85,19 @@ fun QrisDonationPopup(
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
 
-                // Gambar QRIS
                 Image(
                     painter = painterResource(id = R.drawable.qris_donasi),
                     contentDescription = "QRIS Donasi",
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(300.dp)
+                        .heightIn(max = 300.dp) // Batasi tinggi gambar
                         .clip(RoundedCornerShape(12.dp))
                 )
 
                 Spacer(modifier = Modifier.height(20.dp))
 
                 if (isLoading) {
-                    // Loading State
                     CircularProgressIndicator(
                         color = GlassColors.AccentGlow,
                         modifier = Modifier.size(28.dp),
@@ -110,9 +111,8 @@ fun QrisDonationPopup(
                         textAlign = TextAlign.Center
                     )
                 } else {
-                    // Tombol Muncul
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         // Tombol Mampir
@@ -154,7 +154,7 @@ fun QrisDonationPopup(
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(if (isFocusedTutup) Color.White else GlassColors.GlassTint)
-                                    .focusRequester(focusRequester) // Fokus awal ada di Tutup
+                                    .focusRequester(focusRequester)
                                     .onFocusChanged { isFocusedTutup = it.isFocused }
                                     .focusable()
                                     .clickable { onDismiss() }
