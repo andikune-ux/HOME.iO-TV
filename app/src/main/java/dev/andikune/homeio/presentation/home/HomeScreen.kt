@@ -27,6 +27,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -316,7 +318,7 @@ fun HomeScreen(
 }
 
 // ============================================================
-// CAROUSEL COMPONENT (BORDER STATIS DI TENGAH)
+// CAROUSEL COMPONENT (BORDER STATIS DIHAPUS)
 // ============================================================
 @Composable
 fun AllAppsCenterCarousel(
@@ -328,7 +330,7 @@ fun AllAppsCenterCarousel(
     onEdgeLeftReached: () -> Unit,
     onEdgeRightOrDownReached: () -> Unit
 ) {
-    // FIX: Posisi awal di index ke-2 (Aplikasi ke-3)
+    // Posisi awal di index ke-2 (Aplikasi ke-3)
     val initialIndex = remember { if (apps.size > 2) 2 else 0 }
     val lazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
     val flingBehavior = rememberSnapFlingBehavior(lazyListState = lazyListState)
@@ -392,6 +394,7 @@ fun AllAppsCenterCarousel(
                     iconSizeMultiplier = iconSizeMultiplier,
                     modifier = Modifier.width(cardWidth).height(120.dp),
                     isCenterFocused = isCentered,
+                    useNativeFocus = false, // Carousel pakai logika tengah, bukan native focus
                     onClick = { 
                         if (isCentered) onAppClick(app) 
                     },
@@ -399,27 +402,8 @@ fun AllAppsCenterCarousel(
                 )
             }
         }
-
-        // BORDER STATIS
-        Box(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .width(cardWidth)
-                .height(120.dp)
-                .scale(1.15f)
-                .zIndex(1f),
-            contentAlignment = Alignment.Center
-        ) {
-            NeonFocusBorder(
-                focused = true,
-                cornerRadius = 16.dp,
-                borderWidth = 4.dp,
-                modifier = Modifier.fillMaxSize()
-            ) {}
-        }
     }
 }
-
 // ============================================================
 // KOMPONEN PENDUKUNG
 // ============================================================
@@ -429,7 +413,15 @@ fun FavoriteAppsSection(favoriteApps: List<AppItem>, iconSizeMultiplier: Float, 
         Text("${stringResource(R.string.favorite_apps)} (3 Utama)", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
             favoriteApps.forEach { app -> 
-                AppCardItem(app, iconSizeMultiplier, Modifier.width(110.dp * iconSizeMultiplier), false, { onAppClick(app) }, { onAppLongClick(app) }) 
+                AppCardItem(
+                    app = app, 
+                    iconSizeMultiplier = iconSizeMultiplier, 
+                    modifier = Modifier.width(110.dp * iconSizeMultiplier), 
+                    isCenterFocused = false, 
+                    useNativeFocus = true, // Favorit pakai native focus (D-Pad biasa)
+                    onClick = { onAppClick(app) }, 
+                    onLongClick = { onAppLongClick(app) }
+                ) 
             }
         }
     }
@@ -441,11 +433,17 @@ fun AppCardItem(
     iconSizeMultiplier: Float, 
     modifier: Modifier = Modifier, 
     isCenterFocused: Boolean, 
+    useNativeFocus: Boolean = false,
     onClick: () -> Unit, 
     onLongClick: () -> Unit
 ) {
+    var isNativeFocused by remember { mutableStateOf(false) }
+    
+    // Tentukan apakah border menyala
+    val isEffectivelyFocused = if (useNativeFocus) isNativeFocused else isCenterFocused
+
     val scale by animateFloatAsState(
-        targetValue = if (isCenterFocused) 1.15f else 0.9f,
+        targetValue = if (isEffectivelyFocused) 1.15f else 0.9f,
         label = "carousel_scale"
     )
     val context = LocalContext.current
@@ -459,31 +457,52 @@ fun AppCardItem(
         }
     }
 
-    Box(
+    // SOLUSI BUG: Interaction Source untuk mendeteksi tombol OK secara real-time
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    // BORDER & GLOW DISATUKAN LANGSUNG DI SINI
+    NeonFocusBorder(
+        focused = isEffectivelyFocused,
+        pressed = isPressed,
+        cornerRadius = 16.dp,
+        borderWidth = 3.dp,
+        glowRadius = 8.dp,
         modifier = modifier
-            .zIndex(if (isCenterFocused) 2f else 0f)
+            .zIndex(if (isEffectivelyFocused) 2f else 0f)
             .scale(scale)
-            .clip(RoundedCornerShape(16.dp))
-            .background(if (isCenterFocused) GlassColors.GlassTintLighter else GlassColors.GlassTint)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(8.dp),
-        contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap!!.asImageBitmap(), 
-                    contentDescription = app.label, 
-                    contentScale = ContentScale.Fit, 
-                    modifier = Modifier.size(currentIconSize).clip(RoundedCornerShape(12.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(16.dp))
+                .background(if (isEffectivelyFocused) GlassColors.GlassTintLighter else GlassColors.GlassTint)
+                .then(if (useNativeFocus) Modifier.onFocusChanged { isNativeFocused = it.isFocused } else Modifier)
+                .combinedClickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = onClick, 
+                    onLongClick = onLongClick
                 )
-            } else {
-                Box(Modifier.size(currentIconSize).background(Color(0x33FFFFFF), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                    Text(app.label.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 24.sp)
+                .padding(8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap!!.asImageBitmap(), 
+                        contentDescription = app.label, 
+                        contentScale = ContentScale.Fit, 
+                        modifier = Modifier.size(currentIconSize).clip(RoundedCornerShape(12.dp))
+                    )
+                } else {
+                    Box(Modifier.size(currentIconSize).background(Color(0x33FFFFFF), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                        Text(app.label.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 24.sp)
+                    }
                 }
+                Spacer(Modifier.height(8.dp))
+                Text(app.label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Spacer(Modifier.height(8.dp))
-            Text(app.label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -515,7 +534,15 @@ fun AllAppsGridOverlay(
                     items(apps, key = { it.packageName }) { app ->
                         var isFirst by remember { mutableStateOf(app == apps.firstOrNull()) }
                         Box(modifier = if (isFirst) Modifier.focusRequester(firstFocusRequester) else Modifier) {
-                            AppCardItem(app, iconSizeMultiplier, Modifier, false, { onAppClick(app) }, { onAppLongClick(app) })
+                            AppCardItem(
+                                app = app, 
+                                iconSizeMultiplier = iconSizeMultiplier, 
+                                modifier = Modifier, 
+                                isCenterFocused = false, 
+                                useNativeFocus = true, // Grid pakai native focus
+                                onClick = { onAppClick(app) }, 
+                                onLongClick = { onAppLongClick(app) }
+                            )
                         }
                     }
                 }
@@ -523,7 +550,6 @@ fun AllAppsGridOverlay(
         }
     }
 }
-
 // LEFT NAVIGATION PANEL
 @Composable
 fun LeftNavigationGlassPanel(
@@ -543,8 +569,7 @@ fun LeftNavigationGlassPanel(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp, top = 4.dp)) {
             Box(Modifier.size(34.dp).liquidGlass(cornerRadius = 10.dp, isFocused = true), contentAlignment = Alignment.Center) { Icon(Icons.Default.Home, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(20.dp)) }
-            Spacer(Modifier.width(10.dp))
-            // FIX: Text HOME.iO
+            Spacer(modifier = Modifier.width(10.dp))
             Column { Text("HOME.iO", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp); Text("Liquid Glass", color = GlassColors.TextSecondary, fontSize = 10.sp) }
         }
         
@@ -575,16 +600,16 @@ fun LeftNavigationGlassPanel(
 
         GlassNavButton(Icons.Default.Home, stringResource(R.string.nav_home), selectedNav == "home" && !isSideloadActive, onHomeClick)
         
-        Spacer(Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(4.dp))
         Text(stringResource(R.string.nav_system_utils), color = GlassColors.TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 6.dp))
         GlassNavButton(Icons.Default.CleaningServices, stringResource(R.string.ram_booster), false, onRamBoostClick)
         GlassNavButton(Icons.Default.Folder, stringResource(R.string.file_manager), false, onFileManagerClick)
         GlassNavButton(Icons.Default.Build, stringResource(R.string.sideloaded_apps), isSideloadActive, onSideloadToggleClick)
         
-        Spacer(Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(16.dp))
         GlassNavButton(Icons.Default.Settings, stringResource(R.string.settings_title), false, onSettingsClick)
         
-        Spacer(Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0x33FF5252)).combinedClickable(onClick = onPaneClose).padding(12.dp), contentAlignment = Alignment.Center) {
             Text("TUTUP MENU", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
