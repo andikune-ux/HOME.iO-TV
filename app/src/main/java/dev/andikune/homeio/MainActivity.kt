@@ -59,6 +59,7 @@ import dev.andikune.homeio.presentation.components.ResponsiveProvider
 import dev.andikune.homeio.presentation.components.liquidGlass
 import dev.andikune.homeio.presentation.home.HomeScreen
 import dev.andikune.homeio.presentation.onboarding.OnboardingPermissionDialog
+import dev.andikune.homeio.presentation.onboarding.QrisDonationPopup // IMPORT BARU
 import dev.andikune.homeio.presentation.screensaver.ScreensaverActivity
 import dev.andikune.homeio.presentation.settings.SettingsScreen
 import dev.andikune.homeio.receiver.UsbReceiver
@@ -91,6 +92,7 @@ class MainActivity : ComponentActivity() {
                 var isSplashFinished by remember { mutableStateOf(false) }
                 var isSettingsOpen by remember { mutableStateOf(false) }
                 var showOnboarding by remember { mutableStateOf(false) }
+                var showQrisPopup by remember { mutableStateOf(false) }
                 var showLauncherPrompt by remember { 
                     mutableStateOf(!LauncherHelper.isDefaultLauncher(context) && !OnboardingPrefs.hasAskedLauncher(context)) 
                 }
@@ -101,6 +103,14 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(Unit) {
                     if (!OnboardingPrefs.isCompleted(context)) showOnboarding = true
+                }
+                
+                // Logika: Munculkan QRIS setelah Onboarding selesai
+                LaunchedEffect(showOnboarding, isSplashFinished) {
+                    if (!showOnboarding && isSplashFinished && !OnboardingPrefs.hasAskedLauncher(context)) {
+                        // Cek apakah ini pertama kali buka (bisa menggunakan pref lain jika mau, sementara ini muncul setiap splash selesai)
+                        showQrisPopup = true
+                    }
                 }
 
                 var updateInfo by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
@@ -137,7 +147,7 @@ class MainActivity : ComponentActivity() {
                     while (true) {
                         delay(5000)
                         val elapsed = System.currentTimeMillis() - lastUserInteractionTime
-                        if (elapsed >= screensaverTimeoutMs && !isSettingsOpen && crashLog == null && isSplashFinished && !showUpdateDialog && !showOnboarding) {
+                        if (elapsed >= screensaverTimeoutMs && !isSettingsOpen && crashLog == null && isSplashFinished && !showUpdateDialog && !showOnboarding && !showQrisPopup) {
                             try { startActivity(Intent(this@MainActivity, ScreensaverActivity::class.java)) } catch (_: Exception) {}
                             lastUserInteractionTime = System.currentTimeMillis()
                         }
@@ -174,8 +184,9 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                LaunchedEffect(isSplashFinished) {
-                    if (!isSplashFinished) return@LaunchedEffect
+                // CEK UPDATE: Tambahkan syarat !showQrisPopup
+                LaunchedEffect(isSplashFinished, showQrisPopup, showOnboarding) {
+                    if (!isSplashFinished || showQrisPopup || showOnboarding) return@LaunchedEffect
                     try {
                         val info = UpdateManager.checkForUpdate()
                         if (info.available) {
@@ -221,8 +232,9 @@ class MainActivity : ComponentActivity() {
                     onDispose { context.unregisterReceiver(receiver) }
                 }
 
-                BackHandler(enabled = isSettingsOpen || showUpdateDialog || showOnboarding) { 
+                BackHandler(enabled = isSettingsOpen || showUpdateDialog || showOnboarding || showQrisPopup) { 
                     if (showUpdateDialog && updateInfo?.isForceUpdate == true) return@BackHandler
+                    if (showQrisPopup) return@BackHandler // Tidak bisa back jika QRIS muncul
                     if (showOnboarding) return@BackHandler
                     if (isSettingsOpen) isSettingsOpen = false
                     else if (showUpdateDialog) showUpdateDialog = false
@@ -246,7 +258,12 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                if (showLauncherPrompt && isSplashFinished && !showOnboarding) {
+                // QRIS POPUP OVERLAY
+                if (showQrisPopup) {
+                    QrisDonationPopup(onDismiss = { showQrisPopup = false })
+                }
+
+                if (showLauncherPrompt && isSplashFinished && !showOnboarding && !showQrisPopup) {
                     DefaultLauncherDialog(
                         onDismiss = { 
                             OnboardingPrefs.markLauncherAsked(context)
@@ -255,7 +272,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                if (showUpdateDialog && updateInfo != null) {
+                if (showUpdateDialog && updateInfo != null && !showQrisPopup) {
                     UpdateDialog(
                         info = updateInfo!!, progress = downloadProgress, isDownloading = isDownloading, isReady = downloadReady, isError = isError,
                         onUpdate = {
@@ -350,7 +367,7 @@ fun DefaultLauncherDialog(onDismiss: () -> Unit) {
                 Spacer(Modifier.height(16.dp))
                 Text("JADIKAN LAUNCHER UTAMA", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = GlassColors.AccentGlow)
                 Spacer(Modifier.height(8.dp))
-                Text("Agar tombol HOME di remote selalu membuka Home.io.", fontSize = 13.sp, color = GlassColors.TextSecondary, textAlign = TextAlign.Center)
+                Text("Agar tombol HOME di remote selalu membuka HOME.iO.", fontSize = 13.sp, color = GlassColors.TextSecondary, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(24.dp))
                 
                 NeonFocusBorder(focused = isFocusedBtn, cornerRadius = 12.dp, modifier = Modifier.fillMaxWidth()) {
@@ -407,7 +424,7 @@ fun SplashScreen(onFinish: () -> Unit) {
             }
             Spacer(Modifier.height(24.dp))
             Text(
-                "Home.io",
+                "HOME.iO",
                 color = Color.White,
                 fontSize = 36.sp,
                 fontWeight = FontWeight.ExtraBold,
