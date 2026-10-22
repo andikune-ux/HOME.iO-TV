@@ -106,7 +106,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Generate Version Tag & Changelog
+      - name: Generate Version Tag & Friendly Changelog
         id: get_version
         run: |
           YEAR=$(TZ='Asia/Jakarta' date +%Y)
@@ -126,16 +126,29 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "✅ Detected Version: $VERSION"
 
-          # Ambil log commit terakhir untuk dijadikan Changelog
+          # --- LOGIKA CHANGELOG RAMAH PENGGUNA ---
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           if [ -z "$LAST_TAG" ]; then
-            LOG=$(git log -n 5 --pretty=format:"- %s")
+            RAW_LOG=$(git log -n 10 --pretty=format:"%s")
           else
-            LOG=$(git log $LAST_TAG..HEAD --pretty=format:"- %s")
+            RAW_LOG=$(git log $LAST_TAG..HEAD --pretty=format:"%s")
           fi
           
-          if [ -z "$LOG" ]; then
-            LOG="- Tidak ada rincian commit yang tercatat."
+          if [ -z "$RAW_LOG" ]; then
+            LOG="- Tidak ada rincian pembaruan."
+          else
+            # Terjemahkan awalan commit menjadi bahasa yang mudah dipahami
+            LOG=$(echo "$RAW_LOG" | sed -E \
+              -e 's/^feat(\(.*\))?: /✨ Fitur Baru: /g' \
+              -e 's/^fix(\(.*\))?: /🛠️ Perbaikan: /g' \
+              -e 's/^style(\(.*\))?: /🎨 Tampilan: /g' \
+              -e 's/^refactor(\(.*\))?: /🔧 Penyesuaian: /g' \
+              -e 's/^ci(\(.*\))?: /⚙️ Sistem: /g' \
+              -e 's/^docs(\(.*\))?: /📝 Dokumen: /g' \
+              -e 's/^chore(\(.*\))?: /📦 Rutinitas: /g')
+            
+            # Tambahkan bullet point di awal baris
+            LOG=$(echo "$LOG" | sed 's/^/- /')
           fi
           
           EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
