@@ -89,8 +89,10 @@ import kotlinx.coroutines.withContext
 import java.util.Date
 import kotlin.math.abs
 
-// FIX BUG MEMORI: Cache untuk ikon aplikasi
-private val iconCache = LruCache<String, Bitmap>(100)
+// FIX BUG 4: Batasi ukuran cache maksimal 1/8 dari memori yang tersedia
+private val maxMemory = (Runtime.getRuntime().maxMemory() / 1024).toInt()
+private val cacheSize = maxMemory / 8
+private val iconCache = LruCache<String, Bitmap>(cacheSize)
 
 @Composable
 fun HomeScreen(
@@ -112,7 +114,7 @@ fun HomeScreen(
     
     val paneFocusRequester = remember { FocusRequester() }
     val firstMenuItemFocusRequester = remember { FocusRequester() }
-    val hamburgerFocusRequester = remember { FocusRequester() } // FIX BUG FOKUS NYANGKUT
+    val hamburgerFocusRequester = remember { FocusRequester() }
 
     var selectedNav by remember { mutableStateOf("home") }
     var showSearchDialog by remember { mutableStateOf(false) }
@@ -122,10 +124,10 @@ fun HomeScreen(
 
     val notifications by LauncherNotificationService.notifications.collectAsState()
 
-    // FIX BUG FOKUS: Kembalikan fokus ke hamburger saat menu ditutup
+    // FIX BUG 5: Delay diperpanjang menjadi 400ms agar animasi tutup menu selesai dulu
     LaunchedEffect(isPaneOpen) {
         if (!isPaneOpen) {
-            delay(100)
+            delay(400)
             runCatching { hamburgerFocusRequester.requestFocus() }
         }
     }
@@ -236,7 +238,7 @@ fun HomeScreen(
                 }
             }
 
-            // KONTEN BAWAH (Favorit & Carousel)
+            // KONTEN BAWAH
             Column(
                 modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 80.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
@@ -345,7 +347,7 @@ fun HomeScreen(
 }
 
 // ============================================================
-// CAROUSEL COMPONENT (FIX D-PAD OK & CRASH PADDING)
+// CAROUSEL COMPONENT (FIX TOTAL)
 // ============================================================
 @Composable
 fun AllAppsCenterCarousel(
@@ -363,7 +365,6 @@ fun AllAppsCenterCarousel(
     
     val baseCardWidth = 110.dp
     val cardWidth = (baseCardWidth * iconSizeMultiplier).coerceIn(80.dp, 160.dp)
-    // FIX BUG CRASH: Cegah padding negatif jika layar kecil dan ikon dibesarkan
     val horizontalPadding = ((screenWidth - cardWidth) / 2f).coerceAtLeast(0.dp)
 
     val centeredIndex by remember {
@@ -376,10 +377,8 @@ fun AllAppsCenterCarousel(
         }
     }
 
-    LaunchedEffect(centeredIndex) {
-        if (lazyListState.isScrollInProgress) return@LaunchedEffect
-        lazyListState.animateScrollToItem(centeredIndex)
-    }
+    // Variabel untuk mencegah bentrok saat tombol ditahan
+    var isProcessingKey by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxWidth().height(140.dp)) {
         LazyRow(
@@ -394,30 +393,44 @@ fun AllAppsCenterCarousel(
                     if (event.type == KeyEventType.KeyDown) {
                         when (event.key) {
                             Key.DirectionLeft -> {
+                                if (isProcessingKey || lazyListState.isScrollInProgress) return@onPreviewKeyEvent true
                                 if (centeredIndex == 0) {
                                     onEdgeLeftReached()
                                     true
-                                } else false
+                                } else {
+                                    isProcessingKey = true
+                                    true
+                                }
                             }
                             Key.DirectionRight -> {
+                                if (isProcessingKey || lazyListState.isScrollInProgress) return@onPreviewKeyEvent true
                                 if (centeredIndex == apps.size - 1) {
                                     onEdgeRightOrDownReached()
                                     true
-                                } else false
+                                } else {
+                                    isProcessingKey = true
+                                    true
+                                }
                             }
                             Key.DirectionDown -> {
                                 onEdgeRightOrDownReached()
                                 true
                             }
                             Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                                val app = apps.getOrNull(centeredIndex)
-                                if (app != null) {
-                                    onAppClick(app)
-                                    true
-                                } else false
+                                if (!isProcessingKey) {
+                                    val app = apps.getOrNull(centeredIndex)
+                                    if (app != null) {
+                                        isProcessingKey = true
+                                        onAppClick(app)
+                                    }
+                                }
+                                true
                             }
                             else -> false
                         }
+                    } else if (event.type == KeyEventType.KeyUp) {
+                        isProcessingKey = false
+                        false
                     } else false
                 }
         ) {
@@ -433,6 +446,18 @@ fun AllAppsCenterCarousel(
                     onLongClick = { onAppLongClick(app) }
                 )
             }
+        }
+        
+        // FIX BUG 1 & 2: LaunchedEffect untuk mereset isProcessingKey saat scroll selesai
+        LaunchedEffect(lazyListState.isScrollInProgress) {
+            if (!lazyListState.isScrollInProgress) {
+                delay(150) // Beri jeda sedikit sebelum menerima input lagi
+                isProcessingKey = false
+            }
+        }
+        LaunchedEffect(centeredIndex) {
+            if (lazyListState.isScrollInProgress) return@LaunchedEffect
+            lazyListState.animateScrollToItem(centeredIndex)
         }
     }
 }
@@ -475,6 +500,9 @@ fun AppCardItem(
     onLongClick: () -> Unit
 ) {
     var isNativeFocused by remember { mutableStateOf(false) }
+    // FIX BUG 1: Deteksi manual untuk tombol OK agar efek flash muncul
+    var isPressedManual by remember { mutableStateOf(false) }
+
     val isEffectivelyFocused = if (useNativeFocus) isNativeFocused else isCenterFocused
 
     val scale by animateFloatAsState(
@@ -486,7 +514,6 @@ fun AppCardItem(
     val baseIconSize = 48.dp
     val currentIconSize = (baseIconSize * iconSizeMultiplier).coerceIn(24.dp, 80.dp)
 
-    // FIX BUG MEMORI: Ambil dari cache, jika kosong baru load
     val bitmap by produceState<Bitmap?>(initialValue = iconCache.get(app.packageName), app.packageName) {
         if (value == null) {
             val loaded = withContext(Dispatchers.IO) {
@@ -500,11 +527,12 @@ fun AppCardItem(
     }
 
     val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
+    val isPressedSystem by interactionSource.collectIsPressedAsState()
+    val finalIsPressed = isPressedManual || isPressedSystem
 
     NeonFocusBorder(
         focused = isEffectivelyFocused,
-        pressed = isPressed,
+        pressed = finalIsPressed,
         cornerRadius = 16.dp,
         borderWidth = 3.dp,
         glowRadius = 8.dp,
@@ -524,8 +552,12 @@ fun AppCardItem(
                             .focusable()
                             .onPreviewKeyEvent { event ->
                                 if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) {
+                                    isPressedManual = true
                                     onClick()
                                     true
+                                } else if (event.type == KeyEventType.KeyUp) {
+                                    isPressedManual = false
+                                    false
                                 } else false
                             }
                     } else Modifier
@@ -533,7 +565,7 @@ fun AppCardItem(
                 .combinedClickable(
                     interactionSource = interactionSource,
                     indication = null,
-                    onClick = onClick, 
+                    onClick = { if (useNativeFocus) onClick() }, 
                     onLongClick = onLongClick
                 )
                 .padding(8.dp),
@@ -744,12 +776,22 @@ fun GlassNavButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label:
     }
 }
 
+// FIX BUG 3: Gunakan Leanback Intent untuk aplikasi TV
 fun safeLaunchApp(context: Context, app: AppItem) {
     try {
-        val intent = context.packageManager.getLaunchIntentForPackage(app.packageName)
-        if (intent != null) { intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); context.startActivity(intent) }
-        else Toast.makeText(context, "Aplikasi tidak ditemukan.", Toast.LENGTH_SHORT).show()
-    } catch (e: Exception) { Toast.makeText(context, "Gagal membuka aplikasi.", Toast.LENGTH_SHORT).show() }
+        val pm = context.packageManager
+        val launchIntent = pm.getLeanbackLaunchIntentForPackage(app.packageName)
+            ?: pm.getLaunchIntentForPackage(app.packageName)
+        
+        if (launchIntent != null) { 
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(launchIntent) 
+        } else {
+            Toast.makeText(context, "Aplikasi tidak ditemukan.", Toast.LENGTH_SHORT).show()
+        }
+    } catch (e: Exception) { 
+        Toast.makeText(context, "Gagal membuka aplikasi.", Toast.LENGTH_SHORT).show() 
+    }
 }
 
 fun drawableToBitmap(drawable: Drawable): Bitmap {
