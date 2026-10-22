@@ -61,7 +61,9 @@ fun SettingsScreen(
     var selectedCategory by remember { mutableStateOf(SettingsCategory.WALLPAPER) }
     var draftConfig by remember { mutableStateOf(currentConfig) }
     val scope = rememberCoroutineScope()
-    val firstContentFocusRequester = remember { FocusRequester() }
+    
+    // FIX BUG 6: FocusRequester untuk LazyColumn
+    val contentFocusRequester = remember { FocusRequester() }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -77,7 +79,7 @@ fun SettingsScreen(
     Box(Modifier.fillMaxSize().background(GlassColors.DeepBackgroundGradient)) {
         Row(Modifier.fillMaxSize().padding(16.dp)) {
             
-            // PANE KIRI (SIDEBAR GLASS)
+            // PANE KIRI
             Column(
                 Modifier.weight(0.28f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp)
                     .padding(16.dp).verticalScroll(rememberScrollState()).focusGroup(),
@@ -111,9 +113,8 @@ fun SettingsScreen(
                         onClick = {
                             selectedCategory = cat
                             scope.launch {
-                                delay(150)
-                                // FIX: Pindah fokus langsung ke konten kanan
-                                runCatching { firstContentFocusRequester.requestFocus() }
+                                delay(250) // FIX BUG 6: Delay agar LazyColumn siap
+                                runCatching { contentFocusRequester.requestFocus() }
                             }
                         }
                     )
@@ -122,10 +123,11 @@ fun SettingsScreen(
 
             Spacer(Modifier.width(24.dp))
 
-            // PANE KANAN (KONTEN GLASS)
+            // PANE KANAN
             Box(Modifier.weight(0.72f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp).padding(24.dp)) {
                 AutoFocusPane(paneKey = selectedCategory, modifier = Modifier.fillMaxSize()) {
-                    LazyColumn(Modifier.fillMaxSize().focusRequester(firstContentFocusRequester)) {
+                    // FIX BUG 6: FocusRequester dipasang di LazyColumn
+                    LazyColumn(Modifier.fillMaxSize().focusRequester(contentFocusRequester)) {
                         item {
                             when (selectedCategory) {
                                 SettingsCategory.WALLPAPER -> WallpaperSection(draftConfig) { draftConfig = it }
