@@ -1,7 +1,6 @@
 package dev.andikune.homeio.presentation.home
 
 import android.app.Activity
-import android.content.Context
 import android.content.Intent
 import android.speech.RecognizerIntent
 import android.widget.Toast
@@ -9,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -28,6 +28,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -49,7 +54,6 @@ fun SearchDialog(
     val context = LocalContext.current
     var query by remember { mutableStateOf("") }
     
-    // FIX: Auto-Focus ke kolom pencarian saat dialog dibuka
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         delay(300)
@@ -77,32 +81,19 @@ fun SearchDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xD90A0E1A))
-                .padding(32.dp),
+            modifier = Modifier.fillMaxSize().background(Color(0xD90A0E1A)).padding(32.dp),
             contentAlignment = Alignment.Center
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth(0.85f)
-                    .fillMaxHeight(0.85f)
-                    .liquidGlass(cornerRadius = 24.dp)
-                    .padding(20.dp)
+                modifier = Modifier.fillMaxWidth(0.85f).fillMaxHeight(0.85f).liquidGlass(cornerRadius = 24.dp).padding(20.dp)
             ) {
-                // Search Input Bar with Voice Mic
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = query,
                         onValueChange = { query = it },
                         modifier = Modifier.weight(1f).focusRequester(focusRequester),
                         placeholder = { Text("Ketik nama aplikasi...", color = GlassColors.TextSecondary) },
-                        leadingIcon = {
-                            Icon(Icons.Default.Search, contentDescription = null, tint = GlassColors.AccentGlow)
-                        },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = GlassColors.AccentGlow) },
                         trailingIcon = {
                             IconButton(onClick = {
                                 try {
@@ -114,54 +105,40 @@ fun SearchDialog(
                                 } catch (e: Exception) {
                                     Toast.makeText(context, "Fitur suara tidak tersedia", Toast.LENGTH_SHORT).show()
                                 }
-                            }) {
-                                Icon(Icons.Default.Mic, contentDescription = "Voice Search", tint = GlassColors.AccentGlow)
-                            }
+                            }) { Icon(Icons.Default.Mic, contentDescription = "Voice Search", tint = GlassColors.AccentGlow) }
                         },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = GlassColors.AccentGlow,
-                            unfocusedBorderColor = GlassColors.GlassBorder,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            focusedBorderColor = GlassColors.AccentGlow, unfocusedBorderColor = GlassColors.GlassBorder,
+                            focusedTextColor = Color.White, unfocusedTextColor = Color.White
                         ),
-                        shape = RoundedCornerShape(16.dp),
-                        singleLine = true
+                        shape = RoundedCornerShape(16.dp), singleLine = true
                     )
-
                     Spacer(modifier = Modifier.width(12.dp))
-
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
-                    }
+                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White) }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // FIX: Empty State jika pencarian kosong
                 if (filteredApps.isEmpty()) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("Aplikasi tidak ditemukan", color = GlassColors.TextSecondary, fontSize = 14.sp, textAlign = TextAlign.Center)
                     }
                 } else {
-                    // Search Results
                     LazyColumn(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .imePadding(), // FIX: Menghindari keyboard menutupi list
+                        modifier = Modifier.weight(1f).fillMaxWidth().imePadding(),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(filteredApps, key = { it.packageName }) { app ->
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .liquidGlass(cornerRadius = 14.dp)
-                                    .clickable {
-                                        SoundFeedback.playClick(context)
-                                        onAppSelected(app)
-                                        onDismiss()
+                                modifier = Modifier.fillMaxWidth().liquidGlass(cornerRadius = 14.dp)
+                                    .focusable().onPreviewKeyEvent { event ->
+                                        if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) {
+                                            SoundFeedback.playClick(context); onAppSelected(app); onDismiss(); true
+                                        } else false
                                     }
-                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                    .clickable {
+                                        SoundFeedback.playClick(context); onAppSelected(app); onDismiss()
+                                    }.padding(horizontal = 14.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(text = app.label, color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
