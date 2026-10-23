@@ -25,6 +25,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged // <--- INI IMPORT YANG TADI HILANG
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -92,7 +93,6 @@ fun SystemControlScreen(
                                 @Suppress("DEPRECATION") wifiManager.isWifiEnabled = true
                             }
                         } else {
-                            // Buka panel WiFi sistem (tetap di atas aplikasi)
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                                 val panelIntent = Intent(Settings.Panel.ACTION_WIFI)
                                 context.startActivity(panelIntent)
