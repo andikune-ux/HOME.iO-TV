@@ -20,7 +20,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.Dp
@@ -33,7 +32,6 @@ fun NeonFocusBorder(
     focused: Boolean, pressed: Boolean = false, modifier: Modifier = Modifier,
     borderWidth: Dp = 3.dp, cornerRadius: Dp = 12.dp, glowRadius: Dp = 8.dp, content: @Composable () -> Unit
 ) {
-    // Scale dihapus total agar tidak bentrok dengan container luar
     val rotation = remember { Animatable(0f) }
     var currentPhase by remember { mutableStateOf(BorderPhase.HIDDEN) }
 
@@ -49,17 +47,22 @@ fun NeonFocusBorder(
         else { flashAlpha.snapTo(1f) }
     }
 
+    // FIX BUG: Pindahkan inisialisasi Paint, Path, dan PathMeasure ke luar Canvas (mencegah alokasi memori per frame)
+    val corePaint = remember(borderWidth) { 
+        AndroidPaint().apply { isAntiAlias = true; style = AndroidPaint.Style.STROKE; strokeWidth = borderWidth.toPx() } 
+    }
+    val glowPaint = remember(glowRadius) { 
+        AndroidPaint().apply { isAntiAlias = true; maskFilter = BlurMaskFilter(glowRadius.toPx() * 1.5f, BlurMaskFilter.Blur.NORMAL) } 
+    }
+
     Box(modifier = modifier) {
         if (focused) {
             Canvas(modifier = Modifier.matchParentSize()) {
-                // Optimasi: Objek dibuat sekali di luar loop (Cegah Memory Leak)
-                val corePaint = AndroidPaint().apply { isAntiAlias = true; style = AndroidPaint.Style.STROKE; strokeWidth = borderWidth.toPx() }
-                val glowPaint = AndroidPaint().apply { isAntiAlias = true; maskFilter = BlurMaskFilter(glowRadius.toPx() * 1.5f, BlurMaskFilter.Blur.NORMAL) }
-
                 drawIntoCanvas { canvas ->
                     val native = canvas.nativeCanvas
                     val coreInset = borderWidth.toPx() / 2f
                     val coreRect = RectF(coreInset, coreInset, size.width - coreInset, size.height - coreInset)
+                    
                     corePaint.color = if (pressed) {
                         val a = (flashAlpha.value * 255).toInt().coerceIn(0, 255)
                         (0xFF80C3FF.toInt() and 0x00FFFFFF) or (a shl 24)
@@ -71,6 +74,7 @@ fun NeonFocusBorder(
                     val glowPath = Path().apply { addRoundRect(glowRect, cornerRadius.toPx() + glowOutset, cornerRadius.toPx() + glowOutset, Path.Direction.CW) }
                     val pathMeasure = PathMeasure(glowPath, false)
                     val pathLength = pathMeasure.length
+                    
                     val headColors = if (pressed) listOf(0xFF80C3FF.toInt()) else listOf(0xFFFFFFFF.toInt(), 0xFF80C3FF.toInt())
                     val tailLenFraction = 0.30f
                     val dotCount = 24
