@@ -16,6 +16,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,7 +54,7 @@ fun LanguageSection(
                 onClick = { onUpdate(settings.copy(languageCode = "in")) }
             )
             LangOption(
-                label = "🇬🇧 English",
+                label = "🇬🇧 English (Beta)",
                 isSelected = settings.languageCode == "en",
                 modifier = Modifier.weight(1f),
                 onClick = { onUpdate(settings.copy(languageCode = "en")) }
@@ -106,7 +111,9 @@ private fun LangOption(label: String, isSelected: Boolean, modifier: Modifier = 
                 )
                 .border(if (isSelected) 1.5.dp else 0.dp, if (isSelected) GlassColors.AccentGlow else Color.Transparent, RoundedCornerShape(10.dp))
                 .onFocusChanged { isFocused = it.isFocused }
-                .focusable().clickable { onClick() }
+                .focusable()
+                .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onClick(); true } else false }
+                .clickable { onClick() }
                 .padding(vertical = 12.dp, horizontal = 8.dp),
             contentAlignment = Alignment.Center
         ) {
