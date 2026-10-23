@@ -17,18 +17,12 @@ import androidx.compose.ui.unit.dp
 object GlassColors {
     val DeepBackground = Color(0xFF050810)
     val DeepBackgroundGradient = Brush.verticalGradient(
-        colors = listOf(
-            Color(0xFF0A0E1A),
-            Color(0xFF0F172A),
-            Color(0xFF050810)
-        )
+        colors = listOf(Color(0xFF0A0E1A), Color(0xFF0F172A), Color(0xFF050810))
     )
-    val GlassTint = Color(0x1AFFFFFF) // 10% white
-    val GlassTintLighter = Color(0x33FFFFFF) // 20% white (saat fokus)
-    
-    // Perbaikan warna fallback agar lebih solid dan tidak transparan berlebihan
+    val GlassTint = Color(0x1AFFFFFF)
+    val GlassTintLighter = Color(0x33FFFFFF)
     val GlassSolidFallback = Color(0xE60F172A) 
-    val GlassBorder = Color(0x26FFFFFF) // 15% white
+    val GlassBorder = Color(0x26FFFFFF)
     val AccentGlow = Color(0xFF4DA3FF)
     val AccentGlowLight = Color(0xFF80C3FF)
     val TextPrimary = Color(0xFFF8FAFC)
@@ -48,14 +42,12 @@ fun Modifier.liquidGlass(
 ): Modifier {
     val shape = RoundedCornerShape(cornerRadius)
     
-    // FIX BUG #1: Efek Blur dimatikan total (supportsBlur = false) 
-    // karena hardware TV sering gagal render blur dan malah membuat layar ngeblur total/hitam.
+    // Blur dimatikan paksa agar TV tidak nge-hang/blank
     val supportsBlur = false 
     
     val backgroundColor = if (useBlur && supportsBlur) {
         if (isFocused) GlassColors.GlassTintLighter else GlassColors.GlassTint
     } else {
-        // Gunakan Solid Fallback yang lebih gelap dan tajam
         if (isFocused) Color(0xCC1E293B) else GlassColors.GlassSolidFallback
     }
     
@@ -67,16 +59,10 @@ fun Modifier.liquidGlass(
         .then(
             if (isFocused) {
                 Modifier.drawBehind {
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            colors = listOf(GlassColors.AccentGlow.copy(alpha = 0.25f), Color.Transparent),
-                            radius = size.maxDimension * 0.8f
-                        )
-                    )
+                    drawRect(brush = Brush.radialGradient(colors = listOf(GlassColors.AccentGlow.copy(alpha = 0.25f), Color.Transparent), radius = size.maxDimension * 0.8f))
                 }
             } else Modifier
         )
         .background(backgroundColor, shape)
         .border(BorderStroke(effectiveBorderWidth, currentBorderColor), shape)
-        // Modifier.blur() dihapus total dari sini
 }
