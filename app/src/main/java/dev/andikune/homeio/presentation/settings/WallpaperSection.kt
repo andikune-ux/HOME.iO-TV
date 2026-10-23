@@ -2,6 +2,7 @@ package dev.andikune.homeio.presentation.settings
 
 import android.content.Context
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -40,7 +41,11 @@ import java.io.File
 import java.io.FileOutputStream
 
 @Composable
-fun WallpaperSection(settings: SettingsConfig, onUpdate: (SettingsConfig) -> Unit) {
+fun WallpaperSection(
+    settings: SettingsConfig, 
+    onUpdate: (SettingsConfig) -> Unit,
+    onSave: () -> Unit // Parameter baru untuk tombol simpan
+) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -64,8 +69,9 @@ fun WallpaperSection(settings: SettingsConfig, onUpdate: (SettingsConfig) -> Uni
             scope.launch {
                 val localPath = copyUriToInternal(it, pickerModeIsVideo)
                 if (localPath != null) {
-                    if (pickerModeIsVideo) onUpdate(settings.copy(customVideoPath = localPath, customActiveType = "VIDEO"))
-                    else onUpdate(settings.copy(customPhotoPath = localPath, customActiveType = "PHOTO"))
+                    // FIX: Paksa wallpaperMode = "KUSTOM"
+                    if (pickerModeIsVideo) onUpdate(settings.copy(wallpaperMode = "KUSTOM", customVideoPath = localPath, customActiveType = "VIDEO"))
+                    else onUpdate(settings.copy(wallpaperMode = "KUSTOM", customPhotoPath = localPath, customActiveType = "PHOTO"))
                 }
             }
         }
@@ -107,13 +113,11 @@ fun WallpaperSection(settings: SettingsConfig, onUpdate: (SettingsConfig) -> Uni
                 showFileManager = true 
             }
 
-            // Tampilkan info file aktif
             if (!settings.customPhotoPath.isNullOrBlank() || !settings.customVideoPath.isNullOrBlank()) {
                 Text("File Aktif:", color = GlassColors.TextSecondary, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
                 if (!settings.customPhotoPath.isNullOrBlank()) Text("📸 ${settings.customPhotoPath.substringAfterLast("/")}", color = GlassColors.AccentGreen, fontSize = 11.sp, maxLines = 1)
                 if (!settings.customVideoPath.isNullOrBlank()) Text("🎬 ${settings.customVideoPath.substringAfterLast("/")}", color = GlassColors.AccentGlow, fontSize = 11.sp, maxLines = 1)
                 
-                // Switch Foto / Video
                 Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SelectionChip("Gunakan Foto", settings.customActiveType == "PHOTO", Modifier.weight(1f)) { onUpdate(settings.copy(customActiveType = "PHOTO")) }
                     SelectionChip("Gunakan Video", settings.customActiveType == "VIDEO", Modifier.weight(1f)) { onUpdate(settings.copy(customActiveType = "VIDEO")) }
@@ -130,6 +134,36 @@ fun WallpaperSection(settings: SettingsConfig, onUpdate: (SettingsConfig) -> Uni
                 }
             }
         }
+
+        // TOMBOL SIMPAN (BARU)
+        Spacer(Modifier.height(16.dp))
+        var isSaveFocused by remember { mutableStateOf(false) }
+        NeonFocusBorder(focused = isSaveFocused, cornerRadius = 12.dp) {
+            Box(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    .background(if (isSaveFocused) GlassColors.AccentGreen else GlassColors.AccentGreen.copy(alpha = 0.6f))
+                    .onFocusChanged { isSaveFocused = it.isFocused }.focusable()
+                    .onPreviewKeyEvent { e -> 
+                        if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { 
+                            onSave()
+                            Toast.makeText(ctx, "Wallpaper berhasil disimpan!", Toast.LENGTH_SHORT).show()
+                            true 
+                        } else false 
+                    }
+                    .clickable { 
+                        onSave()
+                        Toast.makeText(ctx, "Wallpaper berhasil disimpan!", Toast.LENGTH_SHORT).show()
+                    }
+                    .padding(vertical = 14.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Save, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("SIMPAN WALLPAPER", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+            }
+        }
     }
 
     if (showFileManager) {
@@ -138,8 +172,9 @@ fun WallpaperSection(settings: SettingsConfig, onUpdate: (SettingsConfig) -> Uni
                 showFileManager = false
                 val isVideo = file.extension.lowercase() in listOf("mp4", "mkv", "webm", "avi")
                 scope.launch {
-                    if (isVideo) onUpdate(settings.copy(customVideoPath = file.absolutePath, customActiveType = "VIDEO"))
-                    else onUpdate(settings.copy(customPhotoPath = file.absolutePath, customActiveType = "PHOTO"))
+                    // FIX: Paksa wallpaperMode = "KUSTOM"
+                    if (isVideo) onUpdate(settings.copy(wallpaperMode = "KUSTOM", customVideoPath = file.absolutePath, customActiveType = "VIDEO"))
+                    else onUpdate(settings.copy(wallpaperMode = "KUSTOM", customPhotoPath = file.absolutePath, customActiveType = "PHOTO"))
                 }
             },
             onDismiss = { showFileManager = false }
