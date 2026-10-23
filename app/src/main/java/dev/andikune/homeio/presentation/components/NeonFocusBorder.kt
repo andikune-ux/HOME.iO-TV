@@ -26,116 +26,71 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-private enum class BorderPhase {
-    HIDDEN, IDLE, PRESSED
-}
+private enum class BorderPhase { HIDDEN, IDLE, PRESSED }
 
 @Composable
 fun NeonFocusBorder(
-    focused: Boolean,
-    pressed: Boolean = false,
-    modifier: Modifier = Modifier,
-    borderWidth: Dp = 3.dp,
-    cornerRadius: Dp = 12.dp,
-    glowRadius: Dp = 8.dp,
-    content: @Composable () -> Unit
+    focused: Boolean, pressed: Boolean = false, modifier: Modifier = Modifier,
+    borderWidth: Dp = 3.dp, cornerRadius: Dp = 12.dp, glowRadius: Dp = 8.dp, content: @Composable () -> Unit
 ) {
+    // Scale dihapus total agar tidak bentrok dengan container luar
     val rotation = remember { Animatable(0f) }
     var currentPhase by remember { mutableStateOf(BorderPhase.HIDDEN) }
 
     LaunchedEffect(focused) {
-        if (!focused) {
-            currentPhase = BorderPhase.HIDDEN
-            rotation.snapTo(0f)
-            return@LaunchedEffect
-        }
+        if (!focused) { currentPhase = BorderPhase.HIDDEN; rotation.snapTo(0f); return@LaunchedEffect }
         currentPhase = BorderPhase.IDLE
-        while (true) {
-            rotation.snapTo(0f)
-            rotation.animateTo(360f, tween(2500, easing = LinearEasing))
-        }
+        while (true) { rotation.snapTo(0f); rotation.animateTo(360f, tween(2500, easing = LinearEasing)) }
     }
 
     val flashAlpha = remember { Animatable(1f) }
     LaunchedEffect(pressed) {
-        if (pressed) {
-            while (true) {
-                flashAlpha.animateTo(1f, tween(100, easing = LinearEasing))
-                flashAlpha.animateTo(0f, tween(100, easing = LinearEasing))
-            }
-        } else {
-            flashAlpha.snapTo(1f)
-        }
+        if (pressed) { while (true) { flashAlpha.animateTo(1f, tween(100, easing = LinearEasing)); flashAlpha.animateTo(0f, tween(100, easing = LinearEasing)) } } 
+        else { flashAlpha.snapTo(1f) }
     }
 
     Box(modifier = modifier) {
         if (focused) {
             Canvas(modifier = Modifier.matchParentSize()) {
-                // OPTIMASI: Hanya buat objek Paint sekali di luar loop
-                val corePaint = AndroidPaint().apply {
-                    isAntiAlias = true
-                    style = AndroidPaint.Style.STROKE
-                    strokeWidth = borderWidth.toPx()
-                }
-                val glowPaint = AndroidPaint().apply {
-                    isAntiAlias = true
-                    maskFilter = BlurMaskFilter(glowRadius.toPx() * 1.5f, BlurMaskFilter.Blur.NORMAL)
-                }
+                // Optimasi: Objek dibuat sekali di luar loop (Cegah Memory Leak)
+                val corePaint = AndroidPaint().apply { isAntiAlias = true; style = AndroidPaint.Style.STROKE; strokeWidth = borderWidth.toPx() }
+                val glowPaint = AndroidPaint().apply { isAntiAlias = true; maskFilter = BlurMaskFilter(glowRadius.toPx() * 1.5f, BlurMaskFilter.Blur.NORMAL) }
 
                 drawIntoCanvas { canvas ->
                     val native = canvas.nativeCanvas
-
-                    // 1. CORE BORDER
                     val coreInset = borderWidth.toPx() / 2f
                     val coreRect = RectF(coreInset, coreInset, size.width - coreInset, size.height - coreInset)
                     corePaint.color = if (pressed) {
                         val a = (flashAlpha.value * 255).toInt().coerceIn(0, 255)
                         (0xFF80C3FF.toInt() and 0x00FFFFFF) or (a shl 24)
-                    } else {
-                        0x334DA3FF
-                    }
+                    } else 0x334DA3FF
                     native.drawRoundRect(coreRect, cornerRadius.toPx(), cornerRadius.toPx(), corePaint)
 
-                    // 2. GLOW TAIL
                     val glowOutset = glowRadius.toPx() * 0.4f
                     val glowRect = RectF(-glowOutset, -glowOutset, size.width + glowOutset, size.height + glowOutset)
-                    val glowPath = Path().apply {
-                        addRoundRect(glowRect, cornerRadius.toPx() + glowOutset, cornerRadius.toPx() + glowOutset, Path.Direction.CW)
-                    }
-
+                    val glowPath = Path().apply { addRoundRect(glowRect, cornerRadius.toPx() + glowOutset, cornerRadius.toPx() + glowOutset, Path.Direction.CW) }
                     val pathMeasure = PathMeasure(glowPath, false)
                     val pathLength = pathMeasure.length
-
                     val headColors = if (pressed) listOf(0xFF80C3FF.toInt()) else listOf(0xFFFFFFFF.toInt(), 0xFF80C3FF.toInt())
                     val tailLenFraction = 0.30f
-                    val dotCount = 24 // Dikurangi dari 48 ke 24 agar lebih ringan
+                    val dotCount = 24
 
                     headColors.forEachIndexed { idx, color ->
                         val baseT = rotation.value / 360f
                         val headT = if (pressed) baseT else (baseT + idx * 0.5f) % 1f
-
                         for (i in 0 until dotCount) {
                             val t = headT - (i.toFloat() / dotCount) * tailLenFraction
                             val wrapped = ((t % 1f) + 1f) % 1f
                             val pos = FloatArray(2)
                             pathMeasure.getPosTan(wrapped * pathLength, pos, null)
-
                             val linear = 1f - (i.toFloat() / dotCount)
                             val alphaBase = linear * linear * 0.7f + linear * 0.3f
                             val alpha = if (pressed) alphaBase * flashAlpha.value else alphaBase
                             val dotRadius = glowRadius.toPx() * (0.35f + 0.35f * linear)
 
-                            glowPaint.shader = RadialGradient(
-                                pos[0], pos[1], dotRadius,
-                                intArrayOf(
-                                    colorWithAlpha(color, alpha * 1.0f),
-                                    colorWithAlpha(color, alpha * 0.7f),
-                                    colorWithAlpha(color, alpha * 0.3f),
-                                    colorWithAlpha(color, 0f)
-                                ),
-                                floatArrayOf(0f, 0.3f, 0.7f, 1f),
-                                Shader.TileMode.CLAMP
-                            )
+                            glowPaint.shader = RadialGradient(pos[0], pos[1], dotRadius, intArrayOf(
+                                colorWithAlpha(color, alpha * 1.0f), colorWithAlpha(color, alpha * 0.7f), colorWithAlpha(color, alpha * 0.3f), colorWithAlpha(color, 0f)
+                            ), floatArrayOf(0f, 0.3f, 0.7f, 1f), Shader.TileMode.CLAMP)
                             native.drawCircle(pos[0], pos[1], dotRadius, glowPaint)
                         }
                     }
