@@ -1,4 +1,4 @@
-lpackage dev.andikune.homeio.util
+package dev.andikune.homeio.util
 
 import android.content.Context
 import android.media.AudioManager
@@ -18,7 +18,6 @@ object SoundFeedback {
 
         try {
             if (toneGenerator == null) {
-                // FIX BUG #23: Gunakan STREAM_MUSIC agar tidak diblokir sistem TV
                 toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, 30)
             }
             toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 30)
