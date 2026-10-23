@@ -5,8 +5,12 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class SettingsConfig(
     // === WALLPAPER ===
-    val wallpaperPath: String? = null,
-    val wallpaperType: String = "IMAGE",
+    val wallpaperMode: String = "SINEMATIK", // SINEMATIK, ESTETIK, OLED, KUSTOM
+    val wallpaperPath: String? = null, // Fallback untuk backward compatibility
+    val customPhotoPath: String? = null,
+    val customVideoPath: String? = null,
+    val customActiveType: String = "PHOTO", // PHOTO, VIDEO
+    val wallpaperType: String = "IMAGE", // IMAGE, VIDEO (Fallback lama)
     val wallpaperScaleMode: String = "FILL",
 
     // === FAVORITES ===
@@ -34,8 +38,8 @@ data class SettingsConfig(
     val isAutoStartOnBoot: Boolean = true,
 
     // === TAMPILAN TV ===
-    val safeAreaPercent: Float = 2f, // 0f - 10f
+    val safeAreaPercent: Float = 2f,
     val brightnessMode: String = "MANUAL", // MANUAL, AUTO, SCHEDULE
-    val manualBrightness: Int = 100, // 0 - 100
-    val appIconSizeMultiplier: Float = 0.8f // BARU: Default 0.8x (lebih kecil)
+    val manualBrightness: Int = 100,
+    val appIconSizeMultiplier: Float = 0.8f
 )
