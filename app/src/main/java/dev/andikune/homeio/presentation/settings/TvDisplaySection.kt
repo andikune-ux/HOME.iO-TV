@@ -16,6 +16,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,7 +71,7 @@ fun TvDisplaySection(
         // === KECERAHAN ===
         Text("KECERAHAN LAYAR", color = GlassColors.TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("MANUAL", "AUTO").forEach { mode ->
+            listOf("MANUAL", "AUTO", "SCHEDULE").forEach { mode ->
                 val isSelected = settings.brightnessMode == mode
                 BrightnessChip(
                     label = mode,
@@ -86,8 +91,10 @@ fun TvDisplaySection(
                 steps = 18,
                 formatter = { "${it.toInt()}%" }
             )
-        } else {
+        } else if (settings.brightnessMode == "AUTO") {
             Text("Mode AUTO: Terang di siang hari, redup di malam hari.", color = GlassColors.AccentGlow, fontSize = 11.sp)
+        } else {
+            Text("Mode SCHEDULE: Kecerahan mengikuti jadwal ON/OFF di menu System Control.", color = GlassColors.AccentGlow, fontSize = 11.sp)
         }
 
         // === KIOSK MODE ===
@@ -121,9 +128,13 @@ private fun BrightnessChip(label: String, isSelected: Boolean, modifier: Modifie
                 }
             )
             .border(if (isSelected) 1.5.dp else 0.dp, if (isSelected) GlassColors.AccentGlow else Color.Transparent, RoundedCornerShape(10.dp))
-            .onFocusChanged { isFocused = it.isFocused }.focusable().clickable { onClick() }.padding(vertical = 12.dp),
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
+            .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onClick(); true } else false }
+            .clickable { onClick() }
+            .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(label, color = if (isSelected) GlassColors.AccentGlow else GlassColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text(label, color = if (isSelected) GlassColors.AccentGlow else GlassColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
     }
 }
