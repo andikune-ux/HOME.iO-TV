@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -47,12 +48,16 @@ fun NeonFocusBorder(
         else { flashAlpha.snapTo(1f) }
     }
 
-    // FIX BUG: Pindahkan inisialisasi Paint, Path, dan PathMeasure ke luar Canvas (mencegah alokasi memori per frame)
-    val corePaint = remember(borderWidth) { 
-        AndroidPaint().apply { isAntiAlias = true; style = AndroidPaint.Style.STROKE; strokeWidth = borderWidth.toPx() } 
+    val density = LocalDensity.current
+    val borderWidthPx = with(density) { borderWidth.toPx() }
+    val glowRadiusPx = with(density) { glowRadius.toPx() }
+    val cornerRadiusPx = with(density) { cornerRadius.toPx() }
+
+    val corePaint = remember(borderWidthPx) { 
+        AndroidPaint().apply { isAntiAlias = true; style = AndroidPaint.Style.STROKE; strokeWidth = borderWidthPx } 
     }
-    val glowPaint = remember(glowRadius) { 
-        AndroidPaint().apply { isAntiAlias = true; maskFilter = BlurMaskFilter(glowRadius.toPx() * 1.5f, BlurMaskFilter.Blur.NORMAL) } 
+    val glowPaint = remember(glowRadiusPx) { 
+        AndroidPaint().apply { isAntiAlias = true; maskFilter = BlurMaskFilter(glowRadiusPx * 1.5f, BlurMaskFilter.Blur.NORMAL) } 
     }
 
     Box(modifier = modifier) {
@@ -60,18 +65,18 @@ fun NeonFocusBorder(
             Canvas(modifier = Modifier.matchParentSize()) {
                 drawIntoCanvas { canvas ->
                     val native = canvas.nativeCanvas
-                    val coreInset = borderWidth.toPx() / 2f
+                    val coreInset = borderWidthPx / 2f
                     val coreRect = RectF(coreInset, coreInset, size.width - coreInset, size.height - coreInset)
                     
                     corePaint.color = if (pressed) {
                         val a = (flashAlpha.value * 255).toInt().coerceIn(0, 255)
                         (0xFF80C3FF.toInt() and 0x00FFFFFF) or (a shl 24)
                     } else 0x334DA3FF
-                    native.drawRoundRect(coreRect, cornerRadius.toPx(), cornerRadius.toPx(), corePaint)
+                    native.drawRoundRect(coreRect, cornerRadiusPx, cornerRadiusPx, corePaint)
 
-                    val glowOutset = glowRadius.toPx() * 0.4f
+                    val glowOutset = glowRadiusPx * 0.4f
                     val glowRect = RectF(-glowOutset, -glowOutset, size.width + glowOutset, size.height + glowOutset)
-                    val glowPath = Path().apply { addRoundRect(glowRect, cornerRadius.toPx() + glowOutset, cornerRadius.toPx() + glowOutset, Path.Direction.CW) }
+                    val glowPath = Path().apply { addRoundRect(glowRect, cornerRadiusPx + glowOutset, cornerRadiusPx + glowOutset, Path.Direction.CW) }
                     val pathMeasure = PathMeasure(glowPath, false)
                     val pathLength = pathMeasure.length
                     
@@ -90,7 +95,7 @@ fun NeonFocusBorder(
                             val linear = 1f - (i.toFloat() / dotCount)
                             val alphaBase = linear * linear * 0.7f + linear * 0.3f
                             val alpha = if (pressed) alphaBase * flashAlpha.value else alphaBase
-                            val dotRadius = glowRadius.toPx() * (0.35f + 0.35f * linear)
+                            val dotRadius = glowRadiusPx * (0.35f + 0.35f * linear)
 
                             glowPaint.shader = RadialGradient(pos[0], pos[1], dotRadius, intArrayOf(
                                 colorWithAlpha(color, alpha * 1.0f), colorWithAlpha(color, alpha * 0.7f), colorWithAlpha(color, alpha * 0.3f), colorWithAlpha(color, 0f)
