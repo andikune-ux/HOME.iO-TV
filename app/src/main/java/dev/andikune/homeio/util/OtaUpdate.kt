@@ -40,7 +40,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.withStyle // <--- INI YANG TADI HILANG
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -87,11 +87,7 @@ object UpdateManager {
             val latest = json.optString("tag_name", "Versi Baru").trim().ifEmpty { "Versi Baru" }
             val rawNotes = json.optString("body", "").trim()
             
-            val cleanNotes = rawNotes.lines()
-                .filterNot { it.contains("**Full Changelog**", ignoreCase = true) }
-                .joinToString("\n")
-                .trim()
-                .ifEmpty { "Tidak ada rincian pembaruan." }
+            val cleanNotes = rawNotes.lines().filterNot { it.contains("**Full Changelog**", ignoreCase = true) }.joinToString("\n").trim().ifEmpty { "Tidak ada rincian pembaruan." }
 
             val isNewer = compareVersions(latest, current) > 0
             val isForce = isNewer && cleanNotes.lines().any { it.trim().uppercase().startsWith("FORCE_UPDATE=TRUE") }
@@ -99,16 +95,11 @@ object UpdateManager {
             json.optJSONArray("assets")?.let { arr ->
                 for (i in 0 until arr.length()) {
                     val name = arr.getJSONObject(i).optString("name", "")
-                    if (name.endsWith(".apk", true)) {
-                        dlUrl = arr.getJSONObject(i).getString("browser_download_url")
-                        break
-                    }
+                    if (name.endsWith(".apk", true)) { dlUrl = arr.getJSONObject(i).getString("browser_download_url"); break }
                 }
             }
             UpdateInfo(isNewer, current, latest, dlUrl, cleanNotes, isForce)
-        } catch (e: Exception) {
-            noUpdate(current, "NETWORK: ${e.message}")
-        }
+        } catch (e: Exception) { noUpdate(current, "NETWORK: ${e.message}") }
     }
 
     private fun compareVersions(v1: String, v2: String): Int {
@@ -118,8 +109,7 @@ object UpdateManager {
         }
         val p1 = parse(v1); val p2 = parse(v2)
         for (i in 0 until maxOf(p1.size, p2.size)) {
-            val a = p1.getOrElse(i) { 0 }
-            val b = p2.getOrElse(i) { 0 }
+            val a = p1.getOrElse(i) { 0 }; val b = p2.getOrElse(i) { 0 }
             if (a != b) return a - b
         }
         return 0
@@ -146,9 +136,7 @@ object ApkDownloader {
 
     fun getDir(ctx: Context): File {
         val base = ctx.getExternalFilesDir(null) ?: ctx.filesDir
-        val dir = File(base, FOLDER)
-        if (!dir.exists()) dir.mkdirs()
-        return dir
+        val dir = File(base, FOLDER); if (!dir.exists()) dir.mkdirs(); return dir
     }
 
     fun isUsingFallbackPath(ctx: Context): Boolean = false
@@ -159,74 +147,44 @@ object ApkDownloader {
             val dir = getDir(ctx)
             dir.listFiles()?.filter { it.name.endsWith(".part") }?.forEach { it.delete() }
             val target = File(dir, fileName)
-            if (target.exists() && isValid(ctx, target)) {
-                emit(State(isFinished = true, savedFilePath = target.absolutePath, progress = 1f))
-                return@flow
-            }
+            if (target.exists() && isValid(ctx, target)) { emit(State(isFinished = true, savedFilePath = target.absolutePath, progress = 1f)); return@flow }
             if (target.exists()) target.delete()
 
-            var currentUrl = urlStr
-            var redirectHops = 0
-            var activeConn: HttpURLConnection
-            var respCode: Int
+            var currentUrl = urlStr; var redirectHops = 0
+            var activeConn: HttpURLConnection; var respCode: Int
             while (true) {
                 val urlObj = URL(currentUrl)
                 activeConn = (urlObj.openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 30000
-                    readTimeout = 60000
-                    instanceFollowRedirects = true
-                    setRequestProperty("User-Agent", "HomeIO-TV-Launcher/1.0")
-                    setRequestProperty("Accept", "*/*")
+                    connectTimeout = 30000; readTimeout = 60000; instanceFollowRedirects = true
+                    setRequestProperty("User-Agent", "HomeIO-TV-Launcher/1.0"); setRequestProperty("Accept", "*/*")
                 }
                 respCode = activeConn.responseCode
-                if (respCode == HttpURLConnection.HTTP_MOVED_TEMP ||
-                    respCode == HttpURLConnection.HTTP_MOVED_PERM ||
-                    respCode == HttpURLConnection.HTTP_SEE_OTHER ||
-                    respCode == 307 || respCode == 308) {
-                    val redirectUrl = activeConn.getHeaderField("Location")
-                    activeConn.disconnect()
+                if (respCode == HttpURLConnection.HTTP_MOVED_TEMP || respCode == HttpURLConnection.HTTP_MOVED_PERM || respCode == HttpURLConnection.HTTP_SEE_OTHER || respCode == 307 || respCode == 308) {
+                    val redirectUrl = activeConn.getHeaderField("Location"); activeConn.disconnect()
                     if (redirectUrl != null && redirectHops < 7) {
-                        currentUrl = if (redirectUrl.startsWith("http://") || redirectUrl.startsWith("https://")) {
-                            redirectUrl
-                        } else {
-                            URL(urlObj, redirectUrl).toString()
-                        }
-                        redirectHops++
-                        continue
+                        currentUrl = if (redirectUrl.startsWith("http://") || redirectUrl.startsWith("https://")) redirectUrl else URL(urlObj, redirectUrl).toString()
+                        redirectHops++; continue
                     }
                 }
                 break
             }
 
-            if (respCode != HttpURLConnection.HTTP_OK) {
-                emit(State(error = "Server Error $respCode"))
-                return@flow
-            }
+            if (respCode != HttpURLConnection.HTTP_OK) { emit(State(error = "Server Error $respCode")); return@flow }
 
             val input = activeConn.inputStream
             val total = activeConn.contentLengthLong
             val partFile = File(target.parentFile, "${target.name}.part")
             FileOutputStream(partFile).use { out ->
-                val buf = ByteArray(16384)
-                var read: Int
-                var totalRead = 0L
+                val buf = ByteArray(16384); var read: Int; var totalRead = 0L
                 while (input.read(buf).also { read = it } != -1) {
-                    out.write(buf, 0, read)
-                    totalRead += read
+                    out.write(buf, 0, read); totalRead += read
                     emit(State(isDownloading = true, progress = if (total > 0) totalRead.toFloat() / total else 0f))
                 }
             }
-            input.close()
-            activeConn.disconnect()
-
-            if (!partFile.renameTo(target)) {
-                partFile.delete()
-                throw IllegalStateException("Gagal menyimpan APK")
-            }
+            input.close(); activeConn.disconnect()
+            if (!partFile.renameTo(target)) { partFile.delete(); throw IllegalStateException("Gagal menyimpan APK") }
             emit(State(isFinished = true, savedFilePath = target.absolutePath, progress = 1f))
-        } catch (e: Exception) {
-            emit(State(error = e.message ?: "Download gagal"))
-        }
+        } catch (e: Exception) { emit(State(error = e.message ?: "Download gagal")) }
     }.flowOn(Dispatchers.IO)
 
     fun getList(ctx: Context): List<File> {
@@ -234,9 +192,7 @@ object ApkDownloader {
         getDir(ctx).listFiles()?.filter { it.name.endsWith(".apk") }?.let { list.addAll(it) }
         try {
             val legacy = File(Environment.getExternalStorageDirectory(), FOLDER)
-            if (legacy.exists()) {
-                legacy.listFiles()?.filter { it.name.endsWith(".apk") }?.let { list.addAll(it) }
-            }
+            if (legacy.exists()) { legacy.listFiles()?.filter { it.name.endsWith(".apk") }?.let { list.addAll(it) } }
         } catch (_: Exception) {}
         return list.distinctBy { it.absolutePath }.sortedByDescending { it.lastModified() }
     }
@@ -248,49 +204,28 @@ object ApkDownloader {
         val isZip = try {
             file.inputStream().use { input ->
                 val header = ByteArray(4)
-                input.read(header) == 4 &&
-                    header[0] == 0x50.toByte() &&
-                    header[1] == 0x4B.toByte() &&
-                    header[2] == 0x03.toByte() &&
-                    header[3] == 0x04.toByte()
+                input.read(header) == 4 && header[0] == 0x50.toByte() && header[1] == 0x4B.toByte() && header[2] == 0x03.toByte() && header[3] == 0x04.toByte()
             }
         } catch (_: Exception) { false }
         if (!isZip) return false
-
         return try {
             val pkg = ctx.packageManager.getPackageArchiveInfo(file.absolutePath, 0)
-            if (pkg != null) {
-                pkg.packageName == ctx.packageName
-            } else {
-                true
-            }
-        } catch (_: Exception) {
-            true
-        }
+            if (pkg != null) pkg.packageName == ctx.packageName else true
+        } catch (_: Exception) { true }
     }
 
     fun install(ctx: Context, path: String): Boolean {
         val file = File(path)
         if (!file.exists() || !isValid(ctx, file)) return false
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !ctx.packageManager.canRequestPackageInstalls()) {
-            try {
-                ctx.startActivity(Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                    data = Uri.parse("package:${ctx.packageName}")
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                })
-            } catch (_: Exception) {}
+            try { ctx.startActivity(Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply { data = Uri.parse("package:${ctx.packageName}"); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) } catch (_: Exception) {}
             return false
         }
         return try {
             val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
-            ctx.startActivity(Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "application/vnd.android.package-archive")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            })
+            ctx.startActivity(Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, "application/vnd.android.package-archive"); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION) })
             true
-        } catch (e: Exception) {
-            false
-        }
+        } catch (e: Exception) { false }
     }
 }
 
@@ -301,9 +236,7 @@ private fun parseMarkdownToAnnotatedString(text: String): AnnotatedString {
         val matches = regex.findAll(text)
         for (match in matches) {
             append(text.substring(currentIndex, match.range.first))
-            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Color.White)) {
-                append(match.groupValues[1])
-            }
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Color.White)) { append(match.groupValues[1]) }
             currentIndex = match.range.last + 1
         }
         append(text.substring(currentIndex))
@@ -314,20 +247,13 @@ private fun parseMarkdownToAnnotatedString(text: String): AnnotatedString {
 fun UpdateDialog(info: UpdateManager.UpdateInfo, progress: Float, isDownloading: Boolean, isReady: Boolean, isError: Boolean = false, onUpdate: () -> Unit, onLater: () -> Unit, onSkip: () -> Unit) {
     val isForce = info.isForceUpdate
     val focusReq = remember { FocusRequester() }
-    
-    LaunchedEffect(Unit) { 
-        delay(400); 
-        if (isActive) runCatching { focusReq.requestFocus() } 
-    }
-    
+    LaunchedEffect(Unit) { delay(400); if (isActive) runCatching { focusReq.requestFocus() } }
     BackHandler(enabled = isForce || isDownloading) { }
 
     Dialog(onDismissRequest = { if (!isForce && !isDownloading) onLater() }, properties = DialogProperties(dismissOnBackPress = !isForce && !isDownloading, usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
             Column(Modifier.fillMaxWidth(0.85f).fillMaxHeight(0.9f).liquidGlass(cornerRadius = 24.dp).padding(24.dp).verticalScroll(rememberScrollState()).focusGroup(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(72.dp).background(GlassColors.AccentGlow.copy(alpha = 0.15f), RoundedCornerShape(36.dp)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.SystemUpdate, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(40.dp))
-                }
+                Box(Modifier.size(72.dp).background(GlassColors.AccentGlow.copy(alpha = 0.15f), RoundedCornerShape(36.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Default.SystemUpdate, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(40.dp)) }
                 Spacer(Modifier.height(16.dp))
                 Text("PEMBARUAN TERSEDIA", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = GlassColors.AccentGlow, letterSpacing = 1.sp)
                 Spacer(Modifier.height(4.dp))
@@ -336,14 +262,7 @@ fun UpdateDialog(info: UpdateManager.UpdateInfo, progress: Float, isDownloading:
                 Column(Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(12.dp)).border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(12.dp)).padding(16.dp)) {
                     Text("📋 Rincian Pembaruan:", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GlassColors.AccentGlow)
                     Spacer(Modifier.height(8.dp))
-                    Box(Modifier.heightIn(max = 150.dp).verticalScroll(rememberScrollState())) { 
-                        Text(
-                            text = parseMarkdownToAnnotatedString(info.releaseNotes ?: "-"), 
-                            fontSize = 13.sp, 
-                            color = GlassColors.TextPrimary, 
-                            lineHeight = 18.sp
-                        ) 
-                    }
+                    Box(Modifier.heightIn(max = 150.dp).verticalScroll(rememberScrollState())) { Text(text = parseMarkdownToAnnotatedString(info.releaseNotes ?: "-"), fontSize = 13.sp, color = GlassColors.TextPrimary, lineHeight = 18.sp) }
                 }
                 if (isDownloading || isReady || isError) {
                     Spacer(Modifier.height(20.dp))
@@ -351,43 +270,20 @@ fun UpdateDialog(info: UpdateManager.UpdateInfo, progress: Float, isDownloading:
                     val labelColor = when { isError -> GlassColors.AccentRed; isReady -> GlassColors.AccentGreen; else -> GlassColors.AccentGlow }
                     Text(label, color = labelColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(8.dp))
-                    Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(GlassColors.GlassBorder)) {
-                        Box(Modifier.fillMaxWidth(progress).fillMaxHeight().background(when { isError -> GlassColors.AccentRed; isReady -> GlassColors.AccentGreen; else -> GlassColors.AccentGlow }))
-                    }
+                    Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(GlassColors.GlassBorder)) { Box(Modifier.fillMaxWidth(progress).fillMaxHeight().background(when { isError -> GlassColors.AccentRed; isReady -> GlassColors.AccentGreen; else -> GlassColors.AccentGlow })) }
                 }
                 Spacer(modifier = Modifier.height(24.dp))
-                if (isError) { 
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) { 
-                        Box(Modifier.weight(1f)) { OtaButton("TUTUP", GlassColors.GlassTint, onLater) }; 
-                        Box(Modifier.weight(1f)) { OtaButton("COBA LAGI", GlassColors.AccentRed, onUpdate, focusReq) } 
-                    } 
-                }
+                if (isError) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) { Box(Modifier.weight(1f)) { OtaButton("TUTUP", GlassColors.GlassTint, onLater) }; Box(Modifier.weight(1f)) { OtaButton("COBA LAGI", GlassColors.AccentRed, onUpdate, focusReq) } } }
                 else if (isReady) { OtaButton("INSTALL SEKARANG", GlassColors.AccentGreen, onUpdate, focusReq) }
                 else if (isDownloading) { 
                     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                         OtaButton("MOHON TUNGGU...", GlassColors.GlassTint, {})
                         Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = "Batal",
-                            color = GlassColors.TextSecondary,
-                            fontSize = 12.sp,
-                            modifier = Modifier.clickable { onLater() }.padding(8.dp)
-                        )
+                        Text(text = "Batal", color = GlassColors.TextSecondary, fontSize = 12.sp, modifier = Modifier.clickable { onLater() }.padding(8.dp))
                     }
                 }
-                else if (isForce) { 
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) { 
-                        Box(Modifier.weight(1f)) { OtaButton("TIDAK", GlassColors.GlassTint, onLater) }; 
-                        Box(Modifier.weight(1f)) { OtaButton("UPDATE", GlassColors.AccentGlow, onUpdate, focusReq) } 
-                    } 
-                }
-                else { 
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { 
-                        Box(Modifier.weight(1f)) { OtaButton("SKIP", GlassColors.GlassTint, onSkip) }; 
-                        Box(Modifier.weight(1f)) { OtaButton("NANTI", GlassColors.GlassTint, onLater) }; 
-                        Box(Modifier.weight(1f)) { OtaButton("UPDATE", GlassColors.AccentGlow, onUpdate, focusReq) } 
-                    } 
-                }
+                else if (isForce) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) { Box(Modifier.weight(1f)) { OtaButton("TIDAK", GlassColors.GlassTint, onLater) }; Box(Modifier.weight(1f)) { OtaButton("UPDATE", GlassColors.AccentGlow, onUpdate, focusReq) } } }
+                else { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { Box(Modifier.weight(1f)) { OtaButton("SKIP", GlassColors.GlassTint, onSkip) }; Box(Modifier.weight(1f)) { OtaButton("NANTI", GlassColors.GlassTint, onLater) }; Box(Modifier.weight(1f)) { OtaButton("UPDATE", GlassColors.AccentGlow, onUpdate, focusReq) } } }
             }
         }
     }
@@ -396,30 +292,11 @@ fun UpdateDialog(info: UpdateManager.UpdateInfo, progress: Float, isDownloading:
 @Composable
 private fun OtaButton(txt: String, bg: Color, onClick: () -> Unit, focusReq: FocusRequester? = null) {
     var focus by remember { mutableStateOf(false) }
-    
-    NeonFocusBorder(
-        focused = focus,
-        cornerRadius = 12.dp,
-        borderWidth = 3.dp,
-        modifier = Modifier.fillMaxWidth().let { if (focusReq != null) it.focusRequester(focusReq) else it }
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(if (focus) GlassColors.AccentGlow else bg)
-                .onFocusChanged { focus = it.isFocused }
-                .focusable()
-                .onPreviewKeyEvent { event ->
-                    if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) {
-                        onClick()
-                        true
-                    } else false
-                }
-                .clickable { onClick() }
-                .padding(vertical = 14.dp),
-            contentAlignment = Alignment.Center
-        ) {
+    NeonFocusBorder(focused = focus, cornerRadius = 12.dp, borderWidth = 3.dp, modifier = Modifier.fillMaxWidth().let { if (focusReq != null) it.focusRequester(focusReq) else it }) {
+        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (focus) GlassColors.AccentGlow else bg)
+            .onFocusChanged { focus = it.isFocused }.focusable()
+            .onPreviewKeyEvent { event -> if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) { onClick(); true } else false }
+            .clickable { onClick() }.padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
             Text(txt, color = if (focus) GlassColors.DeepBackground else Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
         }
     }
@@ -472,25 +349,11 @@ fun ApkFileListSection() {
                         scope.launch {
                             val info = UpdateManager.checkForUpdate(); isChecking = false
                             if (info.available) {
-                                isErrorResult = false
-                                checkResult = "✅ Update tersedia: ${info.latestVersion}"
-                                localUpdateInfo = info
+                                isErrorResult = false; checkResult = "✅ Update tersedia: ${info.latestVersion}"; localUpdateInfo = info
                                 val saved = UpdateDownloadService.getCompletedFilePath(ctx, info.latestVersion)
-                                if (saved != null) {
-                                    downloadReady = true
-                                    downloadProgress = 1f
-                                    isDownloading = false
-                                } else {
-                                    downloadReady = false
-                                    downloadProgress = 0f
-                                    isDownloading = false
-                                }
+                                if (saved != null) { downloadReady = true; downloadProgress = 1f; isDownloading = false } else { downloadReady = false; downloadProgress = 0f; isDownloading = false }
                                 showUpdateDialog = true
-                            } else {
-                                isErrorResult = true
-                                val msg = if (info.errorType != null) "Gagal cek: ${info.errorType}" else "Aplikasi sudah versi terbaru (${info.currentVersion})"
-                                checkResult = "❌ $msg"
-                            }
+                            } else { isErrorResult = true; val msg = if (info.errorType != null) "Gagal cek: ${info.errorType}" else "Aplikasi sudah versi terbaru (${info.currentVersion})"; checkResult = "❌ $msg" }
                         }
                     }
                     true
@@ -500,25 +363,11 @@ fun ApkFileListSection() {
                 scope.launch {
                     val info = UpdateManager.checkForUpdate(); isChecking = false
                     if (info.available) {
-                        isErrorResult = false
-                        checkResult = "✅ Update tersedia: ${info.latestVersion}"
-                        localUpdateInfo = info
+                        isErrorResult = false; checkResult = "✅ Update tersedia: ${info.latestVersion}"; localUpdateInfo = info
                         val saved = UpdateDownloadService.getCompletedFilePath(ctx, info.latestVersion)
-                        if (saved != null) {
-                            downloadReady = true
-                            downloadProgress = 1f
-                            isDownloading = false
-                        } else {
-                            downloadReady = false
-                            downloadProgress = 0f
-                            isDownloading = false
-                        }
+                        if (saved != null) { downloadReady = true; downloadProgress = 1f; isDownloading = false } else { downloadReady = false; downloadProgress = 0f; isDownloading = false }
                         showUpdateDialog = true
-                    } else {
-                        isErrorResult = true
-                        val msg = if (info.errorType != null) "Gagal cek: ${info.errorType}" else "Aplikasi sudah versi terbaru (${info.currentVersion})"
-                        checkResult = "❌ $msg"
-                    }
+                    } else { isErrorResult = true; val msg = if (info.errorType != null) "Gagal cek: ${info.errorType}" else "Aplikasi sudah versi terbaru (${info.currentVersion})"; checkResult = "❌ $msg" }
                 }
             }.padding(20.dp), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -551,28 +400,15 @@ fun ApkFileListSection() {
                 if (downloadReady || isError) {
                     if (isError) {
                         isError = false; downloadProgress = 0f; isDownloading = true
-                        localUpdateInfo!!.downloadUrl?.let {
-                            val cleanVer = localUpdateInfo!!.latestVersion.replace("[^a-zA-Z0-9._-]".toRegex(), "_")
-                            UpdateDownloadService.start(ctx, it, "HomeIO_${cleanVer}.apk", localUpdateInfo!!.latestVersion)
-                        }
+                        localUpdateInfo!!.downloadUrl?.let { val cleanVer = localUpdateInfo!!.latestVersion.replace("[^a-zA-Z0-9._-]".toRegex(), "_"); UpdateDownloadService.start(ctx, it, "HomeIO_${cleanVer}.apk", localUpdateInfo!!.latestVersion) }
                     } else {
-                        val path = UpdateDownloadService.getCompletedFilePath(ctx, localUpdateInfo!!.latestVersion)
-                            ?: UpdateDownloadService.readState(ctx).filePath
+                        val path = UpdateDownloadService.getCompletedFilePath(ctx, localUpdateInfo!!.latestVersion) ?: UpdateDownloadService.readState(ctx).filePath
                         if (path != null) {
-                            if (ApkDownloader.install(ctx, path)) {
-                                UpdateDownloadService.resetState(ctx)
-                                showUpdateDialog = false
-                            } else {
-                                Toast.makeText(ctx, "Beri izin install APK", Toast.LENGTH_LONG).show()
-                            }
+                            if (ApkDownloader.install(ctx, path)) { UpdateDownloadService.resetState(ctx); showUpdateDialog = false } else { Toast.makeText(ctx, "Beri izin install APK", Toast.LENGTH_LONG).show() }
                         } else { downloadReady = false; isError = true }
                     }
                 } else {
-                    localUpdateInfo!!.downloadUrl?.let {
-                        isDownloading = true; downloadProgress = 0f; downloadReady = false; isError = false
-                        val cleanVer = localUpdateInfo!!.latestVersion.replace("[^a-zA-Z0-9._-]".toRegex(), "_")
-                        UpdateDownloadService.start(ctx, it, "HomeIO_${cleanVer}.apk", localUpdateInfo!!.latestVersion)
-                    }
+                    localUpdateInfo!!.downloadUrl?.let { isDownloading = true; downloadProgress = 0f; downloadReady = false; isError = false; val cleanVer = localUpdateInfo!!.latestVersion.replace("[^a-zA-Z0-9._-]".toRegex(), "_"); UpdateDownloadService.start(ctx, it, "HomeIO_${cleanVer}.apk", localUpdateInfo!!.latestVersion) }
                 }
             }, onLater = { showUpdateDialog = false }, onSkip = { UpdatePrefs.setSkipped(ctx, localUpdateInfo!!.latestVersion); showUpdateDialog = false })
     }
