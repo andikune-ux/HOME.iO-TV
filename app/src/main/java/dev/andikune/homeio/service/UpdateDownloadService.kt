@@ -22,7 +22,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 class UpdateDownloadService : Service() {
-
     companion object {
         private const val TAG = "UpdateDownloadService"
         private const val CHANNEL_ID = "homeio_update_download"
@@ -76,19 +75,12 @@ class UpdateDownloadService : Service() {
             val state = readState(context)
             if (state.status != STATUS_COMPLETE || state.filePath == null) return null
             val file = java.io.File(state.filePath)
-            if (!file.exists() || !ApkDownloader.isValid(context, file)) {
-                resetState(context)
-                return null
-            }
+            if (!file.exists() || !ApkDownloader.isValid(context, file)) { resetState(context); return null }
             if (!expectedVersion.isNullOrBlank()) {
                 val matchesStored = state.version == expectedVersion
                 val archiveInfo = try { context.packageManager.getPackageArchiveInfo(file.absolutePath, 0) } catch (_: Exception) { null }
                 val matchesArchive = archiveInfo?.versionName == expectedVersion
-                if (!matchesStored && !matchesArchive) {
-                    try { file.delete() } catch (_: Exception) {}
-                    resetState(context)
-                    return null
-                }
+                if (!matchesStored && !matchesArchive) { try { file.delete() } catch (_: Exception) {}; resetState(context); return null }
             }
             return state.filePath
         }
@@ -101,11 +93,7 @@ class UpdateDownloadService : Service() {
                 .putFloat(KEY_PROGRESS, progress.coerceIn(0f, 1f))
                 .putString(KEY_FILE_PATH, filePath)
                 .putString(KEY_ERROR, error)
-            if (version != null) {
-                editor.putString(KEY_VERSION, version)
-            } else if (status == STATUS_IDLE) {
-                editor.remove(KEY_VERSION)
-            }
+            if (version != null) editor.putString(KEY_VERSION, version) else if (status == STATUS_IDLE) editor.remove(KEY_VERSION)
             editor.commit()
         }
 
