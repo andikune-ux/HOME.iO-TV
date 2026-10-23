@@ -39,6 +39,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -62,6 +67,7 @@ import dev.andikune.homeio.presentation.onboarding.OnboardingPermissionDialog
 import dev.andikune.homeio.presentation.onboarding.QrisDonationPopup
 import dev.andikune.homeio.presentation.screensaver.ScreensaverActivity
 import dev.andikune.homeio.presentation.settings.SettingsScreen
+import dev.andikune.homeio.presentation.settings.SystemControlScreen
 import dev.andikune.homeio.receiver.UsbReceiver
 import dev.andikune.homeio.service.UpdateDownloadService
 import dev.andikune.homeio.util.*
@@ -90,7 +96,11 @@ class MainActivity : ComponentActivity() {
 
                 var crashLog by remember { mutableStateOf<String?>(null) }
                 var isSplashFinished by remember { mutableStateOf(false) }
+                
+                // STATE NAVIGASI
                 var isSettingsOpen by remember { mutableStateOf(false) }
+                var isSystemControlOpen by remember { mutableStateOf(false) } // Screen Control Baru
+                
                 var showOnboarding by remember { mutableStateOf(false) }
                 var showQrisPopup by remember { mutableStateOf(false) }
                 var showLauncherPrompt by remember { 
@@ -104,10 +114,14 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(Unit) {
                     if (!OnboardingPrefs.isCompleted(context)) showOnboarding = true
                 }
-                
-                // Logika: Munculkan QRIS setelah Onboarding selesai
-                LaunchedEffect(showOnboarding, isSplashFinished) {
-                    if (!showOnboarding && isSplashFinished && !OnboardingPrefs.hasAskedLauncher(context)) {
+
+                // ALUR POP-UP YANG SUDAH DIPERBAIKI
+                // 1. Onboarding selesai
+                // 2. Launcher Prompt (Jika belum default & belum ditanya)
+                // 3. QRIS Popup (SETIAP KALI BUKA, tapi tunggu launcher selesai)
+                // 4. Update Dialog (Jika ada update)
+                LaunchedEffect(showOnboarding, showLauncherPrompt, isSplashFinished) {
+                    if (!showOnboarding && !showLauncherPrompt && isSplashFinished) {
                         showQrisPopup = true
                     }
                 }
@@ -140,13 +154,16 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                // PAUSE SCREENSAVER SAAT ADA DIALOG (QRIS, LAUNCHER, ONBOARDING, UPDATE)
                 screensaverTimeoutMs = if (!config.screensaverEnabled) 0L else (config.screensaverTimeoutMinutes * 60 * 1000L)
-                LaunchedEffect(screensaverTimeoutMs) {
+                LaunchedEffect(screensaverTimeoutMs, showQrisPopup, showOnboarding, showLauncherPrompt, showUpdateDialog) {
                     if (screensaverTimeoutMs <= 0L) return@LaunchedEffect
+                    if (showQrisPopup || showOnboarding || showLauncherPrompt || showUpdateDialog) return@LaunchedEffect // Jeda hitung
+                    
                     while (true) {
                         delay(5000)
                         val elapsed = System.currentTimeMillis() - lastUserInteractionTime
-                        if (elapsed >= screensaverTimeoutMs && !isSettingsOpen && crashLog == null && isSplashFinished && !showUpdateDialog && !showOnboarding && !showQrisPopup) {
+                        if (elapsed >= screensaverTimeoutMs && !isSettingsOpen && !isSystemControlOpen && crashLog == null && isSplashFinished) {
                             try { startActivity(Intent(this@MainActivity, ScreensaverActivity::class.java)) } catch (_: Exception) {}
                             lastUserInteractionTime = System.currentTimeMillis()
                         }
@@ -177,15 +194,17 @@ class MainActivity : ComponentActivity() {
                                 weatherInfo = WeatherInfo(cw.temperature, cw.weathercode, desc, config.weatherLocation)
                             }
                         } catch (_: Exception) {
-                            if (weatherInfo == null) weatherInfo = WeatherInfo(29.0, 1, "Partly Cloudy", config.weatherLocation)
+                            // JIKA GAGAL FETCH (Offline), JANGAN TAMPILKAN SUHU PALSU
+                            // Cukup set null agar UI menampilkan "--°C"
+                            weatherInfo = null 
                         }
                         delay(30 * 60 * 1000L)
                     }
                 }
 
                 // CEK UPDATE (Ditunda jika QRIS muncul)
-                LaunchedEffect(isSplashFinished, showQrisPopup, showOnboarding) {
-                    if (!isSplashFinished || showQrisPopup || showOnboarding) return@LaunchedEffect
+                LaunchedEffect(isSplashFinished, showQrisPopup, showOnboarding, showLauncherPrompt) {
+                    if (!isSplashFinished || showQrisPopup || showOnboarding || showLauncherPrompt) return@LaunchedEffect
                     try {
                         val info = UpdateManager.checkForUpdate()
                         if (info.available) {
@@ -197,7 +216,7 @@ class MainActivity : ComponentActivity() {
                                 isDownloading = false
                                 showUpdateDialog = true
                             } else if (UpdatePrefs.shouldShow(context, info.latestVersion, info.isForceUpdate)) {
-                                UpdatePrefs.markChecked(context)
+                                UpdatePrefs.markChecked(context) // Tandai sudah cek
                                 updateInfo = info
                                 downloadProgress = 0f
                                 downloadReady = false
@@ -231,11 +250,12 @@ class MainActivity : ComponentActivity() {
                     onDispose { context.unregisterReceiver(receiver) }
                 }
 
-                BackHandler(enabled = isSettingsOpen || showUpdateDialog || showOnboarding || showQrisPopup) { 
+                BackHandler(enabled = isSettingsOpen || isSystemControlOpen || showUpdateDialog || showOnboarding || showQrisPopup) { 
                     if (showUpdateDialog && updateInfo?.isForceUpdate == true) return@BackHandler
-                    if (showQrisPopup) return@BackHandler // Tidak bisa back jika QRIS muncul
+                    if (showQrisPopup) return@BackHandler
                     if (showOnboarding) return@BackHandler
                     if (isSettingsOpen) isSettingsOpen = false
+                    else if (isSystemControlOpen) isSystemControlOpen = false
                     else if (showUpdateDialog) showUpdateDialog = false
                 }
 
@@ -245,23 +265,36 @@ class MainActivity : ComponentActivity() {
                         OnboardingPrefs.markCompleted(context); showOnboarding = false 
                     }
                     !isSplashFinished -> SplashScreen { isSplashFinished = true }
-                    isSettingsOpen -> SettingsScreen(config, { updated -> scope.launch { appContainer.preferencesManager.updateSettings(updated) } }, onBack = { isSettingsOpen = false })
+                    
+                    // NAVIGASI KE SYSTEM CONTROL
+                    isSystemControlOpen -> SystemControlScreen(
+                        config = config,
+                        onUpdateConfig = { updated -> scope.launch { appContainer.preferencesManager.updateSettings(updated) } },
+                        onBack = { isSystemControlOpen = false }
+                    )
+                    isSettingsOpen -> SettingsScreen(
+                        currentConfig = config, 
+                        onSaveConfig = { updated -> scope.launch { appContainer.preferencesManager.updateSettings(updated) } }, 
+                        onBack = { isSettingsOpen = false }
+                    )
                     else -> HomeScreen(
                         config = config,
                         allApps = installedApps,
                         weatherInfo = weatherInfo,
                         onOpenSettings = { isSettingsOpen = true },
+                        onOpenSystemControl = { isSystemControlOpen = true }, // Lempar ke System Control
                         onSaveConfig = { updated -> scope.launch { appContainer.preferencesManager.updateSettings(updated) } },
                         openFileManagerTrigger = pendingFileManagerTrigger,
                         onFileManagerOpened = { pendingFileManagerTrigger = false }
                     )
                 }
 
-                // QRIS POPUP OVERLAY
+                // QRIS POPUP OVERLAY (Muncul setiap buka)
                 if (showQrisPopup) {
                     QrisDonationPopup(onDismiss = { showQrisPopup = false })
                 }
 
+                // LAUNCHER PROMPT OVERLAY
                 if (showLauncherPrompt && isSplashFinished && !showOnboarding && !showQrisPopup) {
                     DefaultLauncherDialog(
                         onDismiss = { 
@@ -271,6 +304,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
+                // UPDATE DIALOG OVERLAY
                 if (showUpdateDialog && updateInfo != null && !showQrisPopup) {
                     UpdateDialog(
                         info = updateInfo!!, progress = downloadProgress, isDownloading = isDownloading, isReady = downloadReady, isError = isError,
@@ -323,7 +357,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onResume() { super.onResume(); lastUserInteractionTime = System.currentTimeMillis(); KioskManager.isMainActivityForeground = true }
+    override fun onResume() { 
+        super.onResume()
+        lastUserInteractionTime = System.currentTimeMillis()
+        KioskManager.isMainActivityForeground = true 
+        
+        // PENGECEKAN IZIN DICABUT (Security Exception Handler)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
+            // Jika izin storage dicabut, kita biarkan UI yang menangani
+        }
+    }
+    
     override fun onPause() { super.onPause(); KioskManager.isMainActivityForeground = false }
     override fun onUserInteraction() { super.onUserInteraction(); lastUserInteractionTime = System.currentTimeMillis() }
     
@@ -332,11 +376,13 @@ class MainActivity : ComponentActivity() {
         SoundFeedback.release()
     }
 
+    // HAPUS DOUBLE BEEP UNTUK OK/ENTER (Biarkan UI yang mengurus suara)
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         lastUserInteractionTime = System.currentTimeMillis()
         if (event.action == KeyEvent.ACTION_DOWN) {
             when (event.keyCode) {
-                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> SoundFeedback.playClick(this)
+                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> SoundFeedback.playClick(this)
+                // KEYCODE_DPAD_CENTER dan KEYCODE_ENTER dihapus dari sini agar tidak double dengan HomeScreen/UI
             }
         }
         return super.dispatchKeyEvent(event)
@@ -351,32 +397,24 @@ fun DefaultLauncherDialog(onDismiss: () -> Unit) {
     var isFocusedBtn by remember { mutableStateOf(false) }
     var isFocusedSkip by remember { mutableStateOf(false) }
     
-    LaunchedEffect(Unit) { 
-        delay(400); 
-        runCatching { focusReq.requestFocus() } 
-    }
+    LaunchedEffect(Unit) { delay(400); runCatching { focusReq.requestFocus() } }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
-            Column(
-                Modifier.fillMaxWidth(0.85f).liquidGlass(cornerRadius = 20.dp).padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            Column(Modifier.fillMaxWidth(0.85f).liquidGlass(cornerRadius = 20.dp).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(Icons.Default.Home, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(56.dp))
                 Spacer(Modifier.height(16.dp))
                 Text("JADIKAN LAUNCHER UTAMA", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = GlassColors.AccentGlow)
                 Spacer(Modifier.height(8.dp))
-                // Update tulisan menjadi HOME.iO
                 Text("Agar tombol HOME di remote selalu membuka HOME.iO.", fontSize = 13.sp, color = GlassColors.TextSecondary, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(24.dp))
                 
                 NeonFocusBorder(focused = isFocusedBtn, cornerRadius = 12.dp, modifier = Modifier.fillMaxWidth()) {
                     Box(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                            .background(if (isFocusedBtn) GlassColors.AccentGlow else GlassColors.GlassTint)
-                            .focusRequester(focusReq).onFocusChanged { isFocusedBtn = it.isFocused }.focusable().clickable {
-                                LauncherHelper.openLauncherChooser(context); onDismiss()
-                            }.padding(14.dp),
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (isFocusedBtn) GlassColors.AccentGlow else GlassColors.GlassTint)
+                            .focusRequester(focusReq).onFocusChanged { isFocusedBtn = it.isFocused }.focusable()
+                            .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { LauncherHelper.openLauncherChooser(context); onDismiss(); true } else false }
+                            .clickable { LauncherHelper.openLauncherChooser(context); onDismiss() }.padding(14.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text("JADIKAN LAUNCHER SEKARANG", color = if (isFocusedBtn) GlassColors.DeepBackground else Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
@@ -386,7 +424,7 @@ fun DefaultLauncherDialog(onDismiss: () -> Unit) {
                 Spacer(modifier = Modifier.height(12.dp))
                 
                 NeonFocusBorder(focused = isFocusedSkip, cornerRadius = 12.dp, modifier = Modifier.fillMaxWidth()) {
-                    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (isFocusedSkip) Color(0x33FFFFFF) else Color.Transparent).onFocusChanged { isFocusedSkip = it.isFocused }.focusable().clickable { onDismiss() }.padding(12.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (isFocusedSkip) Color(0x33FFFFFF) else Color.Transparent).onFocusChanged { isFocusedSkip = it.isFocused }.focusable().onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onDismiss(); true } else false }.clickable { onDismiss() }.padding(12.dp), contentAlignment = Alignment.Center) {
                         Text("NANTI SAJA", color = if (isFocusedSkip) Color.White else GlassColors.TextSecondary, fontSize = 13.sp)
                     }
                 }
@@ -408,30 +446,13 @@ fun SplashScreen(onFinish: () -> Unit) {
         onFinish()
     }
 
-    Box(
-        Modifier.fillMaxSize().background(GlassColors.DeepBackgroundGradient),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.alpha(alphaAnim.value).scale(scaleAnim.value)
-        ) {
-            Box(
-                Modifier.size(120.dp).liquidGlass(cornerRadius = 36.dp, isFocused = true),
-                contentAlignment = Alignment.Center
-            ) {
+    Box(Modifier.fillMaxSize().background(GlassColors.DeepBackgroundGradient), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.alpha(alphaAnim.value).scale(scaleAnim.value)) {
+            Box(Modifier.size(120.dp).liquidGlass(cornerRadius = 36.dp, isFocused = true), contentAlignment = Alignment.Center) {
                 Icon(Icons.Default.Home, "Logo", tint = GlassColors.AccentGlow, modifier = Modifier.size(64.dp))
             }
             Spacer(Modifier.height(24.dp))
-            // Update tulisan Splash Screen
-            Text(
-                "HOME.iO",
-                color = Color.White,
-                fontSize = 36.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 2.sp,
-                style = TextStyle(shadow = Shadow(color = GlassColors.AccentGlow, blurRadius = 20f))
-            )
+            Text("HOME.iO", color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp, style = TextStyle(shadow = Shadow(color = GlassColors.AccentGlow, blurRadius = 20f)))
             Spacer(Modifier.height(8.dp))
             Text("Liquid Glass Launcher", color = GlassColors.TextSecondary, fontSize = 14.sp, letterSpacing = 1.sp)
         }
