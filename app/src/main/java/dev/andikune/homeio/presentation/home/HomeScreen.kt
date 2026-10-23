@@ -11,9 +11,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
-import android.media.AudioManager
-import android.net.wifi.WifiManager
-import android.os.Build
 import android.provider.Settings
 import android.util.LruCache
 import android.widget.Toast
@@ -46,7 +43,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -94,7 +91,7 @@ import kotlinx.coroutines.withContext
 import java.util.Date
 import kotlin.math.abs
 
-// CACHE MEMORI IKON APLIKASI
+// OPTIMASI CACHE MEMORI
 private val maxMemory = (Runtime.getRuntime().maxMemory() / 1024).toInt()
 private val cacheSize = maxMemory / 8
 private val iconCache = LruCache<String, Bitmap>(cacheSize)
@@ -105,7 +102,7 @@ fun HomeScreen(
     allApps: List<AppItem>,
     weatherInfo: WeatherInfo?,
     onOpenSettings: () -> Unit,
-    onOpenSystemControl: () -> Unit, // Callback baru untuk System Control
+    onOpenSystemControl: () -> Unit,
     onSaveConfig: (SettingsConfig) -> Unit,
     openFileManagerTrigger: Boolean = false,
     onFileManagerOpened: () -> Unit = {}
@@ -121,6 +118,7 @@ fun HomeScreen(
     val paneFocusRequester = remember { FocusRequester() }
     val firstMenuItemFocusRequester = remember { FocusRequester() }
     val hamburgerFocusRequester = remember { FocusRequester() }
+    val carouselFocusRequester = remember { FocusRequester() }
 
     var selectedNav by remember { mutableStateOf("home") }
     var showSearchDialog by remember { mutableStateOf(false) }
@@ -130,7 +128,6 @@ fun HomeScreen(
 
     val notifications by LauncherNotificationService.notifications.collectAsState()
 
-    // KEMBALIKAN FOKUS KE HAMBURGER SETELAH MENU DITUTUP
     LaunchedEffect(isPaneOpen) {
         if (!isPaneOpen) {
             delay(400)
@@ -194,31 +191,30 @@ fun HomeScreen(
 
         Box(Modifier.fillMaxSize().padding(safePadding)) {
             
-            // ============================================================
-            // SYSTEM CONTROL BAR (Pojok Kiri Atas)
-            // ============================================================
+            // SYSTEM CONTROL BAR (Ikon Premium)
             Row(
-                modifier = Modifier.align(Alignment.TopStart).padding(top = 16.dp, start = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.align(Alignment.TopStart).padding(top = 16.dp, start = 16.dp).focusGroup(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                SystemControlIcon(
-                    icon = Icons.Default.Lock,
-                    tint = GlassColors.AccentRed,
-                    onClick = { 
-                        // Langsung matikan Kiosk jika sedang menyala (Bypass darurat)
-                        val newKiosk = !config.isKioskModeEnabled
-                        onSaveConfig(config.copy(isKioskModeEnabled = newKiosk)) 
-                    }
-                )
-                SystemControlIcon(icon = Icons.Default.Wifi, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
-                SystemControlIcon(icon = Icons.Default.Bluetooth, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
-                SystemControlIcon(icon = Icons.Default.VolumeUp, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
-                SystemControlIcon(icon = Icons.Default.BrightnessMedium, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
-                SystemControlIcon(icon = Icons.Default.OpenInNew, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
+                // 1. Kiosk (Merah)
+                SystemControlIcon(icon = Icons.Rounded.Shield, tint = GlassColors.AccentRed, onClick = { 
+                    val newKiosk = !config.isKioskModeEnabled
+                    onSaveConfig(config.copy(isKioskModeEnabled = newKiosk)) 
+                })
+                // 2. WiFi
+                SystemControlIcon(icon = Icons.Rounded.Wifi, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
+                // 3. Bluetooth
+                SystemControlIcon(icon = Icons.Rounded.Bluetooth, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
+                // 4. Volume
+                SystemControlIcon(icon = Icons.Rounded.GraphicEq, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
+                // 5. Brightness
+                SystemControlIcon(icon = Icons.Rounded.WbSunny, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
+                // 6. Shortcut
+                SystemControlIcon(icon = Icons.Rounded.Dashboard, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
             }
 
-            // WIDGET KANAN ATAS (Jam, Cuaca, RAM)
+            // WIDGET KANAN ATAS
             Column(
                 modifier = Modifier.align(Alignment.TopEnd).padding(top = 16.dp, end = 24.dp),
                 horizontalAlignment = Alignment.End,
@@ -229,39 +225,32 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.width(16.dp))
                     var isSettingsFocused by remember { mutableStateOf(false) }
                     Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
+                        modifier = Modifier.size(48.dp).clip(CircleShape)
                             .background(if (isSettingsFocused) GlassColors.GlassTintLighter else GlassColors.GlassTint)
-                            .onFocusChanged { isSettingsFocused = it.isFocused }
-                            .focusable()
-                            .onPreviewKeyEvent { event ->
-                                if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) {
-                                    SoundFeedback.playClick(context); onOpenSettings(); true
-                                } else false
-                            }
+                            .onFocusChanged { isSettingsFocused = it.isFocused }.focusable()
+                            .onPreviewKeyEvent { event -> if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) { SoundFeedback.playClick(context); onOpenSettings(); true } else false }
                             .clickable { SoundFeedback.playClick(context); onOpenSettings() },
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.Settings, "Pengaturan", tint = if (isSettingsFocused) GlassColors.AccentGlow else Color.White, modifier = Modifier.size(28.dp))
+                        Icon(Icons.Rounded.Settings, "Pengaturan", tint = if (isSettingsFocused) GlassColors.AccentGlow else Color.White, modifier = Modifier.size(28.dp))
                     }
                 }
                 
                 Text(currentDateString, color = GlassColors.TextSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.WbSunny, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Rounded.WbSunny, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("${weatherInfo?.temperature?.toInt() ?: "--"}°C • ${weatherInfo?.locationName ?: "Jakarta"}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Memory, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Rounded.Memory, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("${memInfo.freeMemMb} MB Free", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 }
             }
 
-            // KONTEN BAWAH (Favorit & Carousel)
+            // KONTEN BAWAH
             Column(
                 modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 80.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
@@ -273,6 +262,7 @@ fun HomeScreen(
                         apps = displayApps,
                         iconSizeMultiplier = config.appIconSizeMultiplier,
                         screenWidth = screenWidth,
+                        focusRequester = carouselFocusRequester,
                         onAppClick = { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) },
                         onAppLongClick = { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app },
                         onEdgeLeftReached = { isPaneOpen = true },
@@ -281,28 +271,19 @@ fun HomeScreen(
                 }
             }
         }
-
-        // TOMBOL HAMBURGER
+                // TOMBOL HAMBURGER
         var isTriggerFocused by remember { mutableStateOf(false) }
         Box(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .padding(start = 16.dp)
-                .size(48.dp)
-                .zIndex(10f)
-                .clip(CircleShape)
+            modifier = Modifier.align(Alignment.CenterStart).padding(start = 16.dp).size(48.dp).zIndex(10f).clip(CircleShape)
                 .background(if (isTriggerFocused) GlassColors.GlassTintLighter else GlassColors.GlassTint)
                 .focusRequester(hamburgerFocusRequester)
-                .onFocusChanged { isTriggerFocused = it.isFocused }
-                .focusable()
-                .onPreviewKeyEvent { event ->
-                    if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) {
-                        SoundFeedback.playClick(context)
-                        isPaneOpen = !isPaneOpen
-                        if (isPaneOpen) scope.launch { delay(350); runCatching { firstMenuItemFocusRequester.requestFocus() } }
-                        true
-                    } else false
-                }
+                .onFocusChanged { isTriggerFocused = it.isFocused }.focusable()
+                .onPreviewKeyEvent { event -> if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) {
+                    SoundFeedback.playClick(context)
+                    isPaneOpen = !isPaneOpen
+                    if (isPaneOpen) scope.launch { delay(350); runCatching { firstMenuItemFocusRequester.requestFocus() } }
+                    true
+                } else false }
                 .combinedClickable(onClick = {
                     SoundFeedback.playClick(context)
                     isPaneOpen = !isPaneOpen
@@ -310,7 +291,7 @@ fun HomeScreen(
                 }),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Menu, "Menu", tint = if (isTriggerFocused) GlassColors.AccentGlow else Color.White)
+            Icon(Icons.Rounded.Menu, "Menu", tint = if (isTriggerFocused) GlassColors.AccentGlow else Color.White)
         }
 
         // SLIDING PANE OVERLAY
@@ -320,41 +301,18 @@ fun HomeScreen(
             exit = slideOutHorizontally(targetOffsetX = { -it }) + fadeOut()
         ) {
             Row(Modifier.fillMaxSize()) {
-                Box(
-                    Modifier.fillMaxHeight().width(280.dp).focusGroup().focusRequester(paneFocusRequester)
-                ) {
+                Box(Modifier.fillMaxHeight().width(280.dp).focusGroup().focusRequester(paneFocusRequester)) {
                     LeftNavigationGlassPanel(
                         selectedNav, isSideloadOnly,
                         notifications = notifications,
                         firstItemFocusRequester = firstMenuItemFocusRequester,
                         onSearchClick = { SoundFeedback.playClick(context); showSearchDialog = true },
-                        onNotificationPermissionClick = { 
-                            try { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) } catch (_: Exception) {}
-                        },
-                        onNotificationClick = { sbn ->
-                            SoundFeedback.playClick(context)
-                            try {
-                                val intent = sbn.notification.contentIntent
-                                if (intent != null) { intent.send(); isPaneOpen = false }
-                            } catch (e: PendingIntent.CanceledException) {
-                                Toast.makeText(context, "Gagal membuka notifikasi", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        onClearNotification = { sbn ->
-                            // Menghapus notifikasi via Intent cancel
-                            val service = LauncherNotificationService()
-                            service.removeNotification(sbn)
-                        },
-                        onClearAllNotifications = {
-                            val service = LauncherNotificationService()
-                            service.removeAllNotifications()
-                        },
+                        onNotificationPermissionClick = { try { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) } catch (_: Exception) {} },
+                        onNotificationClick = { sbn -> SoundFeedback.playClick(context); try { sbn.notification.contentIntent?.send(); isPaneOpen = false } catch (e: PendingIntent.CanceledException) { Toast.makeText(context, "Gagal membuka", Toast.LENGTH_SHORT).show() } },
+                        onClearNotification = { sbn -> LauncherNotificationService().removeNotification(sbn) },
+                        onClearAllNotifications = { LauncherNotificationService().removeAllNotifications() },
                         onHomeClick = { SoundFeedback.playClick(context); selectedNav = "home"; isSideloadOnly = false },
-                        onRamBoostClick = { 
-                            SoundFeedback.playClick(context)
-                            memInfo = SystemUtils.boostRam(context)
-                            Toast.makeText(context, "RAM Berhasil Dioptimalkan!", Toast.LENGTH_SHORT).show()
-                        },
+                        onRamBoostClick = { SoundFeedback.playClick(context); memInfo = SystemUtils.boostRam(context); Toast.makeText(context, "RAM Dioptimalkan!", Toast.LENGTH_SHORT).show() },
                         onFileManagerClick = { SoundFeedback.playClick(context); showFileManager = true },
                         onSideloadToggleClick = { SoundFeedback.playClick(context); isSideloadOnly = !isSideloadOnly },
                         onSettingsClick = { SoundFeedback.playClick(context); onOpenSettings() },
@@ -362,17 +320,14 @@ fun HomeScreen(
                         onPaneClose = { isPaneOpen = false }
                     )
                 }
-                Box(
-                    Modifier.fillMaxHeight().weight(1f).background(Color.Black.copy(alpha = 0.5f)).clickable { isPaneOpen = false }
-                )
+                Box(Modifier.fillMaxHeight().weight(1f).background(Color.Black.copy(alpha = 0.5f)).clickable { isPaneOpen = false })
             }
         }
 
         // OVERLAY GRID
         if (showAllAppsOverlay) {
             AllAppsGridOverlay(
-                apps = displayApps,
-                iconSizeMultiplier = config.appIconSizeMultiplier,
+                apps = displayApps, iconSizeMultiplier = config.appIconSizeMultiplier,
                 onDismiss = { showAllAppsOverlay = false },
                 onAppClick = { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) },
                 onAppLongClick = { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app }
@@ -381,32 +336,27 @@ fun HomeScreen(
     }
 }
 
-// ICON SYSTEM CONTROL
 @Composable
 fun SystemControlIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, onClick: () -> Unit) {
     var isFocused by remember { mutableStateOf(false) }
     NeonFocusBorder(focused = isFocused, cornerRadius = 10.dp) {
         Box(
-            Modifier.size(36.dp).clip(RoundedCornerShape(10.dp))
+            Modifier.size(38.dp).clip(RoundedCornerShape(10.dp))
                 .background(if (isFocused) GlassColors.GlassTintLighter else GlassColors.GlassTint)
+                .border(1.dp, if (isFocused) GlassColors.AccentGlow else GlassColors.GlassBorder, RoundedCornerShape(10.dp))
                 .onFocusChanged { isFocused = it.isFocused }.focusable()
-                .onPreviewKeyEvent { e -> 
-                    if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { 
-                        onClick(); true 
-                    } else false 
-                }
+                .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onClick(); true } else false }
                 .clickable { onClick() },
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp))
+            Icon(icon, null, tint = tint, modifier = Modifier.size(22.dp))
         }
     }
 }
 
-// CAROUSEL (LOGIKA ANTI-STUTTER DIPERBAIKI)
 @Composable
 fun AllAppsCenterCarousel(
-    apps: List<AppItem>, iconSizeMultiplier: Float, screenWidth: Dp,
+    apps: List<AppItem>, iconSizeMultiplier: Float, screenWidth: Dp, focusRequester: FocusRequester,
     onAppClick: (AppItem) -> Unit, onAppLongClick: (AppItem) -> Unit,
     onEdgeLeftReached: () -> Unit, onEdgeRightOrDownReached: () -> Unit
 ) {
@@ -431,9 +381,7 @@ fun AllAppsCenterCarousel(
     var isProcessingKey by remember { mutableStateOf(false) }
 
     LaunchedEffect(lazyListState.isScrollInProgress) {
-        if (!lazyListState.isScrollInProgress) {
-            delay(150); isProcessingKey = false
-        }
+        if (!lazyListState.isScrollInProgress) { delay(150); isProcessingKey = false }
     }
     LaunchedEffect(centeredIndex) {
         if (lazyListState.isScrollInProgress) return@LaunchedEffect
@@ -445,19 +393,17 @@ fun AllAppsCenterCarousel(
             state = lazyListState, flingBehavior = flingBehavior,
             contentPadding = PaddingValues(horizontal = horizontalPadding),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.fillMaxSize().focusGroup()
+            modifier = Modifier.fillMaxSize().focusRequester(focusRequester).focusGroup()
                 .onPreviewKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown) {
                         when (event.key) {
                             Key.DirectionLeft -> {
                                 if (isProcessingKey || lazyListState.isScrollInProgress) return@onPreviewKeyEvent true
-                                if (centeredIndex == 0) { onEdgeLeftReached(); true } 
-                                else { isProcessingKey = true; true }
+                                if (centeredIndex == 0) { onEdgeLeftReached(); true } else { isProcessingKey = true; true }
                             }
                             Key.DirectionRight -> {
                                 if (isProcessingKey || lazyListState.isScrollInProgress) return@onPreviewKeyEvent true
-                                if (centeredIndex == apps.size - 1) { onEdgeRightOrDownReached(); true } 
-                                else { isProcessingKey = true; true }
+                                if (centeredIndex == apps.size - 1) { onEdgeRightOrDownReached(); true } else { isProcessingKey = true; true }
                             }
                             Key.DirectionDown -> { onEdgeRightOrDownReached(); true }
                             Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
@@ -469,9 +415,7 @@ fun AllAppsCenterCarousel(
                             }
                             else -> false
                         }
-                    } else if (event.type == KeyEventType.KeyUp) {
-                        isProcessingKey = false; false
-                    } else false
+                    } else if (event.type == KeyEventType.KeyUp) { isProcessingKey = false; false } else false
                 }
         ) {
             items(apps) { app ->
@@ -480,13 +424,12 @@ fun AllAppsCenterCarousel(
                     app = app, iconSizeMultiplier = iconSizeMultiplier,
                     modifier = Modifier.width(cardWidth).height(120.dp),
                     isCenterFocused = isCentered, useNativeFocus = false,
-                    onClick = { /* Dihandle oleh onPreviewKeyEvent */ }, onLongClick = { onAppLongClick(app) }
+                    onClick = { }, onLongClick = { onAppLongClick(app) }
                 )
             }
         }
     }
 }
-
 @Composable
 fun FavoriteAppsSection(favoriteApps: List<AppItem>, iconSizeMultiplier: Float, onAppClick: (AppItem) -> Unit, onAppLongClick: (AppItem) -> Unit) {
     Column {
@@ -544,9 +487,7 @@ fun AppCardItem(
                             .onPreviewKeyEvent { event ->
                                 if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) {
                                     isPressedManual = true; onClick(); true
-                                } else if (event.type == KeyEventType.KeyUp) {
-                                    isPressedManual = false; false
-                                } else false
+                                } else if (event.type == KeyEventType.KeyUp) { isPressedManual = false; false } else false
                             }
                     } else Modifier
                 )
@@ -569,7 +510,6 @@ fun AppCardItem(
     }
 }
 
-// GRID OVERLAY
 @Composable
 fun AllAppsGridOverlay(apps: List<AppItem>, iconSizeMultiplier: Float, onDismiss: () -> Unit, onAppClick: (AppItem) -> Unit, onAppLongClick: (AppItem) -> Unit) {
     val firstFocusRequester = remember { FocusRequester() }
@@ -580,15 +520,9 @@ fun AllAppsGridOverlay(apps: List<AppItem>, iconSizeMultiplier: Float, onDismiss
             Column(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("SEMUA APLIKASI (${apps.size})", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                    Box(
-                        Modifier.size(40.dp).clip(CircleShape).background(GlassColors.GlassTint)
-                            .focusable()
-                            .onPreviewKeyEvent { event ->
-                                if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) { onDismiss(); true } else false
-                            }
-                            .clickable { onDismiss() },
-                        contentAlignment = Alignment.Center
-                    ) { Icon(Icons.Default.Close, "Tutup", tint = Color.White) }
+                    Box(Modifier.size(40.dp).clip(CircleShape).background(GlassColors.GlassTint).focusable()
+                        .onPreviewKeyEvent { event -> if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) { onDismiss(); true } else false }
+                        .clickable { onDismiss() }, contentAlignment = Alignment.Center) { Icon(Icons.Default.Close, "Tutup", tint = Color.White) }
                 }
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = (100.dp * iconSizeMultiplier).coerceAtLeast(80.dp)),
@@ -598,10 +532,7 @@ fun AllAppsGridOverlay(apps: List<AppItem>, iconSizeMultiplier: Float, onDismiss
                     items(apps, key = { it.packageName }) { app ->
                         var isFirst by remember { mutableStateOf(app == apps.firstOrNull()) }
                         Box(modifier = if (isFirst) Modifier.focusRequester(firstFocusRequester) else Modifier) {
-                            AppCardItem(
-                                app = app, iconSizeMultiplier = iconSizeMultiplier, modifier = Modifier.height(120.dp),
-                                isCenterFocused = false, useNativeFocus = true, onClick = { onAppClick(app) }, onLongClick = { onAppLongClick(app) }
-                            )
+                            AppCardItem(app = app, iconSizeMultiplier = iconSizeMultiplier, modifier = Modifier.height(120.dp), isCenterFocused = false, useNativeFocus = true, onClick = { onAppClick(app) }, onLongClick = { onAppLongClick(app) })
                         }
                     }
                 }
@@ -610,19 +541,14 @@ fun AllAppsGridOverlay(apps: List<AppItem>, iconSizeMultiplier: Float, onDismiss
     }
 }
 
-// PANEL KIRI (DENGAN NOTIFIKASI LAZY & HAPUS)
 @Composable
 fun LeftNavigationGlassPanel(
-    selectedNav: String, isSideloadActive: Boolean,
-    notifications: List<android.service.notification.StatusBarNotification>,
-    firstItemFocusRequester: FocusRequester,
-    onSearchClick: () -> Unit, onNotificationPermissionClick: () -> Unit,
+    selectedNav: String, isSideloadActive: Boolean, notifications: List<android.service.notification.StatusBarNotification>,
+    firstItemFocusRequester: FocusRequester, onSearchClick: () -> Unit, onNotificationPermissionClick: () -> Unit,
     onNotificationClick: (android.service.notification.StatusBarNotification) -> Unit,
-    onClearNotification: (android.service.notification.StatusBarNotification) -> Unit,
-    onClearAllNotifications: () -> Unit,
+    onClearNotification: (android.service.notification.StatusBarNotification) -> Unit, onClearAllNotifications: () -> Unit,
     onHomeClick: () -> Unit, onRamBoostClick: () -> Unit, onFileManagerClick: () -> Unit,
-    onSideloadToggleClick: () -> Unit, onSettingsClick: () -> Unit,
-    onSystemControlClick: () -> Unit, onPaneClose: () -> Unit
+    onSideloadToggleClick: () -> Unit, onSettingsClick: () -> Unit, onSystemControlClick: () -> Unit, onPaneClose: () -> Unit
 ) {
     Column(Modifier.fillMaxHeight().liquidGlass(cornerRadius = 0.dp, borderWidth = 0.dp).padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp, top = 4.dp)) {
@@ -633,32 +559,21 @@ fun LeftNavigationGlassPanel(
         
         Box(Modifier.focusRequester(firstItemFocusRequester)) { GlassNavButton(Icons.Default.Search, stringResource(R.string.nav_search), false, onSearchClick) }
 
-        // NOTIFIKASI BAGIAN
         if (notifications.isEmpty()) {
             var isFocusedBtn by remember { mutableStateOf(false) }
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (isFocusedBtn) GlassColors.AccentAmber.copy(alpha = 0.3f) else GlassColors.AccentAmber.copy(alpha = 0.15f)).border(1.dp, GlassColors.AccentAmber, RoundedCornerShape(14.dp)).onFocusChanged { isFocusedBtn = it.isFocused }.focusable().onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onNotificationPermissionClick(); true } else false }.clickable { onNotificationPermissionClick() }.padding(12.dp)) {
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (isFocusedBtn) GlassColors.AccentAmber.copy(alpha = 0.3f) else GlassColors.AccentAmber.copy(alpha = 0.15f)).border(1.dp, GlassColors.AccentAmber, RoundedCornerShape(14.dp))
+                .onFocusChanged { isFocusedBtn = it.isFocused }.focusable().onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onNotificationPermissionClick(); true } else false }
+                .clickable { onNotificationPermissionClick() }.padding(12.dp)) {
                 Column { Text("Izin Notifikasi Belum Aktif", color = GlassColors.AccentAmber, fontWeight = FontWeight.Bold, fontSize = 12.sp); Text("Klik untuk mengaktifkan", color = GlassColors.TextSecondary, fontSize = 10.sp) }
             }
         } else {
             Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("NOTIFIKASI", color = GlassColors.TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                // Tombol Hapus Semua
                 Box(Modifier.clip(RoundedCornerShape(6.dp)).background(Color(0x33FF5252)).clickable { onClearAllNotifications() }.padding(horizontal = 8.dp, vertical = 2.dp)) {
                     Text("Hapus Semua", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 }
             }
-            
-            // Render notifikasi menggunakan loop biasa (maks 3-4 yang tampil agar tidak lag)
-            notifications.take(3).forEach { sbn ->
-                NotificationItem(
-                    sbn = sbn, 
-                    onClick = { onNotificationClick(sbn) }, 
-                    onDeleteClick = { onClearNotification(sbn) }
-                )
-            }
-            if (notifications.size > 3) {
-                Text("+${notifications.size - 3} notifikasi lainnya...", color = GlassColors.TextSecondary, fontSize = 10.sp, modifier = Modifier.padding(start = 6.dp, top = 4.dp))
-            }
+            notifications.take(3).forEach { sbn -> NotificationItem(sbn = sbn, onClick = { onNotificationClick(sbn) }, onDeleteClick = { onClearNotification(sbn) }) }
         }
 
         GlassNavButton(Icons.Default.Home, stringResource(R.string.nav_home), selectedNav == "home" && !isSideloadActive, onHomeClick)
@@ -669,7 +584,7 @@ fun LeftNavigationGlassPanel(
         GlassNavButton(Icons.Default.Build, stringResource(R.string.sideloaded_apps), isSideloadActive, onSideloadToggleClick)
         
         Spacer(modifier = Modifier.height(8.dp))
-        GlassNavButton(Icons.Default.Settings, "Kendali Sistem", false, onSystemControlClick) // Menu System Control
+        GlassNavButton(Icons.Default.Settings, "Kendali Sistem", false, onSystemControlClick)
         GlassNavButton(Icons.Default.Settings, stringResource(R.string.settings_title), false, onSettingsClick)
         
         Spacer(modifier = Modifier.height(8.dp))
@@ -686,51 +601,33 @@ fun NotificationItem(sbn: android.service.notification.StatusBarNotification, on
     val title = sbn.notification.extras.getCharSequence("android.title")?.toString() ?: ""
     val text = sbn.notification.extras.getCharSequence("android.text")?.toString() ?: ""
     
-    // LOAD IKON ASLI APLIKASI PENGGIRIM NOTIFIKASI
     val context = LocalContext.current
     val appIcon by produceState<Bitmap?>(initialValue = iconCache.get(sbn.packageName), sbn.packageName) {
         if (value == null) {
-            val loaded = withContext(Dispatchers.IO) {
-                try { drawableToBitmap(context.packageManager.getApplicationIcon(sbn.packageName)) } catch (e: Exception) { null }
-            }
+            val loaded = withContext(Dispatchers.IO) { try { drawableToBitmap(context.packageManager.getApplicationIcon(sbn.packageName)) } catch (e: Exception) { null } }
             if (loaded != null) { iconCache.put(sbn.packageName, loaded); value = loaded }
         }
     }
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().liquidGlass(cornerRadius = 14.dp, isFocused = isFocused)
-            .onFocusChanged { isFocused = it.isFocused }.focusable()
-            .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onClick(); true } else false }
-            .combinedClickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 8.dp)
-    ) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().liquidGlass(cornerRadius = 14.dp, isFocused = isFocused)
+        .onFocusChanged { isFocused = it.isFocused }.focusable()
+        .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onClick(); true } else false }
+        .combinedClickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 8.dp)) {
         if (appIcon != null) {
             Image(bitmap = appIcon!!.asImageBitmap(), contentDescription = null, modifier = Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)))
         } else {
             Icon(Icons.Default.Notifications, "Notif", tint = if (isFocused) GlassColors.AccentGlow else GlassColors.TextSecondary, modifier = Modifier.size(18.dp))
         }
-        
         Spacer(modifier = Modifier.width(8.dp))
-        
         Column(Modifier.weight(1f)) {
             if (title.isNotBlank()) Text(title, color = if (isFocused) Color.White else GlassColors.TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (text.isNotBlank()) Text(text, color = GlassColors.TextSecondary, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        
         Spacer(modifier = Modifier.width(4.dp))
-
-        // TOMBOL HAPUS (X)
-        Box(
-            modifier = Modifier
-                .size(24.dp)
-                .clip(CircleShape)
-                .background(if (isDeleteFocused) Color(0xFFFF5252) else Color.Transparent)
-                .onFocusChanged { isDeleteFocused = it.isFocused }
-                .focusable()
-                .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onDeleteClick(); true } else false }
-                .clickable { onDeleteClick() },
-            contentAlignment = Alignment.Center
-        ) {
+        Box(Modifier.size(24.dp).clip(CircleShape).background(if (isDeleteFocused) Color(0xFFFF5252) else Color.Transparent)
+            .onFocusChanged { isDeleteFocused = it.isFocused }.focusable()
+            .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onDeleteClick(); true } else false }
+            .clickable { onDeleteClick() }, contentAlignment = Alignment.Center) {
             Icon(Icons.Default.Close, "Hapus", tint = if (isDeleteFocused) Color.White else GlassColors.TextSecondary, modifier = Modifier.size(14.dp))
         }
     }
@@ -739,20 +636,16 @@ fun NotificationItem(sbn: android.service.notification.StatusBarNotification, on
 @Composable
 fun GlassNavButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, isSelected: Boolean, onClick: () -> Unit) {
     var isFocused by remember { mutableStateOf(false) }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().liquidGlass(cornerRadius = 14.dp, isFocused = isFocused || isSelected)
-            .onFocusChanged { isFocused = it.isFocused }.focusable()
-            .onPreviewKeyEvent { event -> if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) { onClick(); true } else false }
-            .combinedClickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 10.dp)
-    ) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().liquidGlass(cornerRadius = 14.dp, isFocused = isFocused || isSelected)
+        .onFocusChanged { isFocused = it.isFocused }.focusable()
+        .onPreviewKeyEvent { event -> if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) { onClick(); true } else false }
+        .combinedClickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 10.dp)) {
         Icon(icon, label, tint = if (isFocused || isSelected) GlassColors.AccentGlow else GlassColors.TextSecondary, modifier = Modifier.size(18.dp))
         Spacer(modifier = Modifier.width(10.dp))
         Text(label, color = if (isFocused || isSelected) Color.White else GlassColors.TextSecondary, fontSize = 13.sp, fontWeight = if (isFocused || isSelected) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1)
     }
 }
 
-// LAUNCHER LEANBACK (Aplikasi TV bisa dibuka)
 fun safeLaunchApp(context: Context, app: AppItem) {
     try {
         val pm = context.packageManager
