@@ -1,12 +1,15 @@
 package dev.andikune.homeio.util
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.provider.Settings
 import android.util.Log
 import dev.andikune.homeio.BuildConfig
 import dev.andikune.homeio.data.AppKnowledge
-import dev.andikune.homeio.data.model.SettingsConfig
+import dev.andikune.homeio.domain.model.SettingsConfig
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -17,13 +20,39 @@ object BackupManager {
     private const val FOLDER_APP = "HomeiO"
     private const val FOLDER_BACKUP = "Backup aman"
 
-    data class BackupResult(val success: Boolean, val filePath: String? = null, val errorMessage: String? = null, val isFallbackPath: Boolean = false)
+    data class BackupResult(
+        val success: Boolean,
+        val filePath: String? = null,
+        val errorMessage: String? = null,
+        val isFallbackPath: Boolean = false
+    )
 
     fun needsStoragePermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             !Environment.isExternalStorageManager()
         } else {
             false
+        }
+    }
+
+    fun openPermissionSettings(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                try {
+                    val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                } catch (e2: Exception) {
+                    Log.e(TAG, "Gagal buka permission settings: ${e2.message}")
+                }
+            }
         }
     }
 
@@ -89,14 +118,17 @@ object BackupManager {
 
     fun saveBackupToFile(context: Context, content: String): BackupResult {
         if (needsStoragePermission()) {
-            return BackupResult(success = false, errorMessage = "Izin akses penyimpanan diperlukan", isFallbackPath = true)
+            return BackupResult(
+                success = false,
+                errorMessage = "Izin akses penyimpanan diperlukan",
+                isFallbackPath = true
+            )
         }
 
         return try {
             val dateString = SimpleDateFormat("dd-MM-yyyy", Locale.getDefault()).format(Date())
             val fileName = "Backup Aman-Home.io-$dateString.txt"
             
-            // Coba simpan ke External Storage
             val baseDir = Environment.getExternalStorageDirectory()
             val backupDir = File(baseDir, "$FOLDER_APP/$FOLDER_BACKUP")
             
@@ -107,7 +139,6 @@ object BackupManager {
                 file.writeText(content, Charsets.UTF_8)
                 return BackupResult(success = true, filePath = file.absolutePath, isFallbackPath = false)
             } else {
-                // Fallback ke Internal
                 saveFallback(context, fileName, content)
             }
         } catch (e: Exception) {
