@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,44 +31,43 @@ import java.io.File
 fun WallpaperView(config: SettingsConfig) {
     val context = LocalContext.current
 
-    when (config.wallpaperMode) {
-        "SINEMATIK" -> {
-            // FIX: Gunakan getIdentifier agar aman jika file wp_video tidak ada di res/raw
-            val resId = context.resources.getIdentifier("wp_video", "raw", context.packageName)
-            if (resId != 0) {
-                VideoWallpaper(uri = getResourceUri(context.packageName, resId), scaleMode = config.wallpaperScaleMode)
-            } else {
+    // FIX BUG: Tambahkan key() agar Compose terpaksa me-render ulang (reload) saat config berubah
+    key(config.wallpaperMode, config.customPhotoPath, config.customVideoPath, config.customActiveType, config.wallpaperScaleMode) {
+        when (config.wallpaperMode) {
+            "SINEMATIK" -> {
+                val resId = context.resources.getIdentifier("wp_video", "raw", context.packageName)
+                if (resId != 0) {
+                    VideoWallpaper(uri = getResourceUri(context.packageName, resId), scaleMode = config.wallpaperScaleMode)
+                } else {
+                    Box(Modifier.fillMaxSize().background(Color(0xFF0A0E1A)))
+                }
+            }
+            "ESTETIK" -> {
+                val resId = context.resources.getIdentifier("wp_photo", "raw", context.packageName)
+                if (resId != 0) {
+                    ImageWallpaper(uri = getResourceUri(context.packageName, resId), scaleMode = config.wallpaperScaleMode)
+                } else {
+                    Box(Modifier.fillMaxSize().background(Color(0xFF0A0E1A)))
+                }
+            }
+            "OLED" -> {
+                Box(Modifier.fillMaxSize().background(Color(0xFF000000)))
+            }
+            "KUSTOM" -> {
+                if (config.customActiveType == "VIDEO" && !config.customVideoPath.isNullOrBlank()) {
+                    VideoWallpaper(uri = getSafeUri(config.customVideoPath), scaleMode = config.wallpaperScaleMode)
+                } else if (config.customActiveType == "PHOTO" && !config.customPhotoPath.isNullOrBlank()) {
+                    ImageWallpaper(uri = getSafeUri(config.customPhotoPath), scaleMode = config.wallpaperScaleMode)
+                } else if (!config.wallpaperPath.isNullOrBlank()) {
+                    if (config.wallpaperType == "VIDEO") VideoWallpaper(uri = getSafeUri(config.wallpaperPath), scaleMode = config.wallpaperScaleMode)
+                    else ImageWallpaper(uri = getSafeUri(config.wallpaperPath), scaleMode = config.wallpaperScaleMode)
+                } else {
+                    Box(Modifier.fillMaxSize().background(Color(0xFF0A0E1A)))
+                }
+            }
+            else -> {
                 Box(Modifier.fillMaxSize().background(Color(0xFF0A0E1A)))
             }
-        }
-        "ESTETIK" -> {
-            // FIX: Gunakan getIdentifier untuk wp_photo
-            val resId = context.resources.getIdentifier("wp_photo", "raw", context.packageName)
-            if (resId != 0) {
-                ImageWallpaper(uri = getResourceUri(context.packageName, resId), scaleMode = config.wallpaperScaleMode)
-            } else {
-                Box(Modifier.fillMaxSize().background(Color(0xFF0A0E1A)))
-            }
-        }
-        "OLED" -> {
-            // Layar hitam pekat
-            Box(Modifier.fillMaxSize().background(Color(0xFF000000)))
-        }
-        "KUSTOM" -> {
-            if (config.customActiveType == "VIDEO" && !config.customVideoPath.isNullOrBlank()) {
-                VideoWallpaper(uri = getSafeUri(config.customVideoPath), scaleMode = config.wallpaperScaleMode)
-            } else if (config.customActiveType == "PHOTO" && !config.customPhotoPath.isNullOrBlank()) {
-                ImageWallpaper(uri = getSafeUri(config.customPhotoPath), scaleMode = config.wallpaperScaleMode)
-            } else if (!config.wallpaperPath.isNullOrBlank()) {
-                // Fallback ke path lama jika user baru update aplikasi
-                if (config.wallpaperType == "VIDEO") VideoWallpaper(uri = getSafeUri(config.wallpaperPath), scaleMode = config.wallpaperScaleMode)
-                else ImageWallpaper(uri = getSafeUri(config.wallpaperPath), scaleMode = config.wallpaperScaleMode)
-            } else {
-                Box(Modifier.fillMaxSize().background(Color(0xFF0A0E1A)))
-            }
-        }
-        else -> {
-            Box(Modifier.fillMaxSize().background(Color(0xFF0A0E1A)))
         }
     }
 }
@@ -107,7 +107,6 @@ private fun VideoWallpaper(uri: Uri, scaleMode: String) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     
-    // FIX BUG: Tambahkan 'uri' sebagai key di remember agar ExoPlayer ter-reset saat ganti video
     val exoPlayer = remember(uri) {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(uri))
