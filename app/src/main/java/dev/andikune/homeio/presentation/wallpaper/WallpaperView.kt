@@ -5,6 +5,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -22,7 +23,6 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import coil.compose.rememberAsyncImagePainter
-import dev.andikune.homeio.R
 import dev.andikune.homeio.domain.model.SettingsConfig
 import java.io.File
 
@@ -32,16 +32,26 @@ fun WallpaperView(config: SettingsConfig) {
 
     when (config.wallpaperMode) {
         "SINEMATIK" -> {
-            // Memutar video dari res/raw/wp_video.mp4
-            VideoWallpaper(uri = getResourceUri(context.packageName, R.raw.wp_video), scaleMode = config.wallpaperScaleMode)
+            // FIX: Gunakan getIdentifier agar aman jika file wp_video tidak ada di res/raw
+            val resId = context.resources.getIdentifier("wp_video", "raw", context.packageName)
+            if (resId != 0) {
+                VideoWallpaper(uri = getResourceUri(context.packageName, resId), scaleMode = config.wallpaperScaleMode)
+            } else {
+                Box(Modifier.fillMaxSize().background(Color(0xFF0A0E1A)))
+            }
         }
         "ESTETIK" -> {
-            // Menampilkan foto dari res/raw/wp_photo.jpg
-            ImageWallpaper(uri = getResourceUri(context.packageName, R.raw.wp_photo), scaleMode = config.wallpaperScaleMode)
+            // FIX: Gunakan getIdentifier untuk wp_photo
+            val resId = context.resources.getIdentifier("wp_photo", "raw", context.packageName)
+            if (resId != 0) {
+                ImageWallpaper(uri = getResourceUri(context.packageName, resId), scaleMode = config.wallpaperScaleMode)
+            } else {
+                Box(Modifier.fillMaxSize().background(Color(0xFF0A0E1A)))
+            }
         }
         "OLED" -> {
             // Layar hitam pekat
-            androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(Color(0xFF000000)))
+            Box(Modifier.fillMaxSize().background(Color(0xFF000000)))
         }
         "KUSTOM" -> {
             if (config.customActiveType == "VIDEO" && !config.customVideoPath.isNullOrBlank()) {
@@ -53,11 +63,11 @@ fun WallpaperView(config: SettingsConfig) {
                 if (config.wallpaperType == "VIDEO") VideoWallpaper(uri = getSafeUri(config.wallpaperPath), scaleMode = config.wallpaperScaleMode)
                 else ImageWallpaper(uri = getSafeUri(config.wallpaperPath), scaleMode = config.wallpaperScaleMode)
             } else {
-                androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(Color(0xFF0A0E1A)))
+                Box(Modifier.fillMaxSize().background(Color(0xFF0A0E1A)))
             }
         }
         else -> {
-            androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(Color(0xFF0A0E1A)))
+            Box(Modifier.fillMaxSize().background(Color(0xFF0A0E1A)))
         }
     }
 }
@@ -97,7 +107,8 @@ private fun VideoWallpaper(uri: Uri, scaleMode: String) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     
-    val exoPlayer = remember {
+    // FIX BUG: Tambahkan 'uri' sebagai key di remember agar ExoPlayer ter-reset saat ganti video
+    val exoPlayer = remember(uri) {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(uri))
             prepare()
@@ -107,7 +118,7 @@ private fun VideoWallpaper(uri: Uri, scaleMode: String) {
         }
     }
 
-    DisposableEffect(lifecycleOwner) {
+    DisposableEffect(lifecycleOwner, exoPlayer) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_START -> exoPlayer.play()
