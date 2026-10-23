@@ -6,9 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
@@ -17,10 +15,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,9 +51,16 @@ fun BackupBiasaSection(
     var refreshKey by remember { mutableStateOf(0) }
     var isBackingUp by remember { mutableStateOf(false) }
 
-    // Cek fallback path untuk warning
     val usingFallback = remember { BackupManager.isUsingFallbackPath() }
     val fileList = remember(refreshKey) { BackupBiasaManager.getBackupList(ctx) }
+    
+    // FIX BUG FOKUS: FocusRequester untuk tombol backup
+    val backupBtnFocusReq = remember { FocusRequester() }
+    LaunchedEffect(fileList.size) {
+        if (fileList.isEmpty()) {
+            runCatching { backupBtnFocusReq.requestFocus() }
+        }
+    }
 
     fun doBackup() {
         if (isBackingUp) return
@@ -57,7 +68,7 @@ fun BackupBiasaSection(
         scope.launch {
             val res = withContext(Dispatchers.IO) { BackupBiasaManager.createBackup(ctx, settings) }
             isBackingUp = false
-            Toast.makeText(ctx, res.msg ?: if (res.success) "Backup berhasil" else "Backup gagal", Toast.LENGTH_LONG).show()
+            Toast.makeText(ctx.applicationContext, res.msg ?: if (res.success) "Backup berhasil" else "Backup gagal", Toast.LENGTH_LONG).show()
             if (res.success) refreshKey++
         }
     }
@@ -67,9 +78,9 @@ fun BackupBiasaSection(
             val restored = withContext(Dispatchers.IO) { BackupBiasaManager.restoreBackup(file.absolutePath) }
             if (restored != null) {
                 onUpdate(restored)
-                Toast.makeText(ctx, "Tema berhasil dipulihkan!", Toast.LENGTH_LONG).show()
+                Toast.makeText(ctx.applicationContext, "Tema berhasil dipulihkan!", Toast.LENGTH_LONG).show()
             } else {
-                Toast.makeText(ctx, "Gagal membaca file backup", Toast.LENGTH_LONG).show()
+                Toast.makeText(ctx.applicationContext, "Gagal membaca file backup", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -78,18 +89,15 @@ fun BackupBiasaSection(
         scope.launch {
             val ok = withContext(Dispatchers.IO) { BackupBiasaManager.deleteBackup(file.absolutePath) }
             if (ok) {
-                Toast.makeText(ctx, "File dihapus", Toast.LENGTH_SHORT).show()
+                Toast.makeText(ctx.applicationContext, "File dihapus", Toast.LENGTH_SHORT).show()
                 refreshKey++
             } else {
-                Toast.makeText(ctx, "Gagal menghapus file", Toast.LENGTH_SHORT).show()
+                Toast.makeText(ctx.applicationContext, "Gagal menghapus file", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    Column(
-        Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Save, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(28.dp))
             Spacer(Modifier.width(10.dp))
@@ -99,47 +107,36 @@ fun BackupBiasaSection(
             }
         }
 
-        // FIX: Warning jika pakai fallback path
         if (usingFallback) {
             Row(
-                Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
                     .background(GlassColors.AccentAmber.copy(alpha = 0.15f))
-                    .border(1.dp, GlassColors.AccentAmber, RoundedCornerShape(10.dp))
-                    .padding(12.dp),
+                    .border(1.dp, GlassColors.AccentAmber, RoundedCornerShape(10.dp)).padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(Icons.Default.Warning, null, tint = GlassColors.AccentAmber, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "Izin storage belum diberikan. File backup tersimpan di lokasi internal aplikasi (tidak terlihat di file manager).",
-                    color = GlassColors.AccentAmber, fontSize = 11.sp, lineHeight = 15.sp
-                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Izin storage belum diberikan. File tersimpan di lokasi internal.", color = GlassColors.AccentAmber, fontSize = 11.sp, lineHeight = 15.sp)
             }
         }
 
-        Text("Lokasi: /sdcard/HomeiO/Backup/", color = GlassColors.TextSecondary, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-
-        // Tombol Backup Baru
         var isFocusedBtn by remember { mutableStateOf(false) }
         NeonFocusBorder(focused = isFocusedBtn, cornerRadius = 12.dp, modifier = Modifier.fillMaxWidth()) {
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                     .background(if (isFocusedBtn) GlassColors.AccentGlow.copy(alpha = 0.3f) else GlassColors.GlassTint)
                     .border(if (isFocusedBtn) 2.dp else 1.dp, GlassColors.AccentGlow, RoundedCornerShape(12.dp))
+                    .focusRequester(backupBtnFocusReq)
                     .onFocusChanged { isFocusedBtn = it.isFocused }
                     .focusable()
+                    .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { if(!isBackingUp) doBackup(); true } else false }
                     .clickable(enabled = !isBackingUp) { doBackup() }
                     .padding(14.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(Icons.Default.Save, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    if (isBackingUp) "MENYIMPAN..." else "BUAT BACKUP BARU",
-                    color = GlassColors.AccentGlow, fontWeight = FontWeight.Bold, fontSize = 14.sp
-                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(if (isBackingUp) "MENYIMPAN..." else "BUAT BACKUP BARU", color = GlassColors.AccentGlow, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
         }
 
@@ -153,20 +150,17 @@ fun BackupBiasaSection(
                 val dateStr = dateFormat.format(Date(file.lastModified()))
 
                 Row(
-                    Modifier.fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
                         .background(GlassColors.GlassTint)
-                        .border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(10.dp))
-                        .padding(10.dp),
+                        .border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(10.dp)).padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text(file.name, color = GlassColors.TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                         Text(dateStr, color = GlassColors.TextSecondary, fontSize = 10.sp)
                     }
-                    
                     ActionIconButton(icon = Icons.Default.Restore, tint = GlassColors.AccentGreen, onClick = { doRestore(file) })
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     ActionIconButton(icon = Icons.Default.Delete, tint = GlassColors.AccentRed, onClick = { doDelete(file) })
                 }
             }
@@ -183,7 +177,9 @@ private fun ActionIconButton(icon: androidx.compose.ui.graphics.vector.ImageVect
                 .background(if (focused) tint.copy(alpha = 0.4f) else tint.copy(alpha = 0.15f))
                 .border(if (focused) 2.dp else 1.dp, tint, RoundedCornerShape(8.dp))
                 .onFocusChanged { focused = it.isFocused }
-                .focusable().clickable { onClick() },
+                .focusable()
+                .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onClick(); true } else false }
+                .clickable { onClick() },
             contentAlignment = Alignment.Center
         ) {
             Icon(icon, null, tint = tint, modifier = Modifier.size(18.dp))
