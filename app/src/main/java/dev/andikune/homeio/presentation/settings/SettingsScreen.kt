@@ -61,28 +61,37 @@ fun SettingsScreen(
     var selectedCategory by remember { mutableStateOf(SettingsCategory.WALLPAPER) }
     var draftConfig by remember { mutableStateOf(currentConfig) }
     val scope = rememberCoroutineScope()
+    
+    // FIX: FocusRequester untuk memindahkan fokus ke menu kanan
     val contentFocusRequester = remember { FocusRequester() }
 
+    // Auto-save (Debounce 500ms)
+    LaunchedEffect(draftConfig) {
+        delay(500)
+        if (draftConfig != currentConfig) {
+            onSaveConfig(draftConfig)
+        }
+    }
+
+    // Force Save saat keluar
     DisposableEffect(Unit) {
         onDispose {
             if (draftConfig != currentConfig) onSaveConfig(draftConfig)
         }
     }
 
-    LaunchedEffect(draftConfig) {
-        delay(500)
-        if (draftConfig != currentConfig) onSaveConfig(draftConfig)
-    }
-
     Box(Modifier.fillMaxSize().background(GlassColors.DeepBackgroundGradient)) {
         Row(Modifier.fillMaxSize().padding(16.dp)) {
             
+            // ============================================================
             // PANE KIRI (SIDEBAR GLASS)
+            // ============================================================
             Column(
                 Modifier.weight(0.28f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp)
                     .padding(16.dp).verticalScroll(rememberScrollState()).focusGroup(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                // Tombol Kembali
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                         .background(GlassColors.GlassTintLighter)
@@ -104,12 +113,14 @@ fun SettingsScreen(
                 Spacer(Modifier.height(8.dp))
                 Text("PENGATURAN", color = GlassColors.TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, modifier = Modifier.padding(start = 8.dp))
 
+                // Daftar Kategori Menu
                 SettingsCategory.entries.forEach { cat ->
                     SidebarItem(
                         category = cat,
                         isSelected = selectedCategory == cat,
                         onClick = {
                             selectedCategory = cat
+                            // FIX: Pindahkan fokus ke konten kanan setelah UI siap
                             scope.launch {
                                 delay(250)
                                 runCatching { contentFocusRequester.requestFocus() }
@@ -121,7 +132,9 @@ fun SettingsScreen(
 
             Spacer(Modifier.width(24.dp))
 
+            // ============================================================
             // PANE KANAN (KONTEN GLASS)
+            // ============================================================
             Box(Modifier.weight(0.72f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp).padding(24.dp)) {
                 AutoFocusPane(paneKey = selectedCategory, modifier = Modifier.fillMaxSize()) {
                     LazyColumn(Modifier.fillMaxSize().focusRequester(contentFocusRequester)) {
@@ -166,6 +179,7 @@ private fun SidebarItem(category: SettingsCategory, isSelected: Boolean, onClick
                 .onFocusChanged { isFocused = it.isFocused }
                 .focusable()
                 .onPreviewKeyEvent { event ->
+                    // FIX D-PAD: Tekan OK 1x untuk eksekusi
                     if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) {
                         onClick(); true
                     } else false
