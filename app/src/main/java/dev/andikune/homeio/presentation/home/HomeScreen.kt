@@ -22,8 +22,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.LocalIndication
-import androidx.compose.foundation.Indication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -31,11 +29,9 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
-import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -96,12 +92,6 @@ import kotlinx.coroutines.withContext
 import java.util.Date
 import kotlin.math.abs
 
-// Objek untuk mematikan highlight fokus bawaan Android
-private object NoIndication : Indication {
-    @Composable
-    override fun rememberUpdatedIndication(interactionSource: InteractionSource, isFocused: Boolean): Indication = this
-}
-
 // OPTIMASI CACHE MEMORI
 private val maxMemory = (Runtime.getRuntime().maxMemory() / 1024).toInt()
 private val cacheSize = maxMemory / 8
@@ -139,7 +129,6 @@ fun HomeScreen(
 
     val notifications by LauncherNotificationService.notifications.collectAsState()
 
-    // FIX BUG 4: Tombol Back menutup Panel Kiri, bukan keluar aplikasi
     BackHandler(enabled = isPaneOpen) { isPaneOpen = false }
 
     LaunchedEffect(isPaneOpen) {
@@ -193,7 +182,6 @@ fun HomeScreen(
 
         Box(Modifier.fillMaxSize().padding(safePadding)) {
             
-            // SYSTEM CONTROL BAR (Ikon Premium)
             Row(
                 modifier = Modifier.align(Alignment.TopStart).padding(top = 16.dp, start = 16.dp).focusGroup(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -210,7 +198,6 @@ fun HomeScreen(
                 SystemControlIcon(icon = Icons.Rounded.Dashboard, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
             }
 
-            // WIDGET KANAN ATAS (FIX BUG 5: Pisahkan Jam & Tanggal biar gak lag)
             TopRightWidgets(
                 config = config,
                 weatherInfo = weatherInfo,
@@ -219,38 +206,33 @@ fun HomeScreen(
                 modifier = Modifier.align(Alignment.TopEnd).padding(top = 16.dp, end = 24.dp)
             )
 
-            // KONTEN BAWAH
             Column(
                 modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 80.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                CompositionLocalProvider(LocalIndication provides NoIndication) {
-                    // FIX BUG 8: Tambahkan focusProperties agar tombol bawah dari Favorit langsung nyamber ke Carousel
-                    FavoriteAppsSection(
-                        favoriteApps = favoriteApps, 
-                        iconSizeMultiplier = config.appIconSizeMultiplier, 
-                        onAppClick = { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) }, 
+                FavoriteAppsSection(
+                    favoriteApps = favoriteApps, 
+                    iconSizeMultiplier = config.appIconSizeMultiplier, 
+                    onAppClick = { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) }, 
+                    onAppLongClick = { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app },
+                    modifier = Modifier.focusProperties { down = carouselFocusRequester }
+                )
+                
+                if (displayApps.isNotEmpty()) {
+                    AllAppsCenterCarousel(
+                        apps = displayApps,
+                        iconSizeMultiplier = config.appIconSizeMultiplier,
+                        screenWidth = screenWidth,
+                        focusRequester = carouselFocusRequester,
+                        onAppClick = { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) },
                         onAppLongClick = { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app },
-                        modifier = Modifier.focusProperties { down = carouselFocusRequester }
+                        onEdgeLeftReached = { isPaneOpen = true },
+                        onEdgeRightOrDownReached = { showAllAppsOverlay = true }
                     )
-                    
-                    if (displayApps.isNotEmpty()) {
-                        AllAppsCenterCarousel(
-                            apps = displayApps,
-                            iconSizeMultiplier = config.appIconSizeMultiplier,
-                            screenWidth = screenWidth,
-                            focusRequester = carouselFocusRequester,
-                            onAppClick = { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) },
-                            onAppLongClick = { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app },
-                            onEdgeLeftReached = { isPaneOpen = true },
-                            onEdgeRightOrDownReached = { showAllAppsOverlay = true }
-                        )
-                    }
                 }
             }
         }
         
-        // TOMBOL HAMBURGER
         var isTriggerFocused by remember { mutableStateOf(false) }
         Box(
             modifier = Modifier.align(Alignment.CenterStart).padding(start = 16.dp).size(48.dp).zIndex(10f).clip(CircleShape)
@@ -273,7 +255,6 @@ fun HomeScreen(
             Icon(Icons.Rounded.Menu, "Menu", tint = if (isTriggerFocused) GlassColors.AccentGlow else Color.White)
         }
 
-        // SLIDING PANE OVERLAY
         AnimatedVisibility(
             visible = isPaneOpen,
             enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(),
@@ -288,9 +269,8 @@ fun HomeScreen(
                         onSearchClick = { SoundFeedback.playClick(context); showSearchDialog = true },
                         onNotificationPermissionClick = { try { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) } catch (_: Exception) {} },
                         onNotificationClick = { sbn -> SoundFeedback.playClick(context); try { sbn.notification.contentIntent?.send(); isPaneOpen = false } catch (e: PendingIntent.CanceledException) { Toast.makeText(context, "Gagal membuka", Toast.LENGTH_SHORT).show() } },
-                        // FIX BUG 6: Panggil static method, jangan bikin instance baru
-                        onClearNotification = { sbn -> LauncherNotificationService.removeNotification(sbn) },
-                        onClearAllNotifications = { LauncherNotificationService.removeAllNotifications() },
+                        onClearNotification = { sbn -> LauncherNotificationService().removeNotification(sbn) },
+                        onClearAllNotifications = { LauncherNotificationService().removeAllNotifications() },
                         onHomeClick = { SoundFeedback.playClick(context); selectedNav = "home"; isSideloadOnly = false },
                         onRamBoostClick = { SoundFeedback.playClick(context); memInfo = SystemUtils.boostRam(context); Toast.makeText(context, "RAM Dioptimalkan!", Toast.LENGTH_SHORT).show() },
                         onFileManagerClick = { SoundFeedback.playClick(context); showFileManager = true },
@@ -304,7 +284,6 @@ fun HomeScreen(
             }
         }
 
-        // OVERLAY GRID
         if (showAllAppsOverlay) {
             AllAppsGridOverlay(
                 apps = displayApps, iconSizeMultiplier = config.appIconSizeMultiplier,
@@ -316,7 +295,6 @@ fun HomeScreen(
     }
 }
 
-// FIX BUG 5: Ekstrak Widget Atas Kanan (Jam & Cuaca)
 @Composable
 fun TopRightWidgets(
     config: SettingsConfig,
@@ -424,7 +402,6 @@ fun AllAppsCenterCarousel(
             state = lazyListState, flingBehavior = flingBehavior,
             contentPadding = PaddingValues(horizontal = horizontalPadding),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
-            // FIX BUG 7: Tambahkan verticalAlignment dan height agar efek scale/glow tidak terpotong
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxSize().focusRequester(focusRequester).focusGroup()
                 .onPreviewKeyEvent { event ->
@@ -435,7 +412,6 @@ fun AllAppsCenterCarousel(
                                 if (centeredIndex == 0) { onEdgeLeftReached(); true } 
                                 else { 
                                     isProcessingKey = true
-                                    // FIX BUG 1: Tambahkan animateScrollToItem agar list beneran geser
                                     scope.launch { lazyListState.animateScrollToItem(centeredIndex - 1) }
                                     true 
                                 }
@@ -445,7 +421,6 @@ fun AllAppsCenterCarousel(
                                 if (centeredIndex == apps.size - 1) { onEdgeRightOrDownReached(); true } 
                                 else { 
                                     isProcessingKey = true
-                                    // FIX BUG 1: Tambahkan animateScrollToItem agar list beneran geser
                                     scope.launch { lazyListState.animateScrollToItem(centeredIndex + 1) }
                                     true 
                                 }
