@@ -32,6 +32,8 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import dev.andikune.homeio.domain.model.SettingsConfig
 import dev.andikune.homeio.presentation.components.AutoFocusPane
 import dev.andikune.homeio.presentation.components.GlassColors
@@ -62,36 +64,42 @@ fun SettingsScreen(
     var draftConfig by remember { mutableStateOf(currentConfig) }
     val scope = rememberCoroutineScope()
     
-    // FIX: FocusRequester untuk memindahkan fokus ke menu kanan
     val contentFocusRequester = remember { FocusRequester() }
 
-    // Auto-save (Debounce 500ms)
-    LaunchedEffect(draftConfig) {
-        delay(500)
-        if (draftConfig != currentConfig) {
-            onSaveConfig(draftConfig)
+    // STATE UNTUK DIALOG KONFIRMASI
+    var showSaveDialog by remember { mutableStateOf(false) }
+    var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    // Auto-save HANYA untuk menu selain WALLPAPER
+    LaunchedEffect(draftConfig, selectedCategory) {
+        if (selectedCategory != SettingsCategory.WALLPAPER) {
+            delay(500)
+            if (draftConfig != currentConfig) {
+                onSaveConfig(draftConfig)
+            }
         }
     }
 
-    // Force Save saat keluar
-    DisposableEffect(Unit) {
-        onDispose {
-            if (draftConfig != currentConfig) onSaveConfig(draftConfig)
+    // Fungsi navigasi dengan intersepsi
+    fun requestNavigation(action: () -> Unit) {
+        if (selectedCategory == SettingsCategory.WALLPAPER && draftConfig != currentConfig) {
+            pendingAction = action
+            showSaveDialog = true
+        } else {
+            action()
         }
     }
 
     Box(Modifier.fillMaxSize().background(GlassColors.DeepBackgroundGradient)) {
         Row(Modifier.fillMaxSize().padding(16.dp)) {
             
-            // ============================================================
             // PANE KIRI (SIDEBAR GLASS)
-            // ============================================================
             Column(
                 Modifier.weight(0.28f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp)
                     .padding(16.dp).verticalScroll(rememberScrollState()).focusGroup(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Tombol Kembali
+                // Tombol Kembali (Dengan Intersepsi)
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                         .background(GlassColors.GlassTintLighter)
@@ -99,10 +107,11 @@ fun SettingsScreen(
                         .focusable()
                         .onPreviewKeyEvent { event ->
                             if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) {
-                                onBack(); true
+                                requestNavigation { onBack() }
+                                true
                             } else false
                         }
-                        .clickable { onBack() }.padding(12.dp),
+                        .clickable { requestNavigation { onBack() } }.padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Kembali", tint = GlassColors.AccentGlow)
@@ -113,17 +122,18 @@ fun SettingsScreen(
                 Spacer(Modifier.height(8.dp))
                 Text("PENGATURAN", color = GlassColors.TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, modifier = Modifier.padding(start = 8.dp))
 
-                // Daftar Kategori Menu
+                // Daftar Kategori Menu (Dengan Intersepsi)
                 SettingsCategory.entries.forEach { cat ->
                     SidebarItem(
                         category = cat,
                         isSelected = selectedCategory == cat,
                         onClick = {
-                            selectedCategory = cat
-                            // FIX: Pindahkan fokus ke konten kanan setelah UI siap
-                            scope.launch {
-                                delay(250)
-                                runCatching { contentFocusRequester.requestFocus() }
+                            requestNavigation {
+                                selectedCategory = cat
+                                scope.launch {
+                                    delay(250)
+                                    runCatching { contentFocusRequester.requestFocus() }
+                                }
                             }
                         }
                     )
@@ -132,15 +142,17 @@ fun SettingsScreen(
 
             Spacer(Modifier.width(24.dp))
 
-            // ============================================================
             // PANE KANAN (KONTEN GLASS)
-            // ============================================================
             Box(Modifier.weight(0.72f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp).padding(24.dp)) {
                 AutoFocusPane(paneKey = selectedCategory, modifier = Modifier.fillMaxSize()) {
                     LazyColumn(Modifier.fillMaxSize().focusRequester(contentFocusRequester)) {
                         item {
                             when (selectedCategory) {
-                                SettingsCategory.WALLPAPER -> WallpaperSection(draftConfig) { draftConfig = it }
+                                SettingsCategory.WALLPAPER -> WallpaperSection(
+                                    settings = draftConfig, 
+                                    onUpdate = { draftConfig = it },
+                                    onSave = { onSaveConfig(draftConfig) } // Lempar aksi simpan
+                                )
                                 SettingsCategory.SCREENSAVER -> ScreensaverSection(draftConfig) { draftConfig = it }
                                 SettingsCategory.PERFORMANCE -> PerformanceSection(draftConfig) { draftConfig = it }
                                 SettingsCategory.LANGUAGE -> LanguageSection(draftConfig) { draftConfig = it }
@@ -148,6 +160,53 @@ fun SettingsScreen(
                                 SettingsCategory.UPDATER -> ApkFileListSection()
                                 SettingsCategory.BACKUP -> BackupBiasaSection(draftConfig) { draftConfig = it }
                                 SettingsCategory.INFO -> InfoAppSection()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // DIALOG KONFIRMASI PENYIMPANAN
+    if (showSaveDialog) {
+        Dialog(
+            onDismissRequest = { showSaveDialog = false; pendingAction = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
+                Column(Modifier.fillMaxWidth(0.7f).liquidGlass(cornerRadius = 20.dp).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Simpan Perubahan?", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Kamu memiliki perubahan wallpaper yang belum disimpan.", color = GlassColors.TextSecondary, fontSize = 14.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Spacer(Modifier.height(24.dp))
+                    
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        // Tombol Buang
+                        var isDiscardFocused by remember { mutableStateOf(false) }
+                        NeonFocusBorder(focused = isDiscardFocused, cornerRadius = 12.dp, modifier = Modifier.weight(1f)) {
+                            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0x33FF5252))
+                                .onFocusChanged { isDiscardFocused = it.isFocused }.focusable()
+                                .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { 
+                                    draftConfig = currentConfig; pendingAction?.invoke(); showSaveDialog = false; pendingAction = null; true 
+                                } else false }
+                                .clickable { draftConfig = currentConfig; pendingAction?.invoke(); showSaveDialog = false; pendingAction = null }
+                                .padding(14.dp), contentAlignment = Alignment.Center) {
+                                Text("Buang", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        
+                        // Tombol Simpan
+                        var isSaveFocused by remember { mutableStateOf(false) }
+                        NeonFocusBorder(focused = isSaveFocused, cornerRadius = 12.dp, modifier = Modifier.weight(1f)) {
+                            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (isSaveFocused) GlassColors.AccentGreen else GlassColors.AccentGreen.copy(alpha = 0.8f))
+                                .onFocusChanged { isSaveFocused = it.isFocused }.focusable()
+                                .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { 
+                                    onSaveConfig(draftConfig); pendingAction?.invoke(); showSaveDialog = false; pendingAction = null; true 
+                                } else false }
+                                .clickable { onSaveConfig(draftConfig); pendingAction?.invoke(); showSaveDialog = false; pendingAction = null }
+                                .padding(14.dp), contentAlignment = Alignment.Center) {
+                                Text("Simpan", color = Color.White, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -179,7 +238,6 @@ private fun SidebarItem(category: SettingsCategory, isSelected: Boolean, onClick
                 .onFocusChanged { isFocused = it.isFocused }
                 .focusable()
                 .onPreviewKeyEvent { event ->
-                    // FIX D-PAD: Tekan OK 1x untuk eksekusi
                     if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) {
                         onClick(); true
                     } else false
