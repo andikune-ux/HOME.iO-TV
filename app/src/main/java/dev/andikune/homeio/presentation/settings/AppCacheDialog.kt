@@ -20,6 +20,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -113,7 +118,9 @@ private fun AppCacheRow(app: CacheCleaner.AppCacheInfo, onClick: () -> Unit) {
         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
             .background(if (focused) GlassColors.AccentGlow.copy(alpha = 0.15f) else GlassColors.GlassTint)
             .border(if (focused) 2.dp else 1.dp, if (focused) GlassColors.AccentGlow else GlassColors.GlassBorder, RoundedCornerShape(10.dp))
-            .onFocusChanged { focused = it.isFocused }.focusable().clickable { onClick() }.padding(12.dp),
+            .onFocusChanged { focused = it.isFocused }.focusable()
+            .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onClick(); true } else false }
+            .clickable { onClick() }.padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
@@ -121,7 +128,7 @@ private fun AppCacheRow(app: CacheCleaner.AppCacheInfo, onClick: () -> Unit) {
             Text(if (app.isSystemApp) "Sistem · ${app.packageName}" else app.packageName, color = GlassColors.TextSecondary, fontSize = 10.sp, maxLines = 1)
         }
         Text(CacheCleaner.formatBytes(app.cacheBytes), color = GlassColors.AccentAmber, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.width(10.dp))
+        Spacer(modifier = Modifier.width(10.dp))
         Icon(Icons.Default.FolderOpen, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(20.dp))
     }
 }
@@ -133,7 +140,9 @@ private fun PermissionButton(label: String, onClick: () -> Unit) {
         Box(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(GlassColors.AccentGlow.copy(alpha = 0.85f))
                 .border(if (focused) 2.dp else 0.dp, Color.White, RoundedCornerShape(10.dp))
-                .onFocusChanged { focused = it.isFocused }.focusable().clickable { onClick() }.padding(vertical = 10.dp),
+                .onFocusChanged { focused = it.isFocused }.focusable()
+                .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onClick(); true } else false }
+                .clickable { onClick() }.padding(vertical = 10.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(label, color = GlassColors.DeepBackground, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -148,7 +157,9 @@ private fun CloseButton(onClick: () -> Unit) {
         Modifier.size(36.dp).clip(RoundedCornerShape(8.dp))
             .background(if (focused) GlassColors.AccentRed.copy(alpha = 0.4f) else GlassColors.AccentRed.copy(alpha = 0.2f))
             .border(if (focused) 2.dp else 0.dp, Color.White, RoundedCornerShape(8.dp))
-            .onFocusChanged { focused = it.isFocused }.focusable().clickable { onClick() },
+            .onFocusChanged { focused = it.isFocused }.focusable()
+            .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onClick(); true } else false }
+            .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
         Icon(Icons.Default.Close, null, tint = GlassColors.AccentRed, modifier = Modifier.size(18.dp))
