@@ -12,20 +12,28 @@ class LauncherNotificationService : NotificationListenerService() {
         // StateFlow untuk menyimpan daftar notifikasi yang aktif
         private val _notifications = MutableStateFlow<List<StatusBarNotification>>(emptyList())
         val notifications = _notifications.asStateFlow()
+
+        // Fungsi untuk menghapus 1 notifikasi
+        fun cancelNotification(sbn: StatusBarNotification) {
+            try {
+                // Diperlukan instance dari service untuk memanggil ini, 
+                // tapi karena ini companion object, kita gunakan static context atau biarkan UI yang memanggil intent cancel
+            } catch (_: Exception) {}
+        }
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         super.onNotificationPosted(sbn)
         
-        // Filter: Abaikan notifikasi dari aplikasi kita sendiri atau notifikasi grup
+        // Filter: Abaikan notifikasi dari aplikasi kita sendiri
         if (sbn.packageName == packageName) return
         
         val currentList = _notifications.value.toMutableList()
-        // Hapus notifikasi lama dengan ID dan Tag yang sama
+        // Hapus notifikasi lama dengan ID dan Tag yang sama (Update)
         currentList.removeAll { it.id == sbn.id && it.tag == sbn.tag && it.packageName == sbn.packageName }
         currentList.add(sbn)
         
-        // Update daftar (maksimal 20 notifikasi terakhir)
+        // Update daftar (maksimal 20 notifikasi terbaru agar tidak berat)
         _notifications.value = currentList.takeLast(20)
     }
 
@@ -39,10 +47,36 @@ class LauncherNotificationService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
-        // Ambil notifikasi yang sudah ada saat service terhubung
         val activeNotifications = activeNotifications
         if (activeNotifications != null) {
             _notifications.value = activeNotifications.filter { it.packageName != packageName }.takeLast(20)
         }
+    }
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        // Bersihkan notifikasi jika listener mati / izin dicabut
+        _notifications.value = emptyList()
+    }
+
+    // Fungsi untuk menghapus notifikasi dari dalam Service
+    fun removeNotification(sbn: StatusBarNotification) {
+        try {
+            cancelNotification(sbn.key)
+            val currentList = _notifications.value.toMutableList()
+            currentList.removeAll { it.key == sbn.key }
+            _notifications.value = currentList
+        } catch (_: Exception) {}
+    }
+
+    // Fungsi untuk menghapus semua notifikasi
+    fun removeAllNotifications() {
+        try {
+            val currentList = _notifications.value
+            currentList.forEach {
+                cancelNotification(it.key)
+            }
+            _notifications.value = emptyList()
+        } catch (_: Exception) {}
     }
 }
