@@ -61,8 +61,6 @@ fun SettingsScreen(
     var selectedCategory by remember { mutableStateOf(SettingsCategory.WALLPAPER) }
     var draftConfig by remember { mutableStateOf(currentConfig) }
     val scope = rememberCoroutineScope()
-    
-    // FIX BUG 6: FocusRequester untuk LazyColumn
     val contentFocusRequester = remember { FocusRequester() }
 
     DisposableEffect(Unit) {
@@ -79,7 +77,7 @@ fun SettingsScreen(
     Box(Modifier.fillMaxSize().background(GlassColors.DeepBackgroundGradient)) {
         Row(Modifier.fillMaxSize().padding(16.dp)) {
             
-            // PANE KIRI
+            // PANE KIRI (SIDEBAR GLASS)
             Column(
                 Modifier.weight(0.28f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp)
                     .padding(16.dp).verticalScroll(rememberScrollState()).focusGroup(),
@@ -113,7 +111,7 @@ fun SettingsScreen(
                         onClick = {
                             selectedCategory = cat
                             scope.launch {
-                                delay(250) // FIX BUG 6: Delay agar LazyColumn siap
+                                delay(250)
                                 runCatching { contentFocusRequester.requestFocus() }
                             }
                         }
@@ -123,10 +121,9 @@ fun SettingsScreen(
 
             Spacer(Modifier.width(24.dp))
 
-            // PANE KANAN
+            // PANE KANAN (KONTEN GLASS)
             Box(Modifier.weight(0.72f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp).padding(24.dp)) {
                 AutoFocusPane(paneKey = selectedCategory, modifier = Modifier.fillMaxSize()) {
-                    // FIX BUG 6: FocusRequester dipasang di LazyColumn
                     LazyColumn(Modifier.fillMaxSize().focusRequester(contentFocusRequester)) {
                         item {
                             when (selectedCategory) {
