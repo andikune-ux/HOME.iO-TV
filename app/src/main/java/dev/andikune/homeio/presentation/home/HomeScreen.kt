@@ -14,6 +14,7 @@ import android.graphics.drawable.Drawable
 import android.provider.Settings
 import android.util.LruCache
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
@@ -21,6 +22,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.Indication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,6 +31,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -52,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -91,6 +96,12 @@ import kotlinx.coroutines.withContext
 import java.util.Date
 import kotlin.math.abs
 
+// Objek untuk mematikan highlight fokus bawaan Android
+private object NoIndication : Indication {
+    @Composable
+    override fun rememberUpdatedIndication(interactionSource: InteractionSource, isFocused: Boolean): Indication = this
+}
+
 // OPTIMASI CACHE MEMORI
 private val maxMemory = (Runtime.getRuntime().maxMemory() / 1024).toInt()
 private val cacheSize = maxMemory / 8
@@ -128,6 +139,9 @@ fun HomeScreen(
 
     val notifications by LauncherNotificationService.notifications.collectAsState()
 
+    // FIX BUG 4: Tombol Back menutup Panel Kiri, bukan keluar aplikasi
+    BackHandler(enabled = isPaneOpen) { isPaneOpen = false }
+
     LaunchedEffect(isPaneOpen) {
         if (!isPaneOpen) {
             delay(400)
@@ -139,18 +153,6 @@ fun HomeScreen(
         if (openFileManagerTrigger) {
             showFileManager = true
             onFileManagerOpened()
-        }
-    }
-
-    var currentDateString by remember { mutableStateOf(DateTimeFormatter.formatDate(Date(), config.languageCode)) }
-    var currentTimeString by remember { mutableStateOf(DateTimeFormatter.formatTime(Date(), config.timeFormat, config.showSeconds)) }
-
-    LaunchedEffect(config.languageCode, config.timeFormat, config.showSeconds) {
-        while (true) {
-            val now = Date()
-            currentDateString = DateTimeFormatter.formatDate(now, config.languageCode)
-            currentTimeString = DateTimeFormatter.formatTime(now, config.timeFormat, config.showSeconds)
-            delay(if (config.showSeconds) 1000L else 30_000L)
         }
     }
 
@@ -197,81 +199,58 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 1. Kiosk (Merah)
                 SystemControlIcon(icon = Icons.Rounded.Shield, tint = GlassColors.AccentRed, onClick = { 
                     val newKiosk = !config.isKioskModeEnabled
                     onSaveConfig(config.copy(isKioskModeEnabled = newKiosk)) 
                 })
-                // 2. WiFi
                 SystemControlIcon(icon = Icons.Rounded.Wifi, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
-                // 3. Bluetooth
                 SystemControlIcon(icon = Icons.Rounded.Bluetooth, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
-                // 4. Volume
                 SystemControlIcon(icon = Icons.Rounded.GraphicEq, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
-                // 5. Brightness
                 SystemControlIcon(icon = Icons.Rounded.WbSunny, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
-                // 6. Shortcut
                 SystemControlIcon(icon = Icons.Rounded.Dashboard, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
             }
 
-            // WIDGET KANAN ATAS
-            Column(
-                modifier = Modifier.align(Alignment.TopEnd).padding(top = 16.dp, end = 24.dp),
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(currentTimeString, color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Light, letterSpacing = 1.sp)
-                    Spacer(modifier = Modifier.width(16.dp))
-                    var isSettingsFocused by remember { mutableStateOf(false) }
-                    Box(
-                        modifier = Modifier.size(48.dp).clip(CircleShape)
-                            .background(if (isSettingsFocused) GlassColors.GlassTintLighter else GlassColors.GlassTint)
-                            .onFocusChanged { isSettingsFocused = it.isFocused }.focusable()
-                            .onPreviewKeyEvent { event -> if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) { SoundFeedback.playClick(context); onOpenSettings(); true } else false }
-                            .clickable { SoundFeedback.playClick(context); onOpenSettings() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Rounded.Settings, "Pengaturan", tint = if (isSettingsFocused) GlassColors.AccentGlow else Color.White, modifier = Modifier.size(28.dp))
-                    }
-                }
-                
-                Text(currentDateString, color = GlassColors.TextSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.WbSunny, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("${weatherInfo?.temperature?.toInt() ?: "--"}°C • ${weatherInfo?.locationName ?: "Jakarta"}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.Memory, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("${memInfo.freeMemMb} MB Free", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                }
-            }
+            // WIDGET KANAN ATAS (FIX BUG 5: Pisahkan Jam & Tanggal biar gak lag)
+            TopRightWidgets(
+                config = config,
+                weatherInfo = weatherInfo,
+                memInfo = memInfo,
+                onOpenSettings = onOpenSettings,
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 16.dp, end = 24.dp)
+            )
 
             // KONTEN BAWAH
             Column(
                 modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 80.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                FavoriteAppsSection(favoriteApps, config.appIconSizeMultiplier, { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) }, { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app })
-                
-                if (displayApps.isNotEmpty()) {
-                    AllAppsCenterCarousel(
-                        apps = displayApps,
-                        iconSizeMultiplier = config.appIconSizeMultiplier,
-                        screenWidth = screenWidth,
-                        focusRequester = carouselFocusRequester,
-                        onAppClick = { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) },
+                CompositionLocalProvider(LocalIndication provides NoIndication) {
+                    // FIX BUG 8: Tambahkan focusProperties agar tombol bawah dari Favorit langsung nyamber ke Carousel
+                    FavoriteAppsSection(
+                        favoriteApps = favoriteApps, 
+                        iconSizeMultiplier = config.appIconSizeMultiplier, 
+                        onAppClick = { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) }, 
                         onAppLongClick = { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app },
-                        onEdgeLeftReached = { isPaneOpen = true },
-                        onEdgeRightOrDownReached = { showAllAppsOverlay = true }
+                        modifier = Modifier.focusProperties { down = carouselFocusRequester }
                     )
+                    
+                    if (displayApps.isNotEmpty()) {
+                        AllAppsCenterCarousel(
+                            apps = displayApps,
+                            iconSizeMultiplier = config.appIconSizeMultiplier,
+                            screenWidth = screenWidth,
+                            focusRequester = carouselFocusRequester,
+                            onAppClick = { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) },
+                            onAppLongClick = { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app },
+                            onEdgeLeftReached = { isPaneOpen = true },
+                            onEdgeRightOrDownReached = { showAllAppsOverlay = true }
+                        )
+                    }
                 }
             }
         }
-                // TOMBOL HAMBURGER
+        
+        // TOMBOL HAMBURGER
         var isTriggerFocused by remember { mutableStateOf(false) }
         Box(
             modifier = Modifier.align(Alignment.CenterStart).padding(start = 16.dp).size(48.dp).zIndex(10f).clip(CircleShape)
@@ -309,8 +288,9 @@ fun HomeScreen(
                         onSearchClick = { SoundFeedback.playClick(context); showSearchDialog = true },
                         onNotificationPermissionClick = { try { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) } catch (_: Exception) {} },
                         onNotificationClick = { sbn -> SoundFeedback.playClick(context); try { sbn.notification.contentIntent?.send(); isPaneOpen = false } catch (e: PendingIntent.CanceledException) { Toast.makeText(context, "Gagal membuka", Toast.LENGTH_SHORT).show() } },
-                        onClearNotification = { sbn -> LauncherNotificationService().removeNotification(sbn) },
-                        onClearAllNotifications = { LauncherNotificationService().removeAllNotifications() },
+                        // FIX BUG 6: Panggil static method, jangan bikin instance baru
+                        onClearNotification = { sbn -> LauncherNotificationService.removeNotification(sbn) },
+                        onClearAllNotifications = { LauncherNotificationService.removeAllNotifications() },
                         onHomeClick = { SoundFeedback.playClick(context); selectedNav = "home"; isSideloadOnly = false },
                         onRamBoostClick = { SoundFeedback.playClick(context); memInfo = SystemUtils.boostRam(context); Toast.makeText(context, "RAM Dioptimalkan!", Toast.LENGTH_SHORT).show() },
                         onFileManagerClick = { SoundFeedback.playClick(context); showFileManager = true },
@@ -332,6 +312,60 @@ fun HomeScreen(
                 onAppClick = { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) },
                 onAppLongClick = { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app }
             )
+        }
+    }
+}
+
+// FIX BUG 5: Ekstrak Widget Atas Kanan (Jam & Cuaca)
+@Composable
+fun TopRightWidgets(
+    config: SettingsConfig,
+    weatherInfo: WeatherInfo?,
+    memInfo: SystemUtils.MemoryInfo,
+    onOpenSettings: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    var currentDateString by remember { mutableStateOf(DateTimeFormatter.formatDate(Date(), config.languageCode)) }
+    var currentTimeString by remember { mutableStateOf(DateTimeFormatter.formatTime(Date(), config.timeFormat, config.showSeconds)) }
+
+    LaunchedEffect(config.languageCode, config.timeFormat, config.showSeconds) {
+        while (true) {
+            val now = Date()
+            currentDateString = DateTimeFormatter.formatDate(now, config.languageCode)
+            currentTimeString = DateTimeFormatter.formatTime(now, config.timeFormat, config.showSeconds)
+            delay(if (config.showSeconds) 1000L else 30_000L)
+        }
+    }
+
+    Column(modifier = modifier, horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(currentTimeString, color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Light, letterSpacing = 1.sp)
+            Spacer(modifier = Modifier.width(16.dp))
+            var isSettingsFocused by remember { mutableStateOf(false) }
+            Box(
+                modifier = Modifier.size(48.dp).clip(CircleShape)
+                    .background(if (isSettingsFocused) GlassColors.GlassTintLighter else GlassColors.GlassTint)
+                    .onFocusChanged { isSettingsFocused = it.isFocused }.focusable()
+                    .onPreviewKeyEvent { event -> if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) { SoundFeedback.playClick(context); onOpenSettings(); true } else false }
+                    .clickable { SoundFeedback.playClick(context); onOpenSettings() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Rounded.Settings, "Pengaturan", tint = if (isSettingsFocused) GlassColors.AccentGlow else Color.White, modifier = Modifier.size(28.dp))
+            }
+        }
+        
+        Text(currentDateString, color = GlassColors.TextSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.WbSunny, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("${weatherInfo?.temperature?.toInt() ?: "--"}°C • ${weatherInfo?.locationName ?: "Jakarta"}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Memory, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("${memInfo.freeMemMb} MB Free", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -363,6 +397,7 @@ fun AllAppsCenterCarousel(
     val initialIndex = remember { if (apps.size > 2) 2 else 0 }
     val lazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
     val flingBehavior = rememberSnapFlingBehavior(lazyListState = lazyListState)
+    val scope = rememberCoroutineScope()
     
     val baseCardWidth = 110.dp
     val cardWidth = (baseCardWidth * iconSizeMultiplier).coerceIn(80.dp, 160.dp)
@@ -383,27 +418,37 @@ fun AllAppsCenterCarousel(
     LaunchedEffect(lazyListState.isScrollInProgress) {
         if (!lazyListState.isScrollInProgress) { delay(150); isProcessingKey = false }
     }
-    LaunchedEffect(centeredIndex) {
-        if (lazyListState.isScrollInProgress) return@LaunchedEffect
-        lazyListState.animateScrollToItem(centeredIndex)
-    }
 
     Box(Modifier.fillMaxWidth().height(140.dp)) {
         LazyRow(
             state = lazyListState, flingBehavior = flingBehavior,
             contentPadding = PaddingValues(horizontal = horizontalPadding),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
+            // FIX BUG 7: Tambahkan verticalAlignment dan height agar efek scale/glow tidak terpotong
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxSize().focusRequester(focusRequester).focusGroup()
                 .onPreviewKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown) {
                         when (event.key) {
                             Key.DirectionLeft -> {
                                 if (isProcessingKey || lazyListState.isScrollInProgress) return@onPreviewKeyEvent true
-                                if (centeredIndex == 0) { onEdgeLeftReached(); true } else { isProcessingKey = true; true }
+                                if (centeredIndex == 0) { onEdgeLeftReached(); true } 
+                                else { 
+                                    isProcessingKey = true
+                                    // FIX BUG 1: Tambahkan animateScrollToItem agar list beneran geser
+                                    scope.launch { lazyListState.animateScrollToItem(centeredIndex - 1) }
+                                    true 
+                                }
                             }
                             Key.DirectionRight -> {
                                 if (isProcessingKey || lazyListState.isScrollInProgress) return@onPreviewKeyEvent true
-                                if (centeredIndex == apps.size - 1) { onEdgeRightOrDownReached(); true } else { isProcessingKey = true; true }
+                                if (centeredIndex == apps.size - 1) { onEdgeRightOrDownReached(); true } 
+                                else { 
+                                    isProcessingKey = true
+                                    // FIX BUG 1: Tambahkan animateScrollToItem agar list beneran geser
+                                    scope.launch { lazyListState.animateScrollToItem(centeredIndex + 1) }
+                                    true 
+                                }
                             }
                             Key.DirectionDown -> { onEdgeRightOrDownReached(); true }
                             Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
@@ -430,11 +475,18 @@ fun AllAppsCenterCarousel(
         }
     }
 }
+
 @Composable
-fun FavoriteAppsSection(favoriteApps: List<AppItem>, iconSizeMultiplier: Float, onAppClick: (AppItem) -> Unit, onAppLongClick: (AppItem) -> Unit) {
-    Column {
+fun FavoriteAppsSection(
+    favoriteApps: List<AppItem>, 
+    iconSizeMultiplier: Float, 
+    onAppClick: (AppItem) -> Unit, 
+    onAppLongClick: (AppItem) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
         Text("${stringResource(R.string.favorite_apps)} (3 Utama)", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth().focusGroup(), verticalAlignment = Alignment.CenterVertically) {
             favoriteApps.forEach { app -> 
                 AppCardItem(
                     app = app, iconSizeMultiplier = iconSizeMultiplier,
