@@ -60,7 +60,7 @@ fun OnboardingPermissionDialog(
     var hasInstall by remember { mutableStateOf(false) }
     var hasUsage by remember { mutableStateOf(false) }
     var hasNotifListener by remember { mutableStateOf(false) }
-    var hasWriteSettings by remember { mutableStateOf(false) } // Izin Sistem Baru
+    var hasWriteSettings by remember { mutableStateOf(false) }
     var refresh by remember { mutableStateOf(0) }
 
     LaunchedEffect(refresh) {
@@ -104,7 +104,6 @@ fun OnboardingPermissionDialog(
                 Text("HOME.iO butuh izin agar semua fitur berjalan normal", fontSize = 12.sp, color = GlassColors.TextSecondary, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(20.dp))
 
-                // 1. Storage
                 PermissionRow(icon = Icons.Default.Folder, title = "Akses File", desc = "Simpan Backup & download Update", granted = hasStorage, modifier = Modifier.focusRequester(firstFocusRequester), onGrant = {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                         try { ctx.startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply { data = Uri.parse("package:${ctx.packageName}"); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) } 
@@ -112,27 +111,22 @@ fun OnboardingPermissionDialog(
                     }
                 })
 
-                // 2. Notifikasi
                 PermissionRow(icon = Icons.Default.Notifications, title = "Notifikasi Sistem", desc = "Progress download di status bar", granted = hasNotif, onGrant = {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 })
 
-                // 3. Install APK
                 PermissionRow(icon = Icons.Default.Warning, title = "Install Aplikasi", desc = "Pasang update APK HOME.iO", granted = hasInstall, onGrant = {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) try { ctx.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply { data = Uri.parse("package:${ctx.packageName}"); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) } catch (_: Exception) {}
                 })
 
-                // 4. Usage Stats
                 PermissionRow(icon = Icons.Default.CheckCircle, title = "Akses Penggunaan (RAM)", desc = "Fitur RAM Booster & bersihkan cache", granted = hasUsage, onGrant = {
                     try { ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) } catch (_: Exception) {}
                 })
 
-                // 5. Notif Listener
                 PermissionRow(icon = Icons.Default.Notifications, title = "Baca Notifikasi", desc = "Notifikasi HP/sistem di Panel Kiri", granted = hasNotifListener, onGrant = {
                     try { ctx.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) } catch (_: Exception) {}
                 })
 
-                // 6. WRITE_SETTINGS (System Control)
                 PermissionRow(icon = Icons.Default.Settings, title = "Ubah Pengaturan Sistem", desc = "Atur Kecerahan, WiFi, & Volume TV", granted = hasWriteSettings, onGrant = {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) try { ctx.startActivity(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply { data = Uri.parse("package:${ctx.packageName}"); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) } catch (_: Exception) {}
                 })
