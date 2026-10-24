@@ -178,7 +178,8 @@ fun HomeScreen(
 
     Box(Modifier.fillMaxSize()) {
         WallpaperView(config = config)
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)))
+        // FIX: Kurangi overlay hitam dari 0.3f menjadi 0.1f agar wallpaper lebih terlihat
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.1f)))
 
         Box(Modifier.fillMaxSize().padding(safePadding)) {
             
