@@ -379,23 +379,28 @@ fun AllAppsCenterCarousel(
     val initialIndex = remember { if (apps.size > 2) 2 else 0 }
     var selectedIndex by remember { mutableIntStateOf(initialIndex) }
     val lazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
-    val flingBehavior = rememberSnapFlingBehavior(lazyListState = lazyListState)
-    val scope = rememberCoroutineScope()
     
+    // Kunci Anti-Spam
+    var isProcessingKey by remember { mutableStateOf(false) }
+
     val baseCardWidth = 110.dp
     val cardWidth = (baseCardWidth * iconSizeMultiplier).coerceIn(80.dp, 160.dp)
     val horizontalPadding = ((screenWidth - cardWidth) / 2f).coerceAtLeast(0.dp)
 
-    // Sinkronisasi saat index berubah karena D-Pad
+    // Efek Animasi Geser
     LaunchedEffect(selectedIndex) {
-        if (!lazyListState.isScrollInProgress) {
+        if (!isProcessingKey) {
             lazyListState.animateScrollToItem(selectedIndex)
+        } else {
+            lazyListState.animateScrollToItem(selectedIndex)
+            delay(200) // Jeda buat nunggu animasi selesai
+            isProcessingKey = false
         }
     }
 
-    // Sinkronisasi saat layar digeser manual (swipe)
+    // Sinkronisasi jika digeser manual / klik
     LaunchedEffect(lazyListState.isScrollInProgress) {
-        if (!lazyListState.isScrollInProgress) {
+        if (!lazyListState.isScrollInProgress && !isProcessingKey) {
             val layoutInfo = lazyListState.layoutInfo
             val visibleItems = layoutInfo.visibleItemsInfo
             if (visibleItems.isNotEmpty()) {
@@ -408,69 +413,45 @@ fun AllAppsCenterCarousel(
         }
     }
 
-    var isProcessingKey by remember { mutableStateOf(false) }
-
-    // Reset key lock after short delay
-    LaunchedEffect(selectedIndex) {
-        if (isProcessingKey) {
-            delay(200)
-            isProcessingKey = false
-        }
-    }
-
     Box(Modifier.fillMaxWidth().height(140.dp)) {
         LazyRow(
             state = lazyListState,
-            flingBehavior = flingBehavior,
             contentPadding = PaddingValues(horizontal = horizontalPadding),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxSize()
                 .focusRequester(focusRequester)
-                .focusable() // FIX: LazyRow harus bisa menerima fokus
+                .focusable()
                 .onPreviewKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown) {
                         when (event.key) {
                             Key.DirectionLeft -> {
-                                if (isProcessingKey || lazyListState.isScrollInProgress) return@onPreviewKeyEvent true
-                                if (selectedIndex == 0) {
-                                    onEdgeLeftReached()
-                                } else {
-                                    selectedIndex--
+                                if (isProcessingKey) return@onPreviewKeyEvent true
+                                if (selectedIndex == 0) { onEdgeLeftReached() } 
+                                else { 
                                     isProcessingKey = true
+                                    selectedIndex-- 
                                 }
                                 true
                             }
                             Key.DirectionRight -> {
-                                if (isProcessingKey || lazyListState.isScrollInProgress) return@onPreviewKeyEvent true
-                                if (selectedIndex == apps.size - 1) {
-                                    onEdgeRightOrDownReached()
-                                } else {
-                                    selectedIndex++
+                                if (isProcessingKey) return@onPreviewKeyEvent true
+                                if (selectedIndex == apps.size - 1) { onEdgeRightOrDownReached() } 
+                                else { 
                                     isProcessingKey = true
+                                    selectedIndex++ 
                                 }
                                 true
                             }
-                            Key.DirectionDown -> {
-                                onEdgeRightOrDownReached()
-                                true
-                            }
+                            Key.DirectionDown -> { onEdgeRightOrDownReached(); true }
                             Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                                if (!isProcessingKey) {
-                                    val app = apps.getOrNull(selectedIndex)
-                                    if (app != null) {
-                                        isProcessingKey = true
-                                        onAppClick(app)
-                                    }
-                                }
+                                val app = apps.getOrNull(selectedIndex)
+                                if (app != null) onAppClick(app)
                                 true
                             }
                             else -> false
                         }
-                    } else if (event.type == KeyEventType.KeyUp) {
-                        isProcessingKey = false
-                        false
                     } else false
                 }
         ) {
