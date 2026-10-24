@@ -83,6 +83,8 @@ import dev.andikune.homeio.presentation.wallpaper.FileManagerDialog
 import dev.andikune.homeio.presentation.wallpaper.WallpaperView
 import dev.andikune.homeio.service.LauncherNotificationService
 import dev.andikune.homeio.util.DateTimeFormatter
+import dev.andikune.homeio.util.PermissionHelper
+import dev.andikune.homeio.util.PermissionHelper.PermissionType
 import dev.andikune.homeio.util.SoundFeedback
 import dev.andikune.homeio.util.SystemUtils
 import kotlinx.coroutines.Dispatchers
@@ -178,7 +180,6 @@ fun HomeScreen(
 
     Box(Modifier.fillMaxSize()) {
         WallpaperView(config = config)
-        // FIX: Kurangi overlay hitam dari 0.3f menjadi 0.1f agar wallpaper lebih terlihat
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.1f)))
 
         Box(Modifier.fillMaxSize().padding(safePadding)) {
@@ -268,7 +269,10 @@ fun HomeScreen(
                         notifications = notifications,
                         firstItemFocusRequester = firstMenuItemFocusRequester,
                         onSearchClick = { SoundFeedback.playClick(context); showSearchDialog = true },
-                        onNotificationPermissionClick = { try { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) } catch (_: Exception) {} },
+                        // FIX: Gunakan PermissionHelper
+                        onNotificationPermissionClick = { 
+                            PermissionHelper.openPermissionSettings(context, PermissionType.NOTIF_LISTENER) 
+                        },
                         onNotificationClick = { sbn -> SoundFeedback.playClick(context); try { sbn.notification.contentIntent?.send(); isPaneOpen = false } catch (e: PendingIntent.CanceledException) { Toast.makeText(context, "Gagal membuka", Toast.LENGTH_SHORT).show() } },
                         onClearNotification = { sbn -> LauncherNotificationService().removeNotification(sbn) },
                         onClearAllNotifications = { LauncherNotificationService().removeAllNotifications() },
