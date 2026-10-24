@@ -12,7 +12,7 @@ class LauncherNotificationService : NotificationListenerService() {
         private val _notifications = MutableStateFlow<List<StatusBarNotification>>(emptyList())
         val notifications = _notifications.asStateFlow()
 
-        // FIX: Pindahkan ke companion object agar bisa dipanggil secara statis dari HomeScreen.kt
+        // FIX: Fungsi statis untuk dipanggil dari HomeScreen
         fun removeNotification(sbn: StatusBarNotification) {
             instance?.let { service ->
                 try {
@@ -35,7 +35,6 @@ class LauncherNotificationService : NotificationListenerService() {
         }
     }
 
-    // Simpan referensi instance service agar bisa akses cancelNotification
     override fun onCreate() {
         super.onCreate()
         instance = this
