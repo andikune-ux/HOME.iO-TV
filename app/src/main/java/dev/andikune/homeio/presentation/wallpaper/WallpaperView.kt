@@ -8,11 +8,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.key
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -24,6 +20,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -44,9 +41,13 @@ fun WallpaperView(config: SettingsConfig) {
             "SINEMATIK" -> {
                 val resId = context.resources.getIdentifier("wp_video", "raw", context.packageName)
                 if (resId != 0) {
-                    VideoWallpaper(uri = getResourceUri(context.packageName, resId), scaleMode = config.wallpaperScaleMode)
+                    VideoWallpaper(
+                        uri = getResourceUri(context.packageName, resId),
+                        scaleMode = config.wallpaperScaleMode,
+                        forceSoftware = config.forceSoftwareDecoder
+                    )
                 } else {
-                    Box(Modifier.fillMaxSize().background(Color(0xFF1A1A2E))) // Fallback color
+                    Box(Modifier.fillMaxSize().background(Color(0xFF1A1A2E)))
                 }
             }
             "ESTETIK" -> {
@@ -54,7 +55,7 @@ fun WallpaperView(config: SettingsConfig) {
                 if (resId != 0) {
                     ImageWallpaper(model = getResourceUri(context.packageName, resId), scaleMode = config.wallpaperScaleMode)
                 } else {
-                    Box(Modifier.fillMaxSize().background(Color(0xFF2E1A2E))) // Fallback color
+                    Box(Modifier.fillMaxSize().background(Color(0xFF2E1A2E)))
                 }
             }
             "OLED" -> {
@@ -62,14 +63,25 @@ fun WallpaperView(config: SettingsConfig) {
             }
             "KUSTOM" -> {
                 if (config.customActiveType == "VIDEO" && !config.customVideoPath.isNullOrBlank()) {
-                    VideoWallpaper(uri = getSafeUri(config.customVideoPath), scaleMode = config.wallpaperScaleMode)
+                    VideoWallpaper(
+                        uri = getSafeUri(config.customVideoPath),
+                        scaleMode = config.wallpaperScaleMode,
+                        forceSoftware = config.forceSoftwareDecoder
+                    )
                 } else if (config.customActiveType == "PHOTO" && !config.customPhotoPath.isNullOrBlank()) {
                     ImageWallpaper(model = getSafeModel(config.customPhotoPath), scaleMode = config.wallpaperScaleMode)
                 } else if (!config.wallpaperPath.isNullOrBlank()) {
-                    if (config.wallpaperType == "VIDEO") VideoWallpaper(uri = getSafeUri(config.wallpaperPath), scaleMode = config.wallpaperScaleMode)
-                    else ImageWallpaper(model = getSafeModel(config.wallpaperPath), scaleMode = config.wallpaperScaleMode)
+                    if (config.wallpaperType == "VIDEO") {
+                        VideoWallpaper(
+                            uri = getSafeUri(config.wallpaperPath),
+                            scaleMode = config.wallpaperScaleMode,
+                            forceSoftware = config.forceSoftwareDecoder
+                        )
+                    } else {
+                        ImageWallpaper(model = getSafeModel(config.wallpaperPath), scaleMode = config.wallpaperScaleMode)
+                    }
                 } else {
-                    Box(Modifier.fillMaxSize().background(Color(0xFF1A2E1A))) // Fallback color
+                    Box(Modifier.fillMaxSize().background(Color(0xFF1A2E1A)))
                 }
             }
             else -> {
@@ -118,19 +130,26 @@ private fun ImageWallpaper(model: Any, scaleMode: String) {
 }
 
 @Composable
-private fun VideoWallpaper(uri: Uri, scaleMode: String) {
+private fun VideoWallpaper(uri: Uri, scaleMode: String, forceSoftware: Boolean = false) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     
-    val exoPlayer = remember(uri) {
-        ExoPlayer.Builder(context).build().apply {
+    val exoPlayer = remember(uri, forceSoftware) {
+        val renderersFactory = DefaultRenderersFactory(context)
+            .setEnableDecoderFallback(true) // Wajib ON buat fallback
+
+        if (forceSoftware) {
+            // Memaksa ExoPlayer mencoba Software Decoder / FFmpeg (jika ada)
+            renderersFactory.setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+        }
+
+        ExoPlayer.Builder(context, renderersFactory).build().apply {
             setMediaItem(MediaItem.fromUri(uri))
             prepare()
             playWhenReady = true
             repeatMode = ExoPlayer.REPEAT_MODE_ALL
             volume = 0f
             
-            // FIX: Tambahkan Error Listener biar kita tau kalau video gagal diputar
             addListener(object : Player.Listener {
                 override fun onPlayerError(error: PlaybackException) {
                     Log.e("VideoWallpaper", "Error playing video: ${error.errorCodeName} - ${error.message}", error)
@@ -167,7 +186,6 @@ private fun VideoWallpaper(uri: Uri, scaleMode: String) {
                 val playerView = PlayerView(ctx).apply {
                     useController = false
                     this.player = exoPlayer
-                    // FIX: Gunakan RESIZE_MODE_FILL biar video maksa penuhin layar
                     resizeMode = when (scaleMode) {
                         "FIT" -> AspectRatioFrameLayout.RESIZE_MODE_FIT
                         "FILL" -> AspectRatioFrameLayout.RESIZE_MODE_FILL
