@@ -127,15 +127,11 @@ class MainActivity : ComponentActivity() {
                 var downloadReady by remember { mutableStateOf(false) }
                 var isError by remember { mutableStateOf(false) }
 
-                // STATE SINKRONISASI
+                // FIX: Single Source of Truth menggunakan localConfig.
+                // Hilangkan LaunchedEffect(flowConfig) yang bikin Race Condition.
                 val flowConfig by appContainer.preferencesManager.settingsFlow.collectAsState(initial = SettingsConfig())
-                var localConfig by remember { mutableStateOf(flowConfig) }
-                
-                LaunchedEffect(flowConfig) {
-                    localConfig = flowConfig
-                }
-                
-                val config = localConfig
+                var localConfig by remember { mutableStateOf<SettingsConfig?>(null) }
+                val config = localConfig ?: flowConfig
 
                 LaunchedEffect(config.isKioskModeEnabled) {
                     if (config.isKioskModeEnabled) {
