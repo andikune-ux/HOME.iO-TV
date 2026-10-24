@@ -58,7 +58,18 @@ fun FileManagerDialog(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    var currentDir by remember { mutableStateOf(Environment.getExternalStorageDirectory()) }
+    
+    // FIX: Jika tidak ada izin, default ke folder Download publik
+    var currentDir by remember { 
+        mutableStateOf(
+            if (PermissionHelper.checkPermission(context, PermissionType.STORAGE)) {
+                Environment.getExternalStorageDirectory()
+            } else {
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            }
+        ) 
+    }
+    
     var files by remember { mutableStateOf<List<File>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var isVideoMode by remember { mutableStateOf(true) }
@@ -76,7 +87,8 @@ fun FileManagerDialog(
     }
 
     BackHandler(enabled = true) {
-        if (currentDir.absolutePath != Environment.getExternalStorageDirectory().absolutePath) {
+        val rootDir = if (hasStoragePermission) Environment.getExternalStorageDirectory() else Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        if (currentDir.absolutePath != rootDir.absolutePath) {
             currentDir = currentDir.parentFile ?: currentDir
         } else {
             onDismiss()
@@ -141,7 +153,7 @@ fun FileManagerDialog(
                         Spacer(Modifier.height(16.dp))
                         Text("Izin Storage Diperlukan", color = GlassColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                         Spacer(Modifier.height(8.dp))
-                        Text("Aplikasi butuh akses file untuk menampilkan video/foto.", color = GlassColors.TextSecondary, fontSize = 12.sp)
+                        Text("Aplikasi butuh akses file untuk menampilkan video/foto.\n(Atau gunakan folder Download sebagai alternatif).", color = GlassColors.TextSecondary, fontSize = 12.sp)
                         Spacer(Modifier.height(16.dp))
                         Box(Modifier.clip(RoundedCornerShape(8.dp)).background(GlassColors.AccentGlow).clickable {
                             PermissionHelper.openPermissionSettings(context, PermissionType.STORAGE)
@@ -150,7 +162,8 @@ fun FileManagerDialog(
                         }
                     }
                 } else {
-                    if (currentDir.absolutePath != Environment.getExternalStorageDirectory().absolutePath) {
+                    val rootDir = if (hasStoragePermission) Environment.getExternalStorageDirectory() else Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                    if (currentDir.absolutePath != rootDir.absolutePath) {
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(GlassColors.GlassTint).clickable { currentDir = currentDir.parentFile ?: currentDir }.padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically
