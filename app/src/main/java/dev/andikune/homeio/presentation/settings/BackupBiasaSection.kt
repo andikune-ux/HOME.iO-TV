@@ -33,6 +33,8 @@ import dev.andikune.homeio.presentation.components.GlassColors
 import dev.andikune.homeio.presentation.components.NeonFocusBorder
 import dev.andikune.homeio.util.BackupBiasaManager
 import dev.andikune.homeio.util.BackupManager
+import dev.andikune.homeio.util.PermissionHelper
+import dev.andikune.homeio.util.PermissionHelper.PermissionType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -54,7 +56,6 @@ fun BackupBiasaSection(
     val usingFallback = remember { BackupManager.isUsingFallbackPath() }
     val fileList = remember(refreshKey) { BackupBiasaManager.getBackupList(ctx) }
     
-    // FIX BUG FOKUS: FocusRequester untuk tombol backup
     val backupBtnFocusReq = remember { FocusRequester() }
     LaunchedEffect(fileList.size) {
         if (fileList.isEmpty()) {
@@ -112,11 +113,19 @@ fun BackupBiasaSection(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
                     .background(GlassColors.AccentAmber.copy(alpha = 0.15f))
                     .border(1.dp, GlassColors.AccentAmber, RoundedCornerShape(10.dp)).padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Icon(Icons.Default.Warning, null, tint = GlassColors.AccentAmber, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Izin storage belum diberikan. File tersimpan di lokasi internal.", color = GlassColors.AccentAmber, fontSize = 11.sp, lineHeight = 15.sp)
+                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Warning, null, tint = GlassColors.AccentAmber, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Izin storage belum diberikan. File tersimpan di folder Download TV.", color = GlassColors.AccentAmber, fontSize = 11.sp, lineHeight = 15.sp)
+                }
+                Box(Modifier.clip(RoundedCornerShape(6.dp)).background(GlassColors.AccentAmber).clickable {
+                    PermissionHelper.openPermissionSettings(ctx, PermissionType.STORAGE)
+                }.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                    Text("BERI IZIN", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                }
             }
         }
 
