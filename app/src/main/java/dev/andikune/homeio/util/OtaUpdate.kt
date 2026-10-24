@@ -51,6 +51,7 @@ import dev.andikune.homeio.presentation.components.GlassColors
 import dev.andikune.homeio.presentation.components.NeonFocusBorder
 import dev.andikune.homeio.presentation.components.liquidGlass
 import dev.andikune.homeio.service.UpdateDownloadService
+import dev.andikune.homeio.util.PermissionHelper.PermissionType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -229,7 +230,7 @@ object ApkDownloader {
         val file = File(path)
         if (!file.exists() || !isValid(ctx, file)) return false
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !ctx.packageManager.canRequestPackageInstalls()) {
-            PermissionHelper.openPermissionSettings(ctx, PermissionHelper.PermissionType.INSTALL_APK)
+            PermissionHelper.openPermissionSettings(ctx, PermissionType.INSTALL_APK)
             return false
         }
         return try {
