@@ -1,7 +1,7 @@
 package dev.andikune.homeio.presentation.onboarding
 
+import android.content.Context
 import android.os.Build
-import android.os.Environment
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -52,21 +52,23 @@ fun OnboardingPermissionDialog(
     val ctx = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     
+    // SharedPreferences untuk menyimpan status System Limit
+    val prefs = remember { ctx.getSharedPreferences("homeio_onboarding", Context.MODE_PRIVATE) }
+
     var refresh by remember { mutableStateOf(0) }
     
-    var systemLimitedStorage by remember { mutableStateOf(false) }
-    var systemLimitedNotif by remember { mutableStateOf(false) }
-    var systemLimitedInstall by remember { mutableStateOf(false) }
-    var systemLimitedUsage by remember { mutableStateOf(false) }
-    var systemLimitedListener by remember { mutableStateOf(false) }
-    var systemLimitedWrite by remember { mutableStateOf(false) }
+    var systemLimitedStorage by remember { mutableStateOf(prefs.getBoolean("limit_storage", false)) }
+    var systemLimitedNotif by remember { mutableStateOf(prefs.getBoolean("limit_notif", false)) }
+    var systemLimitedInstall by remember { mutableStateOf(prefs.getBoolean("limit_install", false)) }
+    var systemLimitedUsage by remember { mutableStateOf(prefs.getBoolean("limit_usage", false)) }
+    var systemLimitedListener by remember { mutableStateOf(prefs.getBoolean("limit_listener", false)) }
+    var systemLimitedWrite by remember { mutableStateOf(prefs.getBoolean("limit_write", false)) }
 
     var showGuideDialog by remember { mutableStateOf(false) }
     var guideTitle by remember { mutableStateOf("") }
     var guideMessage by remember { mutableStateOf("") }
     var guideAction by remember { mutableStateOf<() -> Unit>({}) }
 
-    // FIX: Auto refresh status saat user kembali dari pengaturan
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -88,12 +90,12 @@ fun OnboardingPermissionDialog(
         
         if (!opened) {
             when(type) {
-                PermissionType.STORAGE -> systemLimitedStorage = true
-                PermissionType.NOTIFICATION -> systemLimitedNotif = true
-                PermissionType.INSTALL_APK -> systemLimitedInstall = true
-                PermissionType.USAGE_ACCESS -> systemLimitedUsage = true
-                PermissionType.NOTIF_LISTENER -> systemLimitedListener = true
-                PermissionType.WRITE_SETTINGS -> systemLimitedWrite = true
+                PermissionType.STORAGE -> { systemLimitedStorage = true; prefs.edit().putBoolean("limit_storage", true).apply() }
+                PermissionType.NOTIFICATION -> { systemLimitedNotif = true; prefs.edit().putBoolean("limit_notif", true).apply() }
+                PermissionType.INSTALL_APK -> { systemLimitedInstall = true; prefs.edit().putBoolean("limit_install", true).apply() }
+                PermissionType.USAGE_ACCESS -> { systemLimitedUsage = true; prefs.edit().putBoolean("limit_usage", true).apply() }
+                PermissionType.NOTIF_LISTENER -> { systemLimitedListener = true; prefs.edit().putBoolean("limit_listener", true).apply() }
+                PermissionType.WRITE_SETTINGS -> { systemLimitedWrite = true; prefs.edit().putBoolean("limit_write", true).apply() }
             }
             Toast.makeText(ctx, "Sistem TV tidak mendukung izin ini. Menggunakan mode kompatibilitas.", Toast.LENGTH_LONG).show()
             refresh++
