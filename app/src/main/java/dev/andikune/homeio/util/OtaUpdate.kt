@@ -135,11 +135,22 @@ object ApkDownloader {
     data class State(val isDownloading: Boolean = false, val progress: Float = 0f, val savedFilePath: String? = null, val error: String? = null, val isFinished: Boolean = false)
 
     fun getDir(ctx: Context): File {
-        val base = ctx.getExternalFilesDir(null) ?: ctx.filesDir
-        val dir = File(base, FOLDER); if (!dir.exists()) dir.mkdirs(); return dir
+        val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager() else true
+        
+        return if (hasPermission) {
+            try {
+                File(Environment.getExternalStorageDirectory(), FOLDER).also { if (!it.exists()) it.mkdirs() }
+            } catch (e: Exception) {
+                File(ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), FOLDER).also { if (!it.exists()) it.mkdirs() }
+            }
+        } else {
+            File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), FOLDER).also { if (!it.exists()) it.mkdirs() }
+        }
     }
 
-    fun isUsingFallbackPath(ctx: Context): Boolean = false
+    fun isUsingFallbackPath(ctx: Context): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) !Environment.isExternalStorageManager() else false
+    }
 
     fun download(ctx: Context, urlStr: String, fileName: String): Flow<State> = flow {
         emit(State(isDownloading = true))
@@ -192,7 +203,7 @@ object ApkDownloader {
         getDir(ctx).listFiles()?.filter { it.name.endsWith(".apk") }?.let { list.addAll(it) }
         try {
             val legacy = File(Environment.getExternalStorageDirectory(), FOLDER)
-            if (legacy.exists()) { legacy.listFiles()?.filter { it.name.endsWith(".apk") }?.let { list.addAll(it) } }
+            if (legacy.exists() && legacy.absolutePath != getDir(ctx).absolutePath) { legacy.listFiles()?.filter { it.name.endsWith(".apk") }?.let { list.addAll(it) } }
         } catch (_: Exception) {}
         return list.distinctBy { it.absolutePath }.sortedByDescending { it.lastModified() }
     }
@@ -218,7 +229,7 @@ object ApkDownloader {
         val file = File(path)
         if (!file.exists() || !isValid(ctx, file)) return false
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !ctx.packageManager.canRequestPackageInstalls()) {
-            try { ctx.startActivity(Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply { data = Uri.parse("package:${ctx.packageName}"); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) } catch (_: Exception) {}
+            PermissionHelper.openPermissionSettings(ctx, PermissionHelper.PermissionType.INSTALL_APK)
             return false
         }
         return try {
@@ -308,7 +319,7 @@ fun ApkFileListSection() {
     val scope = rememberCoroutineScope()
     var refreshKey by remember { mutableStateOf(0) }
     val list = remember(refreshKey) { ApkDownloader.getList(ctx) }
-    val usingFallback = remember { ApkDownloader.isUsingFallbackPath(ctx) }
+    val usingFallback = remember(refreshKey) { ApkDownloader.isUsingFallbackPath(ctx) }
     var isChecking by remember { mutableStateOf(false) }
     var checkResult by remember { mutableStateOf<String?>(null) }
     var isErrorResult by remember { mutableStateOf(false) }
@@ -338,7 +349,13 @@ fun ApkFileListSection() {
     }
 
     Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        if (usingFallback) { Row(Modifier.fillMaxWidth().background(GlassColors.AccentAmber.copy(alpha = 0.15f), RoundedCornerShape(8.dp)).border(1.dp, GlassColors.AccentAmber, RoundedCornerShape(8.dp)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Warning, null, tint = GlassColors.AccentAmber, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Izin storage belum diberikan. File tersimpan di lokasi internal.", color = GlassColors.AccentAmber, fontSize = 11.sp) } }
+        if (usingFallback) { 
+            Row(Modifier.fillMaxWidth().background(GlassColors.AccentAmber.copy(alpha = 0.15f), RoundedCornerShape(8.dp)).border(1.dp, GlassColors.AccentAmber, RoundedCornerShape(8.dp)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) { 
+                Icon(Icons.Default.Warning, null, tint = GlassColors.AccentAmber, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Izin storage belum diberikan. APK akan diunduh ke folder Downloads TV.", color = GlassColors.AccentAmber, fontSize = 11.sp) 
+            } 
+        }
         Spacer(Modifier.height(16.dp))
         var isFocused by remember { mutableStateOf(false) }
         NeonFocusBorder(focused = isFocused, cornerRadius = 16.dp, modifier = Modifier.fillMaxWidth(0.8f)) {
