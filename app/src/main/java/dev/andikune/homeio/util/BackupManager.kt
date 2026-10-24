@@ -1,7 +1,6 @@
 package dev.andikune.homeio.util
 
 import android.content.Context
-import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.util.Log
@@ -23,6 +22,20 @@ object BackupManager {
         val errorMessage: String? = null,
         val isFallbackPath: Boolean = false
     )
+
+    // FIX: Mengembalikan fungsi ini agar BackupSection.kt bisa compile
+    fun needsStoragePermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            !Environment.isExternalStorageManager()
+        } else {
+            false
+        }
+    }
+
+    // FIX: Mengembalikan fungsi ini dan mengarahkannya ke PermissionHelper
+    fun openPermissionSettings(context: Context) {
+        PermissionHelper.openPermissionSettings(context, PermissionHelper.PermissionType.STORAGE)
+    }
 
     fun isUsingFallbackPath(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -107,7 +120,6 @@ object BackupManager {
                 file.writeText(content, Charsets.UTF_8)
                 BackupResult(success = true, filePath = file.absolutePath, isFallbackPath = true)
             } else {
-                // Jika folder publik benar-benar gagal, simpan di folder privat (pasti aman)
                 val appDir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
                 val internalDir = File(appDir, "$FOLDER_APP/$FOLDER_BACKUP")
                 if (!internalDir.exists()) internalDir.mkdirs()
