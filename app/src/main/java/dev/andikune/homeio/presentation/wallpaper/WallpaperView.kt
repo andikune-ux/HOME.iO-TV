@@ -22,6 +22,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -33,7 +35,6 @@ import java.io.File
 fun WallpaperView(config: SettingsConfig) {
     val context = LocalContext.current
 
-    // Debug: Cek apakah Compose mendeteksi perubahan
     LaunchedEffect(config.wallpaperMode, config.customPhotoPath) {
         Log.d("WallpaperDebug", "Mode: ${config.wallpaperMode}, Path: ${config.customPhotoPath}")
     }
@@ -45,7 +46,7 @@ fun WallpaperView(config: SettingsConfig) {
                 if (resId != 0) {
                     VideoWallpaper(uri = getResourceUri(context.packageName, resId), scaleMode = config.wallpaperScaleMode)
                 } else {
-                    Box(Modifier.fillMaxSize().background(Color(0xFF1A1A2E)))
+                    Box(Modifier.fillMaxSize().background(Color(0xFF1A1A2E))) // Fallback color
                 }
             }
             "ESTETIK" -> {
@@ -53,7 +54,7 @@ fun WallpaperView(config: SettingsConfig) {
                 if (resId != 0) {
                     ImageWallpaper(model = getResourceUri(context.packageName, resId), scaleMode = config.wallpaperScaleMode)
                 } else {
-                    Box(Modifier.fillMaxSize().background(Color(0xFF2E1A2E)))
+                    Box(Modifier.fillMaxSize().background(Color(0xFF2E1A2E))) // Fallback color
                 }
             }
             "OLED" -> {
@@ -68,7 +69,7 @@ fun WallpaperView(config: SettingsConfig) {
                     if (config.wallpaperType == "VIDEO") VideoWallpaper(uri = getSafeUri(config.wallpaperPath), scaleMode = config.wallpaperScaleMode)
                     else ImageWallpaper(model = getSafeModel(config.wallpaperPath), scaleMode = config.wallpaperScaleMode)
                 } else {
-                    Box(Modifier.fillMaxSize().background(Color(0xFF1A2E1A)))
+                    Box(Modifier.fillMaxSize().background(Color(0xFF1A2E1A))) // Fallback color
                 }
             }
             else -> {
@@ -82,7 +83,6 @@ private fun getResourceUri(packageName: String, resId: Int): Uri {
     return Uri.parse("android.resource://$packageName/$resId")
 }
 
-// Untuk Video ExoPlayer, Uri.fromFile masih aman
 private fun getSafeUri(path: String): Uri {
     return if (path.startsWith("content://") || path.startsWith("http") || path.startsWith("android.resource://")) {
         Uri.parse(path)
@@ -91,7 +91,6 @@ private fun getSafeUri(path: String): Uri {
     }
 }
 
-// FIX: Untuk Coil Image, gunakan File agar tidak kena restrict Android 10+
 private fun getSafeModel(path: String): Any {
     return if (path.startsWith("content://") || path.startsWith("http") || path.startsWith("android.resource://")) {
         Uri.parse(path)
@@ -130,6 +129,13 @@ private fun VideoWallpaper(uri: Uri, scaleMode: String) {
             playWhenReady = true
             repeatMode = ExoPlayer.REPEAT_MODE_ALL
             volume = 0f
+            
+            // FIX: Tambahkan Error Listener biar kita tau kalau video gagal diputar
+            addListener(object : Player.Listener {
+                override fun onPlayerError(error: PlaybackException) {
+                    Log.e("VideoWallpaper", "Error playing video: ${error.errorCodeName} - ${error.message}", error)
+                }
+            })
         }
     }
 
@@ -161,14 +167,16 @@ private fun VideoWallpaper(uri: Uri, scaleMode: String) {
                 val playerView = PlayerView(ctx).apply {
                     useController = false
                     this.player = exoPlayer
+                    // FIX: Gunakan RESIZE_MODE_FILL biar video maksa penuhin layar
                     resizeMode = when (scaleMode) {
                         "FIT" -> AspectRatioFrameLayout.RESIZE_MODE_FIT
                         "FILL" -> AspectRatioFrameLayout.RESIZE_MODE_FILL
                         "ZOOM" -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                         "CROP" -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                        else -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                        else -> AspectRatioFrameLayout.RESIZE_MODE_FILL
                     }
                     layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                    setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
                 }
                 addView(playerView)
             }
