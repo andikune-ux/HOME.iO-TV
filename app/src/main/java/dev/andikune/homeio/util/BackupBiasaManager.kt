@@ -1,6 +1,7 @@
 package dev.andikune.homeio.util
 
 import android.content.Context
+import android.os.Build
 import android.os.Environment
 import android.util.Log
 import dev.andikune.homeio.domain.model.SettingsConfig
@@ -15,16 +16,38 @@ object BackupBiasaManager {
     private const val FOLDER = "HomeiO/Backup"
     private val jsonFormat = Json { 
         prettyPrint = true
-        ignoreUnknownKeys = true // FIX BUG #29 & #45: Abaikan field baru/asing saat restore versi lama
+        ignoreUnknownKeys = true
         isLenient = true 
     }
 
     data class BackupResult(val success: Boolean, val path: String? = null, val msg: String? = null)
 
+    // FIX: Fungsi untuk mengecek fallback, agar UI bisa nampilin peringatan
+    fun isUsingFallbackPath(ctx: Context): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            !Environment.isExternalStorageManager()
+        } else {
+            val dir = File(Environment.getExternalStorageDirectory(), FOLDER)
+            !dir.exists() || !dir.canWrite()
+        }
+    }
+
     private fun getDir(ctx: Context): File {
-        val dir = File(Environment.getExternalStorageDirectory(), FOLDER)
-        if (!dir.exists()) dir.mkdirs()
-        return if (dir.canWrite()) dir else File(ctx.filesDir, FOLDER).also { if (!it.exists()) it.mkdirs() }
+        // PLAN A: Paksa simpan di root SD Card (Butuh Izin)
+        if (!isUsingFallbackPath(ctx)) {
+            val dir = File(Environment.getExternalStorageDirectory(), FOLDER)
+            if (!dir.exists()) dir.mkdirs()
+            if (dir.exists() && dir.canWrite()) return dir
+        }
+        
+        // PLAN B: Fallback ke folder Downloads bawaan TV
+        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val fallbackDir = File(downloadsDir, FOLDER)
+        if (!fallbackDir.exists()) fallbackDir.mkdirs()
+        if (fallbackDir.exists() && fallbackDir.canWrite()) return fallbackDir
+
+        // Fallback Terakhir: Folder privat aplikasi (pasti aman)
+        return File(ctx.filesDir, FOLDER).also { if (!it.exists()) it.mkdirs() }
     }
 
     fun createBackup(ctx: Context, config: SettingsConfig): BackupResult {
