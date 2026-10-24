@@ -36,6 +36,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.andikune.homeio.presentation.components.GlassColors
 import dev.andikune.homeio.presentation.components.NeonFocusBorder
 import dev.andikune.homeio.util.PermissionHelper
@@ -47,6 +50,8 @@ fun OnboardingPermissionDialog(
     onDismiss: () -> Unit
 ) {
     val ctx = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    
     var refresh by remember { mutableStateOf(0) }
     
     var systemLimitedStorage by remember { mutableStateOf(false) }
@@ -60,6 +65,17 @@ fun OnboardingPermissionDialog(
     var guideTitle by remember { mutableStateOf("") }
     var guideMessage by remember { mutableStateOf("") }
     var guideAction by remember { mutableStateOf<() -> Unit>({}) }
+
+    // FIX: Auto refresh status saat user kembali dari pengaturan
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                refresh++
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     fun handlePermission(type: PermissionType, titleStr: String, guideStr: String) {
         if (PermissionHelper.checkPermission(ctx, type)) {
