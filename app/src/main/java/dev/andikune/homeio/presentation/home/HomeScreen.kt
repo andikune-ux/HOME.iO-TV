@@ -269,13 +269,12 @@ fun HomeScreen(
                         notifications = notifications,
                         firstItemFocusRequester = firstMenuItemFocusRequester,
                         onSearchClick = { SoundFeedback.playClick(context); showSearchDialog = true },
-                        // FIX: Gunakan PermissionHelper
                         onNotificationPermissionClick = { 
                             PermissionHelper.openPermissionSettings(context, PermissionType.NOTIF_LISTENER) 
                         },
                         onNotificationClick = { sbn -> SoundFeedback.playClick(context); try { sbn.notification.contentIntent?.send(); isPaneOpen = false } catch (e: PendingIntent.CanceledException) { Toast.makeText(context, "Gagal membuka", Toast.LENGTH_SHORT).show() } },
-                        onClearNotification = { sbn -> LauncherNotificationService().removeNotification(sbn) },
-                        onClearAllNotifications = { LauncherNotificationService().removeAllNotifications() },
+                        onClearNotification = { sbn -> LauncherNotificationService.removeNotification(sbn) },
+                        onClearAllNotifications = { LauncherNotificationService.removeAllNotifications() },
                         onHomeClick = { SoundFeedback.playClick(context); selectedNav = "home"; isSideloadOnly = false },
                         onRamBoostClick = { SoundFeedback.playClick(context); memInfo = SystemUtils.boostRam(context); Toast.makeText(context, "RAM Dioptimalkan!", Toast.LENGTH_SHORT).show() },
                         onFileManagerClick = { SoundFeedback.playClick(context); showFileManager = true },
