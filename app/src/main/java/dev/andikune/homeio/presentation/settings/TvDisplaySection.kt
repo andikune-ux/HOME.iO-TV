@@ -21,19 +21,39 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import android.widget.Toast
 import dev.andikune.homeio.domain.model.SettingsConfig
 import dev.andikune.homeio.presentation.components.GlassColors
 import dev.andikune.homeio.presentation.components.TvSlider
 import dev.andikune.homeio.presentation.components.TvToggle
+import dev.andikune.homeio.util.LauncherHelper
 
 @Composable
 fun TvDisplaySection(
     settings: SettingsConfig,
     onUpdate: (SettingsConfig) -> Unit
 ) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var isDefaultLauncher by remember { mutableStateOf(LauncherHelper.isDefaultLauncher(context)) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                isDefaultLauncher = LauncherHelper.isDefaultLauncher(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Tv, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(28.dp))
@@ -99,6 +119,26 @@ fun TvDisplaySection(
 
         // === KIOSK MODE ===
         Text("KIOSK & SYSTEM", color = GlassColors.TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        TvToggle(
+            label = "Launcher Utama (Default Home)",
+            description = if (isDefaultLauncher) {
+                "HOME.iO aktif sebagai launcher utama TV"
+            } else {
+                "Jadikan HOME.iO sebagai launcher saat tombol HOME ditekan"
+            },
+            isChecked = isDefaultLauncher,
+            onToggle = { enabled ->
+                val opened = if (enabled) {
+                    LauncherHelper.openDefaultLauncherRequest(context)
+                } else {
+                    LauncherHelper.openHomeSettings(context)
+                }
+                if (!opened) {
+                    Toast.makeText(context, "Pengaturan launcher tidak tersedia", Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
+
         TvToggle(
             label = "Kiosk Mode (Lock Task)",
             description = "Kunci aplikasi agar jamaah tidak bisa keluar dari Home.io",

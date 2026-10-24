@@ -13,8 +13,10 @@ import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -55,6 +57,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.andikune.homeio.domain.model.SettingsConfig
 import dev.andikune.homeio.domain.model.WeatherInfo
 import dev.andikune.homeio.kiosk.KioskManager
@@ -103,8 +108,35 @@ class MainActivity : ComponentActivity() {
                 
                 var showOnboarding by remember { mutableStateOf(false) }
                 var showQrisPopup by remember { mutableStateOf(false) }
-                var showLauncherPrompt by remember { 
-                    mutableStateOf(!LauncherHelper.isDefaultLauncher(context) && !OnboardingPrefs.hasAskedLauncher(context)) 
+                var isDefaultLauncher by remember { mutableStateOf(LauncherHelper.isDefaultLauncher(context)) }
+                var showLauncherPrompt by remember {
+                    mutableStateOf(!isDefaultLauncher && !OnboardingPrefs.hasAskedLauncher(context))
+                }
+                val lifecycleOwner = LocalLifecycleOwner.current
+                val launcherRoleRequest = rememberLauncherForActivityResult(
+                    ActivityResultContracts.StartActivityForResult()
+                ) {
+                    isDefaultLauncher = LauncherHelper.isDefaultLauncher(context)
+                    if (isDefaultLauncher) {
+                        OnboardingPrefs.markLauncherAsked(context)
+                        showLauncherPrompt = false
+                    } else {
+                        Toast.makeText(context, "HOME.iO belum menjadi launcher utama", Toast.LENGTH_SHORT).show()
+                    }
+                }
+
+                DisposableEffect(lifecycleOwner) {
+                    val observer = LifecycleEventObserver { _, event ->
+                        if (event == Lifecycle.Event.ON_RESUME) {
+                            isDefaultLauncher = LauncherHelper.isDefaultLauncher(context)
+                            if (isDefaultLauncher) {
+                                OnboardingPrefs.markLauncherAsked(context)
+                                showLauncherPrompt = false
+                            }
+                        }
+                    }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
                 }
 
                 LaunchedEffect(Unit) {
@@ -294,6 +326,13 @@ class MainActivity : ComponentActivity() {
 
                 if (showLauncherPrompt && isSplashFinished && !showOnboarding && !showQrisPopup) {
                     DefaultLauncherDialog(
+                        onRequestLauncher = {
+                            try {
+                                launcherRoleRequest.launch(LauncherHelper.createDefaultLauncherRequestIntent(context))
+                            } catch (_: Exception) {
+                                Toast.makeText(context, "Pengaturan launcher tidak tersedia", Toast.LENGTH_SHORT).show()
+                            }
+                        },
                         onDismiss = { OnboardingPrefs.markLauncherAsked(context); showLauncherPrompt = false }
                     )
                 }
@@ -365,8 +404,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun DefaultLauncherDialog(onDismiss: () -> Unit) {
-    val context = LocalContext.current
+fun DefaultLauncherDialog(onRequestLauncher: () -> Unit, onDismiss: () -> Unit) {
     val focusReq = remember { FocusRequester() }
     var isFocusedBtn by remember { mutableStateOf(false) }
     var isFocusedSkip by remember { mutableStateOf(false) }
@@ -386,8 +424,8 @@ fun DefaultLauncherDialog(onDismiss: () -> Unit) {
                 NeonFocusBorder(focused = isFocusedBtn, cornerRadius = 12.dp, modifier = Modifier.fillMaxWidth()) {
                     Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (isFocusedBtn) GlassColors.AccentGlow else GlassColors.GlassTint)
                         .focusRequester(focusReq).onFocusChanged { isFocusedBtn = it.isFocused }.focusable()
-                        .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { LauncherHelper.openLauncherChooser(context); onDismiss(); true } else false }
-                        .clickable { LauncherHelper.openLauncherChooser(context); onDismiss() }.padding(14.dp), contentAlignment = Alignment.Center) {
+                        .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onRequestLauncher(); true } else false }
+                        .clickable { onRequestLauncher() }.padding(14.dp), contentAlignment = Alignment.Center) {
                         Text("JADIKAN LAUNCHER SEKARANG", color = if (isFocusedBtn) GlassColors.DeepBackground else Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                 }
