@@ -46,6 +46,8 @@ object PermissionHelper {
         }
     }
 
+    // FIX: Mengembalikan true jika halaman pengaturan berhasil dibuka (termasuk Info App)
+    // Mengembalikan false HANYA jika TV benar-benar tidak punya halaman pengaturan tersebut (System Limit)
     fun openPermissionSettings(context: Context, type: PermissionType): Boolean {
         val intent = when (type) {
             PermissionType.STORAGE -> {
@@ -73,17 +75,20 @@ object PermissionHelper {
             context.startActivity(intent)
             true
         } catch (e: Exception) {
+            // Fallback ke Info Aplikasi: User masih bisa atur manual di sini, jadi return true
             try {
                 val fallback = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                     data = Uri.parse("package:${context.packageName}")
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 context.startActivity(fallback)
-                Toast.makeText(context, "Sistem TV tidak mendukung halaman ini. Silakan atur manual di Info Aplikasi.", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "Halaman izin khusus tidak tersedia. Silakan atur manual di Info Aplikasi.", Toast.LENGTH_LONG).show()
+                true 
             } catch (_: Exception) {
-                Toast.makeText(context, "Fitur pengaturan tidak didukung oleh TV ini.", Toast.LENGTH_SHORT).show()
+                // Benar-benar tidak ada halaman pengaturan (System Limit)
+                Toast.makeText(context, "Sistem TV tidak mendukung pengaturan izin.", Toast.LENGTH_SHORT).show()
+                false
             }
-            false
         }
     }
 }
