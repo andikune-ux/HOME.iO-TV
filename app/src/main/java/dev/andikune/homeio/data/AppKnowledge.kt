@@ -179,6 +179,56 @@ ATURAN FORMAT:
 26. Temuan: Overload resolution ambiguity pada BackupManager.kt
     File   : BackupManager.kt
     Fix    : Gunakan appendLine(CharSequence) dan pastikan semua konstanta di AppKnowledge.kt tersedia.
+
+27. Temuan: Pengaturan wallpaper kustom hilang setelah aplikasi direstart
+    File   : PreferencesManager.kt, SettingsConfig.kt
+    Fix    : Tambahkan persistence DataStore untuk wallpaperMode, customPhotoPath,
+             customVideoPath, customActiveType, forceSoftwareDecoder, dan
+             isKeepScreenOnEnabled.
+
+28. Temuan: Toggle Auto-Start saat TV menyala tidak dihormati
+    File   : receiver/BootReceiver.kt
+    Fix    : BootReceiver membaca isAutoStartOnBoot sebelum menjalankan
+             AutoStartService.
+
+29. Temuan: AutoStartService dapat gagal pada Android modern
+    File   : AndroidManifest.xml
+    Fix    : Tambahkan permission FOREGROUND_SERVICE_SPECIAL_USE untuk service.
+
+30. Temuan: Konversi video wallpaper menggunakan Thread.sleep tetap berjalan
+             walaupun Transformer belum selesai
+    File   : WallpaperSection.kt
+    Fix    : Tunggu callback resmi Transformer dan validasi file hasil sebelum dipakai.
+
+31. Temuan: Format tanggal bahasa Inggris salah karena Calendar.MONTH zero-based
+    File   : DateTimeFormatter.kt
+    Fix    : Gunakan nilai tanggal sebenarnya sehingga Januari tidak tampil sebagai
+             "0 January".
+
+32. Temuan: Backup pada hari yang sama dapat saling menimpa
+    File   : BackupManager.kt
+    Fix    : Tambahkan jam, menit, dan detik pada nama file backup.
+
+33. Temuan: File ZIP biasa dapat dianggap sebagai APK valid
+    File   : OtaUpdate.kt
+    Fix    : Pastikan package archive ditemukan dan package name sesuai aplikasi.
+
+34. Temuan: Pemeriksaan update terlalu sering mengakses GitHub API
+    File   : MainActivity.kt, OtaUpdate.kt
+    Fix    : Gunakan interval pengecekan enam jam melalui UpdatePrefs.
+
+35. Temuan: Daftar notifikasi berisiko kehilangan update bersamaan
+    File   : LauncherNotificationService.kt
+    Fix    : Serialisasikan perubahan StateFlow dan bersihkan instance service.
+
+36. Temuan: Fallback folder Downloads sebelumnya tidak benar-benar dipakai
+    File   : FileManagerDialog.kt
+    Fix    : Coba baca folder Downloads ketika izin storage penuh belum diberikan.
+
+37. Temuan: Unit test gagal karena dependency JUnit tidak tersedia
+    File   : app/build.gradle.kts
+    Fix    : Tambahkan testImplementation JUnit 4.13.2 tanpa mengubah identitas,
+             signing, atau konfigurasi release.
     """.trimIndent()
 
     val BUILD_ERROR_HISTORY = """
@@ -189,13 +239,21 @@ ATURAN FORMAT:
 4. Unresolved reference 'withStyle' -> tambah import androidx.compose.ui.text.withStyle
 5. Unresolved reference 'onFocusChanged' -> tambah import androidx.compose.ui.focus.onFocusChanged
 6. Unresolved reference 'wp_video' -> gunakan context.resources.getIdentifier
+7. Build lokal pertama tertahan karena Android SDK belum tersedia.
+8. Build berikutnya tertahan karena toolchain Java tidak memiliki jlink.
+9. Build berhasil setelah Android SDK API 35 dan JDK lengkap tersedia.
+10. Unit test gagal karena dependency JUnit belum dideklarasikan.
+11. Setelah dependency JUnit ditambahkan, testDebugUnitTest dan assembleDebug berhasil.
+12. GitHub Actions berhasil pada commit 8795374, run 40117478357.
     """.trimIndent()
 
     val BACKUP_INFO = """
 === INFORMASI BACKUP ===
 Backup Aman (TXT): /sdcard/HomeiO/Backup aman/
 Backup Biasa (JSON): /sdcard/HomeiO/Backup/
-Format Aman: Backup Aman-Home.io-dd-MM-yyyy-HHmmss.txt
+Format Aman Lama: Backup Aman-Home.io-dd-MM-yyyy.txt
+Format Aman Terbaru: Backup Aman-Home.io-dd-MM-yyyy-HHmmss.txt
+Catatan: Format terbaru mencegah backup pada hari yang sama menimpa file sebelumnya.
 Format Biasa: Backup_HomeIO_HHmmss_ddMMyyyy.json
     """.trimIndent()
 
@@ -205,7 +263,13 @@ app/src/main/java/dev/andikune/homeio/
 ├── presentation/home/HomeScreen.kt
 ├── presentation/settings/SettingsScreen.kt
 ├── presentation/settings/SystemControlScreen.kt
+├── presentation/settings/WallpaperSection.kt
+├── presentation/wallpaper/FileManagerDialog.kt
 ├── presentation/wallpaper/WallpaperView.kt
+├── data/local/PreferencesManager.kt
+├── receiver/BootReceiver.kt
+├── service/LauncherNotificationService.kt
+├── util/OtaUpdate.kt
 ├── util/SoundFeedback.kt
 └── data/AppKnowledge.kt
     """.trimIndent()
@@ -221,5 +285,13 @@ app/src/main/java/dev/andikune/homeio/
 8. OTA Update GitHub (Tombol Darurat Batal).
 9. Screensaver (Pause saat Pop-up).
 10. Dialog Pop-up (QRIS, Launcher, Context Menu).
+11. Persistence wallpaper, decoder, dan layar tetap menyala.
+12. Auto-start boot yang mengikuti toggle pengguna.
+13. Konversi video wallpaper berbasis callback Transformer.
+14. Validasi APK OTA berdasarkan package aplikasi.
+15. Interval pengecekan update otomatis enam jam.
+16. Backup unik dengan timestamp lengkap.
+17. File Manager fallback ke Downloads.
+18. Notification listener dengan update state yang lebih aman.
     """.trimIndent()
 }
