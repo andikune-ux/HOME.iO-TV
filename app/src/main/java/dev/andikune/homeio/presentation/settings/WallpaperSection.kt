@@ -44,7 +44,7 @@ import java.io.FileOutputStream
 fun WallpaperSection(
     settings: SettingsConfig, 
     onUpdate: (SettingsConfig) -> Unit,
-    onSave: () -> Unit // Parameter baru untuk tombol simpan
+    onSave: () -> Unit
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -69,7 +69,6 @@ fun WallpaperSection(
             scope.launch {
                 val localPath = copyUriToInternal(it, pickerModeIsVideo)
                 if (localPath != null) {
-                    // FIX: Paksa wallpaperMode = "KUSTOM"
                     if (pickerModeIsVideo) onUpdate(settings.copy(wallpaperMode = "KUSTOM", customVideoPath = localPath, customActiveType = "VIDEO"))
                     else onUpdate(settings.copy(wallpaperMode = "KUSTOM", customPhotoPath = localPath, customActiveType = "PHOTO"))
                 }
@@ -135,7 +134,7 @@ fun WallpaperSection(
             }
         }
 
-        // TOMBOL SIMPAN (BARU)
+        // TOMBOL SIMPAN
         Spacer(Modifier.height(16.dp))
         var isSaveFocused by remember { mutableStateOf(false) }
         NeonFocusBorder(focused = isSaveFocused, cornerRadius = 12.dp) {
@@ -172,7 +171,6 @@ fun WallpaperSection(
                 showFileManager = false
                 val isVideo = file.extension.lowercase() in listOf("mp4", "mkv", "webm", "avi")
                 scope.launch {
-                    // FIX: Paksa wallpaperMode = "KUSTOM"
                     if (isVideo) onUpdate(settings.copy(wallpaperMode = "KUSTOM", customVideoPath = file.absolutePath, customActiveType = "VIDEO"))
                     else onUpdate(settings.copy(wallpaperMode = "KUSTOM", customPhotoPath = file.absolutePath, customActiveType = "PHOTO"))
                 }
