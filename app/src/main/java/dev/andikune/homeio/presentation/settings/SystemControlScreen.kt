@@ -24,10 +24,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -51,6 +48,8 @@ import dev.andikune.homeio.domain.model.SettingsConfig
 import dev.andikune.homeio.presentation.components.GlassColors
 import dev.andikune.homeio.presentation.components.NeonFocusBorder
 import dev.andikune.homeio.presentation.components.liquidGlass
+import dev.andikune.homeio.util.PermissionHelper
+import dev.andikune.homeio.util.PermissionHelper.PermissionType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -63,25 +62,20 @@ fun SystemControlScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // SYSTEM MANAGERS (Null Safety untuk TV murah)
     val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     val wifiManager = remember { context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager }
     val bluetoothAdapter = remember { BluetoothAdapter.getDefaultAdapter() }
 
-    // STATE SLIDERS
     var brightness by remember { mutableFloatStateOf(50f) }
     var volume by remember { mutableFloatStateOf(50f) }
-    var hasWriteSettings by remember { mutableStateOf(Settings.System.canWrite(context)) }
+    var hasWriteSettings by remember { mutableStateOf(PermissionHelper.checkPermission(context, PermissionType.WRITE_SETTINGS)) }
 
-    // STATE WIFI SCAN
     var wifiList by remember { mutableStateOf<List<String>>(emptyList()) }
     var isScanningWifi by remember { mutableStateOf(false) }
 
-    // STATE BT SCAN
     var btList by remember { mutableStateOf<List<String>>(emptyList()) }
     var isScanningBt by remember { mutableStateOf(false) }
 
-    // INITIAL LOAD
     LaunchedEffect(Unit) {
         try {
             val currentBrightness = Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS)
@@ -92,7 +86,6 @@ fun SystemControlScreen(
         } catch (_: Exception) {}
     }
 
-    // PERMISSION LAUNCHERS
     val locationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) Toast.makeText(context, "Izin lokasi dibutuhkan untuk scan WiFi", Toast.LENGTH_SHORT).show()
     }
@@ -100,7 +93,6 @@ fun SystemControlScreen(
         if (perms.values.any { !it }) Toast.makeText(context, "Izin Bluetooth ditolak", Toast.LENGTH_SHORT).show()
     }
 
-    // WIFI SCAN LOGIC
     fun startWifiScan() {
         if (wifiManager == null) {
             Toast.makeText(context, "TV ini tidak mendukung WiFi", Toast.LENGTH_SHORT).show()
@@ -121,7 +113,6 @@ fun SystemControlScreen(
             Toast.makeText(context, "Gagal scan. Coba lagi.", Toast.LENGTH_SHORT).show()
             isScanningWifi = false
         } else {
-            // Ambil hasil scan (simulasi delay agar UI responsif)
             Handler(Looper.getMainLooper()).postDelayed({
                 try {
                     val results = wifiManager.scanResults.map { it.SSID }.filter { it.isNotBlank() }.distinct()
@@ -134,7 +125,6 @@ fun SystemControlScreen(
         }
     }
 
-    // BLUETOOTH SCAN LOGIC
     fun startBtScan() {
         if (bluetoothAdapter == null) {
             Toast.makeText(context, "TV ini tidak mendukung Bluetooth", Toast.LENGTH_SHORT).show()
@@ -176,7 +166,6 @@ fun SystemControlScreen(
         })
         @Suppress("DEPRECATION") bluetoothAdapter.startDiscovery()
         
-        // Timeout agar tidak scan selamanya
         Handler(Looper.getMainLooper()).postDelayed({
             if (isScanningBt) {
                 @Suppress("DEPRECATION") bluetoothAdapter.cancelDiscovery()
@@ -186,11 +175,9 @@ fun SystemControlScreen(
         }, 10000)
     }
 
-    // UI LAYOUT
     Box(Modifier.fillMaxSize().background(GlassColors.DeepBackgroundGradient)) {
         LazyColumn(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             item {
-                // HEADER
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                     BackButton(onClick = onBack)
                     Spacer(Modifier.width(16.dp))
@@ -198,7 +185,6 @@ fun SystemControlScreen(
                 }
             }
 
-            // WIFI PANEL
             item {
                 Column(Modifier.fillMaxWidth().liquidGlass(cornerRadius = 16.dp).padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
@@ -218,7 +204,6 @@ fun SystemControlScreen(
                 }
             }
 
-            // BLUETOOTH PANEL
             item {
                 Column(Modifier.fillMaxWidth().liquidGlass(cornerRadius = 16.dp).padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
@@ -238,7 +223,6 @@ fun SystemControlScreen(
                 }
             }
 
-            // VOLUME PANEL
             item {
                 Column(Modifier.fillMaxWidth().liquidGlass(cornerRadius = 16.dp).padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -261,7 +245,6 @@ fun SystemControlScreen(
                 }
             }
 
-            // KECERAHAN PANEL
             item {
                 Column(Modifier.fillMaxWidth().liquidGlass(cornerRadius = 16.dp).padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -285,7 +268,7 @@ fun SystemControlScreen(
                     if (!hasWriteSettings) {
                         Spacer(Modifier.height(8.dp))
                         Row(Modifier.fillMaxWidth().clickable { 
-                            try { context.startActivity(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply { data = Uri.parse("package:${context.packageName}") }) } catch (_: Exception) {}
+                            PermissionHelper.openPermissionSettings(context, PermissionType.WRITE_SETTINGS)
                         }, verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Warning, null, tint = GlassColors.AccentRed, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
@@ -295,17 +278,18 @@ fun SystemControlScreen(
                 }
             }
 
-            // PINTASAN PENGATURAN ASLI
             item {
                 SystemPanel(
                     title = "Buka Pengaturan Android TV",
                     icon = Icons.Default.Settings,
                     description = "Akses semua pengaturan sistem asli (Suara, Bahasa, Info TV, dll)",
-                    onClick = { try { context.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) {} }
+                    onClick = { 
+                        try { context.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } 
+                        catch (_: Exception) { Toast.makeText(context, "Tidak bisa membuka pengaturan TV", Toast.LENGTH_SHORT).show() }
+                    }
                 )
             }
 
-            // KIOSK PANEL
             item {
                 SystemPanel(
                     title = "Kiosk Mode",
@@ -321,15 +305,11 @@ fun SystemControlScreen(
     }
 }
 
-// CUSTOM SLIDER (Anti Patah)
 @Composable
 fun TvSliderCustom(value: Float, onValueChange: (Float) -> Unit) {
     Box(Modifier.fillMaxWidth().height(40.dp), contentAlignment = Alignment.CenterStart) {
-        // Track Belakang
         Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(Color(0x33FFFFFF)))
-        // Track Depan (Aktif)
         Box(Modifier.fillMaxWidth(value / 100f).height(8.dp).clip(RoundedCornerShape(4.dp)).background(GlassColors.AccentGlow))
-        // Thumb (Bulatan)
         Row(Modifier.fillMaxWidth(value / 100f), horizontalArrangement = Arrangement.End) {
             Box(Modifier.size(20.dp).clip(RoundedCornerShape(10.dp)).background(Color.White))
         }
