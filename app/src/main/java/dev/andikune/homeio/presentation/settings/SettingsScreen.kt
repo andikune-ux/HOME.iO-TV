@@ -93,13 +93,11 @@ fun SettingsScreen(
     Box(Modifier.fillMaxSize().background(GlassColors.DeepBackgroundGradient)) {
         Row(Modifier.fillMaxSize().padding(16.dp)) {
             
-            // PANE KIRI (SIDEBAR GLASS)
             Column(
                 Modifier.weight(0.28f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp)
                     .padding(16.dp).verticalScroll(rememberScrollState()).focusGroup(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Tombol Kembali (Dengan Intersepsi)
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                         .background(GlassColors.GlassTintLighter)
@@ -122,7 +120,6 @@ fun SettingsScreen(
                 Spacer(Modifier.height(8.dp))
                 Text("PENGATURAN", color = GlassColors.TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, modifier = Modifier.padding(start = 8.dp))
 
-                // Daftar Kategori Menu (Dengan Intersepsi)
                 SettingsCategory.entries.forEach { cat ->
                     SidebarItem(
                         category = cat,
@@ -142,7 +139,6 @@ fun SettingsScreen(
 
             Spacer(Modifier.width(24.dp))
 
-            // PANE KANAN (KONTEN GLASS)
             Box(Modifier.weight(0.72f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp).padding(24.dp)) {
                 AutoFocusPane(paneKey = selectedCategory, modifier = Modifier.fillMaxSize()) {
                     LazyColumn(Modifier.fillMaxSize().focusRequester(contentFocusRequester)) {
@@ -151,7 +147,7 @@ fun SettingsScreen(
                                 SettingsCategory.WALLPAPER -> WallpaperSection(
                                     settings = draftConfig, 
                                     onUpdate = { draftConfig = it },
-                                    onSave = { onSaveConfig(draftConfig) } // Lempar aksi simpan
+                                    onSave = { onSaveConfig(draftConfig) }
                                 )
                                 SettingsCategory.SCREENSAVER -> ScreensaverSection(draftConfig) { draftConfig = it }
                                 SettingsCategory.PERFORMANCE -> PerformanceSection(draftConfig) { draftConfig = it }
@@ -168,7 +164,6 @@ fun SettingsScreen(
         }
     }
 
-    // DIALOG KONFIRMASI PENYIMPANAN
     if (showSaveDialog) {
         Dialog(
             onDismissRequest = { showSaveDialog = false; pendingAction = null },
@@ -182,7 +177,6 @@ fun SettingsScreen(
                     Spacer(Modifier.height(24.dp))
                     
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        // Tombol Buang
                         var isDiscardFocused by remember { mutableStateOf(false) }
                         NeonFocusBorder(focused = isDiscardFocused, cornerRadius = 12.dp, modifier = Modifier.weight(1f)) {
                             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0x33FF5252))
@@ -196,7 +190,6 @@ fun SettingsScreen(
                             }
                         }
                         
-                        // Tombol Simpan
                         var isSaveFocused by remember { mutableStateOf(false) }
                         NeonFocusBorder(focused = isSaveFocused, cornerRadius = 12.dp, modifier = Modifier.weight(1f)) {
                             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (isSaveFocused) GlassColors.AccentGreen else GlassColors.AccentGreen.copy(alpha = 0.8f))
