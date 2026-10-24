@@ -66,7 +66,7 @@ fun SystemControlScreen(
     val wifiManager = remember { context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager }
     val bluetoothAdapter = remember { BluetoothAdapter.getDefaultAdapter() }
 
-    var brightness by remember { mutableFloatStateOf(50f) }
+    var brightness by remember { mutableFloatStateOf(config.manualBrightness.toFloat()) }
     var volume by remember { mutableFloatStateOf(50f) }
     var hasWriteSettings by remember { mutableStateOf(PermissionHelper.checkPermission(context, PermissionType.WRITE_SETTINGS)) }
 
@@ -78,8 +78,6 @@ fun SystemControlScreen(
 
     LaunchedEffect(Unit) {
         try {
-            val currentBrightness = Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS)
-            brightness = (currentBrightness / 255f) * 100f
             val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
             val currentVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
             volume = (currentVol.toFloat() / maxVol.toFloat()) * 100f
@@ -257,6 +255,8 @@ fun SystemControlScreen(
                         value = brightness,
                         onValueChange = { newVal ->
                             brightness = newVal
+                            // FIX: Update config agar tersimpan permanen
+                            onUpdateConfig(config.copy(manualBrightness = newVal.toInt()))
                             if (hasWriteSettings) {
                                 try {
                                     val targetBrightness = ((newVal / 100f) * 255).toInt()
@@ -305,22 +305,17 @@ fun SystemControlScreen(
     }
 }
 
-// FIX: TvSliderCustom sekarang responsif terhadap D-Pad
 @Composable
 fun TvSliderCustom(value: Float, onValueChange: (Float) -> Unit) {
     var isFocused by remember { mutableStateOf(false) }
     
     Box(Modifier.fillMaxWidth().height(50.dp), contentAlignment = Alignment.CenterStart) {
-        // Track Belakang
         Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(Color(0x33FFFFFF)))
-        // Track Depan (Aktif)
         Box(Modifier.fillMaxWidth(value / 100f).height(8.dp).clip(RoundedCornerShape(4.dp)).background(if (isFocused) GlassColors.AccentGlow else GlassColors.AccentGlow.copy(alpha = 0.6f)))
-        // Thumb (Bulatan)
         Row(Modifier.fillMaxWidth(value / 100f), horizontalArrangement = Arrangement.End) {
             Box(Modifier.size(20.dp).clip(RoundedCornerShape(10.dp)).background(if (isFocused) Color.White else Color.Gray))
         }
 
-        // Layer deteksi fokus dan D-Pad
         Box(
             Modifier.fillMaxSize()
                 .onFocusChanged { isFocused = it.isFocused }
@@ -344,7 +339,6 @@ fun TvSliderCustom(value: Float, onValueChange: (Float) -> Unit) {
                 }
         )
         
-        // Garis bawah tanda fokus
         if (isFocused) {
             Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(2.dp).background(GlassColors.AccentGlow))
         }
