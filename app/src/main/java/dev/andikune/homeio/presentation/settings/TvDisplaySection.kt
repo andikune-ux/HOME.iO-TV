@@ -112,6 +112,14 @@ fun TvDisplaySection(
             isChecked = settings.isAutoStartOnBoot,
             onToggle = { onUpdate(settings.copy(isAutoStartOnBoot = it)) }
         )
+
+        // TAMBAHAN: LAYAR TETAP NYALA
+        TvToggle(
+            label = "Layar Tetap Nyala",
+            description = "Cegah screensaver bawaan TV muncul. Biarkan aplikasi mengatur layarnya sendiri.",
+            isChecked = settings.isKeepScreenOnEnabled,
+            onToggle = { onUpdate(settings.copy(isKeepScreenOnEnabled = it)) }
+        )
     }
 }
 
