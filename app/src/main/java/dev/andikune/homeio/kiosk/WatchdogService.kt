@@ -14,13 +14,17 @@ class WatchdogService : Service() {
         override fun run() {
             try {
                 if (!KioskManager.isMainActivityForeground) {
-                    Log.d("Watchdog", "MainActivity mati, membuka ulang...")
+                    Log.d("Watchdog", "MainActivity mati, mencoba membuka ulang...")
                     val intent = Intent(this@WatchdogService, MainActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                     }
                     startActivity(intent)
                 }
-            } catch (e: Exception) {}
+            } catch (e: Exception) {
+                // FIX: Di Android 10+, startActivity dari background bisa diblokir (BackgroundActivityStartException).
+                // Kita biarkan gagal (catch) tanpa crash, karena kalau TV memblokir, kita tidak bisa memaksa.
+                Log.e("Watchdog", "Gagal startActivity dari background: ${e.message}")
+            }
             handler.postDelayed(this, 30_000L)
         }
     }
