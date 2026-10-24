@@ -97,7 +97,6 @@ class MainActivity : ComponentActivity() {
                 var crashLog by remember { mutableStateOf<String?>(null) }
                 var isSplashFinished by remember { mutableStateOf(false) }
                 
-                // STATE NAVIGASI
                 var isSettingsOpen by remember { mutableStateOf(false) }
                 var isSystemControlOpen by remember { mutableStateOf(false) }
                 
@@ -115,8 +114,6 @@ class MainActivity : ComponentActivity() {
                     if (!OnboardingPrefs.isCompleted(context)) showOnboarding = true
                 }
                 
-                // ALUR POP-UP YANG SUDAH DIPERBAIKI
-                // 1. Onboarding selesai -> 2. Launcher Prompt -> 3. QRIS Popup (SETIAP KALI BUKA)
                 LaunchedEffect(showOnboarding, showLauncherPrompt, isSplashFinished) {
                     if (!showOnboarding && !showLauncherPrompt && isSplashFinished) {
                         showQrisPopup = true
@@ -130,7 +127,15 @@ class MainActivity : ComponentActivity() {
                 var downloadReady by remember { mutableStateOf(false) }
                 var isError by remember { mutableStateOf(false) }
 
-                val config by appContainer.preferencesManager.settingsFlow.collectAsState(initial = SettingsConfig())
+                // STATE SINKRONISASI
+                val flowConfig by appContainer.preferencesManager.settingsFlow.collectAsState(initial = SettingsConfig())
+                var localConfig by remember { mutableStateOf(flowConfig) }
+                
+                LaunchedEffect(flowConfig) {
+                    localConfig = flowConfig
+                }
+                
+                val config = localConfig
 
                 LaunchedEffect(config.isKioskModeEnabled) {
                     if (config.isKioskModeEnabled) {
@@ -151,7 +156,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // PAUSE SCREENSAVER SAAT ADA DIALOG
                 screensaverTimeoutMs = if (!config.screensaverEnabled) 0L else (config.screensaverTimeoutMinutes * 60 * 1000L)
                 LaunchedEffect(screensaverTimeoutMs, showQrisPopup, showOnboarding, showLauncherPrompt, showUpdateDialog) {
                     if (screensaverTimeoutMs <= 0L) return@LaunchedEffect
@@ -176,7 +180,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // WEATHER (Offline Fallback: Tampilkan null / --)
                 var weatherInfo by remember { mutableStateOf<WeatherInfo?>(null) }
                 LaunchedEffect(isSplashFinished) {
                     if (!isSplashFinished) return@LaunchedEffect
@@ -192,13 +195,12 @@ class MainActivity : ComponentActivity() {
                                 weatherInfo = WeatherInfo(cw.temperature, cw.weathercode, desc, config.weatherLocation)
                             }
                         } catch (_: Exception) {
-                            weatherInfo = null // Offline fallback
+                            weatherInfo = null 
                         }
                         delay(30 * 60 * 1000L)
                     }
                 }
 
-                // CEK UPDATE (Tunggu QRIS selesai)
                 LaunchedEffect(isSplashFinished, showQrisPopup, showOnboarding, showLauncherPrompt) {
                     if (!isSplashFinished || showQrisPopup || showOnboarding || showLauncherPrompt) return@LaunchedEffect
                     try {
@@ -259,30 +261,36 @@ class MainActivity : ComponentActivity() {
                     crashLog != null -> CrashLogScreen(crashLog!!) { CrashHandler.clearCrashLog(context); crashLog = null }
                     showOnboarding -> OnboardingPermissionDialog { OnboardingPrefs.markCompleted(context); showOnboarding = false }
                     !isSplashFinished -> SplashScreen { isSplashFinished = true }
-                    isSystemControlOpen -> SystemControlScreen(config = config, onUpdateConfig = { scope.launch { appContainer.preferencesManager.updateSettings(it) } }, onBack = { isSystemControlOpen = false })
-                    isSettingsOpen -> SettingsScreen(currentConfig = config, onSaveConfig = { scope.launch { appContainer.preferencesManager.updateSettings(it) } }, onBack = { isSettingsOpen = false })
+                    isSystemControlOpen -> SystemControlScreen(config = config, onUpdateConfig = { 
+                        localConfig = it 
+                        scope.launch { appContainer.preferencesManager.updateSettings(it) } 
+                    }, onBack = { isSystemControlOpen = false })
+                    isSettingsOpen -> SettingsScreen(currentConfig = config, onSaveConfig = { newConfig ->
+                        localConfig = newConfig
+                        scope.launch { appContainer.preferencesManager.updateSettings(newConfig) }
+                    }, onBack = { isSettingsOpen = false })
                     else -> HomeScreen(
                         config = config, allApps = installedApps, weatherInfo = weatherInfo,
                         onOpenSettings = { isSettingsOpen = true },
                         onOpenSystemControl = { isSystemControlOpen = true },
-                        onSaveConfig = { scope.launch { appContainer.preferencesManager.updateSettings(it) } },
+                        onSaveConfig = { 
+                            localConfig = it 
+                            scope.launch { appContainer.preferencesManager.updateSettings(it) } 
+                        },
                         openFileManagerTrigger = pendingFileManagerTrigger, onFileManagerOpened = { pendingFileManagerTrigger = false }
                     )
                 }
 
-                // QRIS POPUP OVERLAY
                 if (showQrisPopup) {
                     QrisDonationPopup(onDismiss = { showQrisPopup = false })
                 }
 
-                // LAUNCHER PROMPT OVERLAY
                 if (showLauncherPrompt && isSplashFinished && !showOnboarding && !showQrisPopup) {
                     DefaultLauncherDialog(
                         onDismiss = { OnboardingPrefs.markLauncherAsked(context); showLauncherPrompt = false }
                     )
                 }
 
-                // UPDATE DIALOG OVERLAY
                 if (showUpdateDialog && updateInfo != null && !showQrisPopup) {
                     UpdateDialog(
                         info = updateInfo!!, progress = downloadProgress, isDownloading = isDownloading, isReady = downloadReady, isError = isError,
@@ -341,7 +349,6 @@ class MainActivity : ComponentActivity() {
         lastUserInteractionTime = System.currentTimeMillis()
         if (event.action == KeyEvent.ACTION_DOWN) {
             when (event.keyCode) {
-                // Hanya navigasi arah yang memicu beep, OK/Enter diurus oleh UI
                 KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> SoundFeedback.playClick(this)
             }
         }
