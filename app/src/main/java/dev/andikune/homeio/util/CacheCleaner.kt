@@ -51,9 +51,7 @@ object CacheCleaner {
     }
 
     fun openUsageAccessSettings(ctx: Context) {
-        try {
-            ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        } catch (e: Exception) { Log.w(TAG, "openUsageAccessSettings: ${e.message}") }
+        PermissionHelper.openPermissionSettings(ctx, PermissionHelper.PermissionType.USAGE_ACCESS)
     }
 
     fun openAppInfoSettings(ctx: Context, packageName: String) {
@@ -62,7 +60,10 @@ object CacheCleaner {
                 data = Uri.fromParts("package", packageName, null)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             })
-        } catch (e: Exception) { Log.w(TAG, "openAppInfoSettings: ${e.message}") }
+        } catch (e: Exception) { 
+            Log.w(TAG, "openAppInfoSettings gagal, fallback ke Info App kita sendiri: ${e.message}")
+            PermissionHelper.openPermissionSettings(ctx, PermissionHelper.PermissionType.STORAGE)
+        }
     }
 
     fun getAllAppsCache(ctx: Context): List<AppCacheInfo> {
@@ -81,7 +82,6 @@ object CacheCleaner {
 
             packages.forEach { pkg ->
                 if (pkg.packageName == ctx.packageName) return@forEach
-                // FIX: Null-check applicationInfo (bisa null untuk paket sistem/shared lib)
                 val appInfo: ApplicationInfo = pkg.applicationInfo ?: return@forEach
                 try {
                     val stats = sm.queryStatsForPackage(StorageManager.UUID_DEFAULT, pkg.packageName, Process.myUserHandle())
@@ -225,6 +225,8 @@ object CacheCleaner {
                     }
                 } catch (_: Exception) {}
             }
+            // Fallback terakhir pakai Helper
+            PermissionHelper.openPermissionSettings(ctx, PermissionHelper.PermissionType.STORAGE)
         } catch (_: Exception) {}
     }
 
