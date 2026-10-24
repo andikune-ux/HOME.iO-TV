@@ -104,6 +104,10 @@ dependencies {
     implementation(libs.androidx.tv.foundation)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
+    
+    // TAMBAHAN BARU KITA (Buat Auto-Convert Video)
+    implementation("androidx.media3:media3-transformer:1.3.1")
+    
     implementation(libs.coil.compose)
     implementation(libs.retrofit)
     implementation(libs.converter.kotlinx.serialization)
