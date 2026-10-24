@@ -1,6 +1,7 @@
 package dev.andikune.homeio.presentation.wallpaper
 
 import android.net.Uri
+import android.util.Log
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.foundation.Image
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -31,7 +33,11 @@ import java.io.File
 fun WallpaperView(config: SettingsConfig) {
     val context = LocalContext.current
 
-    // FIX BUG: Tambahkan key() agar Compose terpaksa me-render ulang (reload) saat config berubah
+    // Debug: Cek apakah Compose mendeteksi perubahan
+    LaunchedEffect(config.wallpaperMode, config.customPhotoPath) {
+        Log.d("WallpaperDebug", "Mode: ${config.wallpaperMode}, Path: ${config.customPhotoPath}")
+    }
+
     key(config.wallpaperMode, config.customPhotoPath, config.customVideoPath, config.customActiveType, config.wallpaperScaleMode) {
         when (config.wallpaperMode) {
             "SINEMATIK" -> {
@@ -39,30 +45,30 @@ fun WallpaperView(config: SettingsConfig) {
                 if (resId != 0) {
                     VideoWallpaper(uri = getResourceUri(context.packageName, resId), scaleMode = config.wallpaperScaleMode)
                 } else {
-                    Box(Modifier.fillMaxSize().background(Color(0xFF0A0E1A)))
+                    Box(Modifier.fillMaxSize().background(Color(0xFF1A1A2E)))
                 }
             }
             "ESTETIK" -> {
                 val resId = context.resources.getIdentifier("wp_photo", "raw", context.packageName)
                 if (resId != 0) {
-                    ImageWallpaper(uri = getResourceUri(context.packageName, resId), scaleMode = config.wallpaperScaleMode)
+                    ImageWallpaper(model = getResourceUri(context.packageName, resId), scaleMode = config.wallpaperScaleMode)
                 } else {
-                    Box(Modifier.fillMaxSize().background(Color(0xFF0A0E1A)))
+                    Box(Modifier.fillMaxSize().background(Color(0xFF2E1A2E)))
                 }
             }
             "OLED" -> {
-                Box(Modifier.fillMaxSize().background(Color(0xFF000000)))
+                Box(Modifier.fillMaxSize().background(Color.Black))
             }
             "KUSTOM" -> {
                 if (config.customActiveType == "VIDEO" && !config.customVideoPath.isNullOrBlank()) {
                     VideoWallpaper(uri = getSafeUri(config.customVideoPath), scaleMode = config.wallpaperScaleMode)
                 } else if (config.customActiveType == "PHOTO" && !config.customPhotoPath.isNullOrBlank()) {
-                    ImageWallpaper(uri = getSafeUri(config.customPhotoPath), scaleMode = config.wallpaperScaleMode)
+                    ImageWallpaper(model = getSafeModel(config.customPhotoPath), scaleMode = config.wallpaperScaleMode)
                 } else if (!config.wallpaperPath.isNullOrBlank()) {
                     if (config.wallpaperType == "VIDEO") VideoWallpaper(uri = getSafeUri(config.wallpaperPath), scaleMode = config.wallpaperScaleMode)
-                    else ImageWallpaper(uri = getSafeUri(config.wallpaperPath), scaleMode = config.wallpaperScaleMode)
+                    else ImageWallpaper(model = getSafeModel(config.wallpaperPath), scaleMode = config.wallpaperScaleMode)
                 } else {
-                    Box(Modifier.fillMaxSize().background(Color(0xFF0A0E1A)))
+                    Box(Modifier.fillMaxSize().background(Color(0xFF1A2E1A)))
                 }
             }
             else -> {
@@ -76,6 +82,7 @@ private fun getResourceUri(packageName: String, resId: Int): Uri {
     return Uri.parse("android.resource://$packageName/$resId")
 }
 
+// Untuk Video ExoPlayer, Uri.fromFile masih aman
 private fun getSafeUri(path: String): Uri {
     return if (path.startsWith("content://") || path.startsWith("http") || path.startsWith("android.resource://")) {
         Uri.parse(path)
@@ -84,8 +91,17 @@ private fun getSafeUri(path: String): Uri {
     }
 }
 
+// FIX: Untuk Coil Image, gunakan File agar tidak kena restrict Android 10+
+private fun getSafeModel(path: String): Any {
+    return if (path.startsWith("content://") || path.startsWith("http") || path.startsWith("android.resource://")) {
+        Uri.parse(path)
+    } else {
+        File(path)
+    }
+}
+
 @Composable
-private fun ImageWallpaper(uri: Uri, scaleMode: String) {
+private fun ImageWallpaper(model: Any, scaleMode: String) {
     val contentScale = when (scaleMode) {
         "FIT" -> ContentScale.Fit
         "FILL" -> ContentScale.Crop
@@ -95,7 +111,7 @@ private fun ImageWallpaper(uri: Uri, scaleMode: String) {
     }
 
     Image(
-        painter = rememberAsyncImagePainter(model = uri),
+        painter = rememberAsyncImagePainter(model = model),
         contentDescription = "Wallpaper Image",
         contentScale = contentScale,
         modifier = Modifier.fillMaxSize()
