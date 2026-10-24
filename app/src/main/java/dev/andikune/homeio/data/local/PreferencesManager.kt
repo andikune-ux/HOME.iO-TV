@@ -44,13 +44,24 @@ class PreferencesManager(private val context: Context) {
         
         // KEY BARU UNTUK UKURAN IKON
         private val KEY_APP_ICON_SIZE = floatPreferencesKey("app_icon_size")
+        private val KEY_WALLPAPER_MODE = stringPreferencesKey("wallpaper_mode")
+        private val KEY_CUSTOM_PHOTO_PATH = stringPreferencesKey("custom_photo_path")
+        private val KEY_CUSTOM_VIDEO_PATH = stringPreferencesKey("custom_video_path")
+        private val KEY_CUSTOM_ACTIVE_TYPE = stringPreferencesKey("custom_active_type")
+        private val KEY_FORCE_SOFTWARE_DECODER = booleanPreferencesKey("force_software_decoder")
+        private val KEY_KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
     }
 
     val settingsFlow: Flow<SettingsConfig> = context.dataStore.data.map { prefs ->
         SettingsConfig(
+            wallpaperMode = prefs[KEY_WALLPAPER_MODE] ?: "SINEMATIK",
             wallpaperPath = prefs[KEY_WALLPAPER_PATH],
+            customPhotoPath = prefs[KEY_CUSTOM_PHOTO_PATH],
+            customVideoPath = prefs[KEY_CUSTOM_VIDEO_PATH],
+            customActiveType = prefs[KEY_CUSTOM_ACTIVE_TYPE] ?: "PHOTO",
             wallpaperType = prefs[KEY_WALLPAPER_TYPE] ?: "IMAGE",
             wallpaperScaleMode = prefs[KEY_SCALE_MODE] ?: "FILL",
+            forceSoftwareDecoder = prefs[KEY_FORCE_SOFTWARE_DECODER] ?: false,
             favoritePackages = prefs[KEY_FAVORITES]?.toList() ?: emptyList(),
             
             languageCode = prefs[KEY_LANGUAGE] ?: "in",
@@ -72,19 +83,25 @@ class PreferencesManager(private val context: Context) {
             brightnessMode = prefs[KEY_BRIGHTNESS_MODE] ?: "MANUAL",
             manualBrightness = prefs[KEY_MANUAL_BRIGHTNESS] ?: 100,
             
-            appIconSizeMultiplier = prefs[KEY_APP_ICON_SIZE] ?: 0.8f
+            appIconSizeMultiplier = prefs[KEY_APP_ICON_SIZE] ?: 0.8f,
+            isKeepScreenOnEnabled = prefs[KEY_KEEP_SCREEN_ON] ?: false
         )
     }
 
     suspend fun updateSettings(config: SettingsConfig) {
         context.dataStore.edit { prefs ->
+            prefs[KEY_WALLPAPER_MODE] = config.wallpaperMode
             if (config.wallpaperPath != null) {
                 prefs[KEY_WALLPAPER_PATH] = config.wallpaperPath
             } else {
                 prefs.remove(KEY_WALLPAPER_PATH)
             }
+            if (config.customPhotoPath != null) prefs[KEY_CUSTOM_PHOTO_PATH] = config.customPhotoPath else prefs.remove(KEY_CUSTOM_PHOTO_PATH)
+            if (config.customVideoPath != null) prefs[KEY_CUSTOM_VIDEO_PATH] = config.customVideoPath else prefs.remove(KEY_CUSTOM_VIDEO_PATH)
+            prefs[KEY_CUSTOM_ACTIVE_TYPE] = config.customActiveType
             prefs[KEY_WALLPAPER_TYPE] = config.wallpaperType
             prefs[KEY_SCALE_MODE] = config.wallpaperScaleMode
+            prefs[KEY_FORCE_SOFTWARE_DECODER] = config.forceSoftwareDecoder
             prefs[KEY_FAVORITES] = config.favoritePackages.toSet()
             
             prefs[KEY_LANGUAGE] = config.languageCode
@@ -107,6 +124,7 @@ class PreferencesManager(private val context: Context) {
             prefs[KEY_MANUAL_BRIGHTNESS] = config.manualBrightness
             
             prefs[KEY_APP_ICON_SIZE] = config.appIconSizeMultiplier
+            prefs[KEY_KEEP_SCREEN_ON] = config.isKeepScreenOnEnabled
         }
     }
 }

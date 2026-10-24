@@ -23,7 +23,7 @@ object DateTimeFormatter {
 
         return when (langCode.lowercase()) {
             "in", "id" -> "${HARI_ID[dow]}, $day ${BULAN_ID[month]} $year"
-            "en" -> "${DAY_EN[dow]}, $month ${MONTH_EN[month]} $year"
+            "en" -> "${DAY_EN[dow]}, $day ${MONTH_EN[month]} $year"
             else -> "${HARI_ID[dow]}, $day ${BULAN_ID[month]} $year"
         }
     }

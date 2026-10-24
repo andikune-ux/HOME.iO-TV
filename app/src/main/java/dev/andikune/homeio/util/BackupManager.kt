@@ -88,7 +88,7 @@ object BackupManager {
     }
 
     fun saveBackupToFile(context: Context, content: String): BackupResult {
-        val dateString = SimpleDateFormat("dd-MM-yyyy", Locale.getDefault()).format(Date())
+        val dateString = SimpleDateFormat("dd-MM-yyyy-HHmmss", Locale.getDefault()).format(Date())
         val fileName = "Backup Aman-Home.io-$dateString.txt"
 
         // PLAN A: Paksa simpan di root SD Card (Butuh Izin)

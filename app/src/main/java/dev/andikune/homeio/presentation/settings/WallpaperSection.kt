@@ -38,7 +38,10 @@ import dev.andikune.homeio.presentation.components.NeonFocusBorder
 import dev.andikune.homeio.presentation.wallpaper.FileManagerDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import java.io.File
 import java.io.FileOutputStream
 
@@ -75,26 +78,26 @@ fun WallpaperSection(
 
             if (isVideo) {
                 // AUTO-CONVERT PAKAI MEDIA3 TRANSFORMER (Turunin resolusi ke 720p H.264)
-                val transformer = Transformer.Builder(ctx)
-                    .addListener(object : Transformer.Listener {
-                        override fun onCompleted(composition: androidx.media3.transformer.Composition, exportResult: androidx.media3.transformer.ExportResult) {
-                            Log.d("Wallpaper", "Video Convert Berhasil")
-                        }
-                        override fun onError(composition: androidx.media3.transformer.Composition, exportResult: androidx.media3.transformer.ExportResult, exportException: androidx.media3.transformer.ExportException) {
-                            Log.e("Wallpaper", "Video Convert Gagal: ${exportException.message}")
-                        }
-                    })
-                    .build()
-
                 val mediaItem = MediaItem.Builder()
                     .setUri(uri)
                     .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().build())
                     .build()
-                
-                // Mulai transcoding (ini akan jalan di background)
-                transformer.start(mediaItem, destFile.absolutePath)
-                // Tunggu sebentar agar proses transcode berjalan (bisa disesuaikan)
-                Thread.sleep(2000) 
+
+                suspendCancellableCoroutine<Unit> { continuation ->
+                    val transformer = Transformer.Builder(ctx)
+                        .addListener(object : Transformer.Listener {
+                            override fun onCompleted(composition: androidx.media3.transformer.Composition, exportResult: androidx.media3.transformer.ExportResult) {
+                                if (continuation.isActive) continuation.resume(Unit)
+                            }
+                            override fun onError(composition: androidx.media3.transformer.Composition, exportResult: androidx.media3.transformer.ExportResult, exportException: androidx.media3.transformer.ExportException) {
+                                if (continuation.isActive) continuation.resumeWithException(exportException)
+                            }
+                        })
+                        .build()
+                    continuation.invokeOnCancellation { transformer.cancel() }
+                    transformer.start(mediaItem, destFile.absolutePath)
+                }
+                if (!destFile.isFile || destFile.length() == 0L) throw IllegalStateException("Hasil konversi video kosong")
             } else {
                 // FOTO: Cukup copy langsung
                 ctx.contentResolver.openInputStream(uri)?.use { input ->

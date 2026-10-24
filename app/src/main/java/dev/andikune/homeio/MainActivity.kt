@@ -242,8 +242,10 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(isSplashFinished, showQrisPopup, showOnboarding, showLauncherPrompt) {
                     if (!isSplashFinished || showQrisPopup || showOnboarding || showLauncherPrompt) return@LaunchedEffect
+                    if (!UpdatePrefs.shouldCheck(context)) return@LaunchedEffect
                     try {
                         val info = UpdateManager.checkForUpdate()
+                        UpdatePrefs.markChecked(context)
                         if (info.available) {
                             val savedPath = UpdateDownloadService.getCompletedFilePath(context, info.latestVersion)
                             if (savedPath != null) {
@@ -253,7 +255,6 @@ class MainActivity : ComponentActivity() {
                                 isDownloading = false
                                 showUpdateDialog = true
                             } else if (UpdatePrefs.shouldShow(context, info.latestVersion, info.isForceUpdate)) {
-                                UpdatePrefs.markChecked(context)
                                 updateInfo = info
                                 downloadProgress = 0f
                                 downloadReady = false

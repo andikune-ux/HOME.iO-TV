@@ -222,8 +222,8 @@ object ApkDownloader {
         if (!isZip) return false
         return try {
             val pkg = ctx.packageManager.getPackageArchiveInfo(file.absolutePath, 0)
-            if (pkg != null) pkg.packageName == ctx.packageName else true
-        } catch (_: Exception) { true }
+            pkg != null && pkg.packageName == ctx.packageName
+        } catch (_: Exception) { false }
     }
 
     fun install(ctx: Context, path: String): Boolean {

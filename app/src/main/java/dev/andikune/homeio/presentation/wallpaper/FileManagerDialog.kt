@@ -116,9 +116,7 @@ fun FileManagerDialog(
     }
 
     LaunchedEffect(currentDir, isVideoMode, hasStoragePermission) {
-        if (hasStoragePermission) {
-            withContext(Dispatchers.IO) { loadFiles(currentDir) }
-        }
+        withContext(Dispatchers.IO) { loadFiles(currentDir) }
     }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -147,7 +145,7 @@ fun FileManagerDialog(
 
                 Spacer(Modifier.height(16.dp))
 
-                if (!hasStoragePermission) {
+                if (!hasStoragePermission && files.isEmpty()) {
                     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                         Icon(Icons.Default.Lock, null, tint = GlassColors.AccentAmber, modifier = Modifier.size(48.dp))
                         Spacer(Modifier.height(16.dp))
