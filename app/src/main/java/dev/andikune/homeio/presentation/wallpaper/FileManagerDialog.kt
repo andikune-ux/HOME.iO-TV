@@ -1,8 +1,6 @@
 package dev.andikune.homeio.presentation.wallpaper
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
@@ -41,10 +39,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
 import dev.andikune.homeio.presentation.components.GlassColors
 import dev.andikune.homeio.presentation.components.NeonFocusBorder
+import dev.andikune.homeio.util.PermissionHelper
+import dev.andikune.homeio.util.PermissionHelper.PermissionType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -55,17 +57,22 @@ fun FileManagerDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var currentDir by remember { mutableStateOf(Environment.getExternalStorageDirectory()) }
     var files by remember { mutableStateOf<List<File>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var isVideoMode by remember { mutableStateOf(true) }
     
-    val hasStoragePermission = remember {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Environment.isExternalStorageManager()
-        } else {
-            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+    var hasStoragePermission by remember { mutableStateOf(PermissionHelper.checkPermission(context, PermissionType.STORAGE)) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasStoragePermission = PermissionHelper.checkPermission(context, PermissionType.STORAGE)
+            }
         }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     BackHandler(enabled = true) {
@@ -137,12 +144,7 @@ fun FileManagerDialog(
                         Text("Aplikasi butuh akses file untuk menampilkan video/foto.", color = GlassColors.TextSecondary, fontSize = 12.sp)
                         Spacer(Modifier.height(16.dp))
                         Box(Modifier.clip(RoundedCornerShape(8.dp)).background(GlassColors.AccentGlow).clickable {
-                            // FIX: Tambahkan startActivity(intent)
-                            val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-                                data = Uri.parse("package:${context.packageName}")
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            context.startActivity(intent)
+                            PermissionHelper.openPermissionSettings(context, PermissionType.STORAGE)
                         }.padding(horizontal = 20.dp, vertical = 10.dp)) {
                             Text("BERI IZIN", color = GlassColors.DeepBackground, fontWeight = FontWeight.Bold)
                         }
