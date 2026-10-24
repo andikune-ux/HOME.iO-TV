@@ -8,8 +8,42 @@ import kotlinx.coroutines.flow.asStateFlow
 class LauncherNotificationService : NotificationListenerService() {
 
     companion object {
+        private var instance: LauncherNotificationService? = null
         private val _notifications = MutableStateFlow<List<StatusBarNotification>>(emptyList())
         val notifications = _notifications.asStateFlow()
+
+        // FIX: Pindahkan ke companion object agar bisa dipanggil secara statis dari HomeScreen.kt
+        fun removeNotification(sbn: StatusBarNotification) {
+            instance?.let { service ->
+                try {
+                    service.cancelNotification(sbn.key)
+                    val currentList = _notifications.value.toMutableList()
+                    currentList.removeAll { it.key == sbn.key }
+                    _notifications.value = currentList
+                } catch (_: Exception) {}
+            }
+        }
+
+        fun removeAllNotifications() {
+            instance?.let { service ->
+                try {
+                    val currentList = _notifications.value
+                    currentList.forEach { service.cancelNotification(it.key) }
+                    _notifications.value = emptyList()
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    // Simpan referensi instance service agar bisa akses cancelNotification
+    override fun onCreate() {
+        super.onCreate()
+        instance = this
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        instance = null
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -40,23 +74,5 @@ class LauncherNotificationService : NotificationListenerService() {
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
         _notifications.value = emptyList()
-    }
-
-    // FIX BUG #20: Fungsi Hapus Notifikasi
-    fun removeNotification(sbn: StatusBarNotification) {
-        try {
-            cancelNotification(sbn.key)
-            val currentList = _notifications.value.toMutableList()
-            currentList.removeAll { it.key == sbn.key }
-            _notifications.value = currentList
-        } catch (_: Exception) {}
-    }
-
-    fun removeAllNotifications() {
-        try {
-            val currentList = _notifications.value
-            currentList.forEach { cancelNotification(it.key) }
-            _notifications.value = emptyList()
-        } catch (_: Exception) {}
     }
 }
