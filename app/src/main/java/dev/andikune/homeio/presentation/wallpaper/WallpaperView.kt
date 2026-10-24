@@ -4,12 +4,14 @@ import android.net.Uri
 import android.util.Log
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -31,6 +33,7 @@ import java.io.File
 @Composable
 fun WallpaperView(config: SettingsConfig) {
     val context = LocalContext.current
+    var videoError by remember { mutableStateOf(false) }
 
     LaunchedEffect(config.wallpaperMode, config.customPhotoPath) {
         Log.d("WallpaperDebug", "Mode: ${config.wallpaperMode}, Path: ${config.customPhotoPath}")
@@ -39,15 +42,30 @@ fun WallpaperView(config: SettingsConfig) {
     key(config.wallpaperMode, config.customPhotoPath, config.customVideoPath, config.customActiveType, config.wallpaperScaleMode) {
         when (config.wallpaperMode) {
             "SINEMATIK" -> {
-                val resId = context.resources.getIdentifier("wp_video", "raw", context.packageName)
-                if (resId != 0) {
+                // Coba file 4K dulu, kalau gak ada/error, pindah ke HD
+                val hdResId = context.resources.getIdentifier("wp_video_hd", "raw", context.packageName)
+                val fallbackResId = context.resources.getIdentifier("wp_photo", "raw", context.packageName)
+                
+                if (videoError) {
+                    if (fallbackResId != 0) {
+                        KenBurnsFallbackWallpaper(resId = fallbackResId, scaleMode = config.wallpaperScaleMode)
+                    } else {
+                        Box(Modifier.fillMaxSize().background(Color(0xFF1A1A2E)))
+                    }
+                } else if (hdResId != 0) {
                     VideoWallpaper(
-                        uri = getResourceUri(context.packageName, resId),
+                        uri = getResourceUri(context.packageName, hdResId),
                         scaleMode = config.wallpaperScaleMode,
-                        forceSoftware = config.forceSoftwareDecoder
+                        forceSoftware = config.forceSoftwareDecoder,
+                        onError = { videoError = true }
                     )
                 } else {
-                    Box(Modifier.fillMaxSize().background(Color(0xFF1A1A2E)))
+                    // Kalo HD gak ada, coba fallback ke gambar
+                    if (fallbackResId != 0) {
+                        ImageWallpaper(model = getResourceUri(context.packageName, fallbackResId), scaleMode = config.wallpaperScaleMode)
+                    } else {
+                        Box(Modifier.fillMaxSize().background(Color(0xFF1A1A2E)))
+                    }
                 }
             }
             "ESTETIK" -> {
@@ -63,20 +81,30 @@ fun WallpaperView(config: SettingsConfig) {
             }
             "KUSTOM" -> {
                 if (config.customActiveType == "VIDEO" && !config.customVideoPath.isNullOrBlank()) {
-                    VideoWallpaper(
-                        uri = getSafeUri(config.customVideoPath),
-                        scaleMode = config.wallpaperScaleMode,
-                        forceSoftware = config.forceSoftwareDecoder
-                    )
+                    if (videoError) {
+                        ImageWallpaper(model = getSafeModel(config.customVideoPath), scaleMode = config.wallpaperScaleMode)
+                    } else {
+                        VideoWallpaper(
+                            uri = getSafeUri(config.customVideoPath),
+                            scaleMode = config.wallpaperScaleMode,
+                            forceSoftware = config.forceSoftwareDecoder,
+                            onError = { videoError = true }
+                        )
+                    }
                 } else if (config.customActiveType == "PHOTO" && !config.customPhotoPath.isNullOrBlank()) {
                     ImageWallpaper(model = getSafeModel(config.customPhotoPath), scaleMode = config.wallpaperScaleMode)
                 } else if (!config.wallpaperPath.isNullOrBlank()) {
                     if (config.wallpaperType == "VIDEO") {
-                        VideoWallpaper(
-                            uri = getSafeUri(config.wallpaperPath),
-                            scaleMode = config.wallpaperScaleMode,
-                            forceSoftware = config.forceSoftwareDecoder
-                        )
+                        if (videoError) {
+                            ImageWallpaper(model = getSafeModel(config.wallpaperPath), scaleMode = config.wallpaperScaleMode)
+                        } else {
+                            VideoWallpaper(
+                                uri = getSafeUri(config.wallpaperPath),
+                                scaleMode = config.wallpaperScaleMode,
+                                forceSoftware = config.forceSoftwareDecoder,
+                                onError = { videoError = true }
+                            )
+                        }
                     } else {
                         ImageWallpaper(model = getSafeModel(config.wallpaperPath), scaleMode = config.wallpaperScaleMode)
                     }
@@ -111,6 +139,37 @@ private fun getSafeModel(path: String): Any {
     }
 }
 
+// FUNGSI ANIMASI KEN BURNS (Fallback kalau video kaga bisa)
+@Composable
+private fun KenBurnsFallbackWallpaper(resId: Int, scaleMode: String) {
+    val context = LocalContext.current
+    val contentScale = if (scaleMode == "FIT") ContentScale.Fit else ContentScale.Crop
+
+    val infiniteTransition = rememberInfiniteTransition(label = "kenburns")
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 1.0f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(20000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scale"
+    )
+
+    if (resId != 0) {
+        Image(
+            painter = rememberAsyncImagePainter(model = getResourceUri(context.packageName, resId)),
+            contentDescription = "Fallback Animated Wallpaper",
+            contentScale = contentScale,
+            modifier = Modifier
+                .fillMaxSize()
+                .scale(scale)
+        )
+    } else {
+        Box(Modifier.fillMaxSize().background(Color(0xFF1A1A2E)))
+    }
+}
+
 @Composable
 private fun ImageWallpaper(model: Any, scaleMode: String) {
     val contentScale = when (scaleMode) {
@@ -130,16 +189,15 @@ private fun ImageWallpaper(model: Any, scaleMode: String) {
 }
 
 @Composable
-private fun VideoWallpaper(uri: Uri, scaleMode: String, forceSoftware: Boolean = false) {
+private fun VideoWallpaper(uri: Uri, scaleMode: String, forceSoftware: Boolean = false, onError: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     
     val exoPlayer = remember(uri, forceSoftware) {
         val renderersFactory = DefaultRenderersFactory(context)
-            .setEnableDecoderFallback(true) // Wajib ON buat fallback
+            .setEnableDecoderFallback(true)
 
         if (forceSoftware) {
-            // Memaksa ExoPlayer mencoba Software Decoder / FFmpeg (jika ada)
             renderersFactory.setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
         }
 
@@ -153,6 +211,7 @@ private fun VideoWallpaper(uri: Uri, scaleMode: String, forceSoftware: Boolean =
             addListener(object : Player.Listener {
                 override fun onPlayerError(error: PlaybackException) {
                     Log.e("VideoWallpaper", "Error playing video: ${error.errorCodeName} - ${error.message}", error)
+                    onError()
                 }
             })
         }
