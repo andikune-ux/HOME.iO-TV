@@ -1,16 +1,8 @@
 package dev.andikune.homeio.presentation.onboarding
 
-import android.Manifest
-import android.app.AppOpsManager
-import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Environment
-import android.provider.Settings
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -44,10 +36,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
 import dev.andikune.homeio.presentation.components.GlassColors
 import dev.andikune.homeio.presentation.components.NeonFocusBorder
+import dev.andikune.homeio.util.PermissionHelper
+import dev.andikune.homeio.util.PermissionHelper.PermissionType
 import kotlinx.coroutines.delay
 
 @Composable
@@ -55,32 +47,60 @@ fun OnboardingPermissionDialog(
     onDismiss: () -> Unit
 ) {
     val ctx = LocalContext.current
-    var hasStorage by remember { mutableStateOf(false) }
-    var hasNotif by remember { mutableStateOf(false) }
-    var hasInstall by remember { mutableStateOf(false) }
-    var hasUsage by remember { mutableStateOf(false) }
-    var hasNotifListener by remember { mutableStateOf(false) }
-    var hasWriteSettings by remember { mutableStateOf(false) }
     var refresh by remember { mutableStateOf(0) }
+    
+    var systemLimitedStorage by remember { mutableStateOf(false) }
+    var systemLimitedNotif by remember { mutableStateOf(false) }
+    var systemLimitedInstall by remember { mutableStateOf(false) }
+    var systemLimitedUsage by remember { mutableStateOf(false) }
+    var systemLimitedListener by remember { mutableStateOf(false) }
+    var systemLimitedWrite by remember { mutableStateOf(false) }
 
-    LaunchedEffect(refresh) {
-        hasStorage = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager() else true
-        hasNotif = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED else true
-        hasInstall = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ctx.packageManager.canRequestPackageInstalls() else true
-        
-        val appOps = ctx.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            appOps.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), ctx.packageName)
-        } else {
-            @Suppress("DEPRECATION") appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), ctx.packageName)
+    var showGuideDialog by remember { mutableStateOf(false) }
+    var guideTitle by remember { mutableStateOf("") }
+    var guideMessage by remember { mutableStateOf("") }
+    var guideAction by remember { mutableStateOf<() -> Unit>({}) }
+
+    fun handlePermission(type: PermissionType, titleStr: String, guideStr: String) {
+        if (PermissionHelper.checkPermission(ctx, type)) {
+            Toast.makeText(ctx, "Izin sudah aktif.", Toast.LENGTH_SHORT).show()
+            refresh++
+            return
         }
-        hasUsage = mode == AppOpsManager.MODE_ALLOWED
-        hasNotifListener = NotificationManagerCompat.getEnabledListenerPackages(ctx).contains(ctx.packageName)
-        hasWriteSettings = Settings.System.canWrite(ctx)
+        
+        val opened = PermissionHelper.openPermissionSettings(ctx, type)
+        
+        if (!opened) {
+            when(type) {
+                PermissionType.STORAGE -> systemLimitedStorage = true
+                PermissionType.NOTIFICATION -> systemLimitedNotif = true
+                PermissionType.INSTALL_APK -> systemLimitedInstall = true
+                PermissionType.USAGE_ACCESS -> systemLimitedUsage = true
+                PermissionType.NOTIF_LISTENER -> systemLimitedListener = true
+                PermissionType.WRITE_SETTINGS -> systemLimitedWrite = true
+            }
+            Toast.makeText(ctx, "Sistem TV tidak mendukung izin ini. Menggunakan mode kompatibilitas.", Toast.LENGTH_LONG).show()
+            refresh++
+        } else {
+            guideTitle = titleStr
+            guideMessage = guideStr
+            guideAction = { PermissionHelper.openPermissionSettings(ctx, type) }
+            showGuideDialog = true
+        }
     }
 
-    val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { refresh++ }
-    val allGranted = hasStorage && hasNotif && hasInstall && hasUsage && hasNotifListener && hasWriteSettings
+    LaunchedEffect(showGuideDialog) {
+        if (!showGuideDialog) refresh++
+    }
+
+    val hasStorage = PermissionHelper.checkPermission(ctx, PermissionType.STORAGE) || systemLimitedStorage
+    val hasNotif = PermissionHelper.checkPermission(ctx, PermissionType.NOTIFICATION) || systemLimitedNotif
+    val hasInstall = PermissionHelper.checkPermission(ctx, PermissionType.INSTALL_APK) || systemLimitedInstall
+    val hasUsage = PermissionHelper.checkPermission(ctx, PermissionType.USAGE_ACCESS) || systemLimitedUsage
+    val hasListener = PermissionHelper.checkPermission(ctx, PermissionType.NOTIF_LISTENER) || systemLimitedListener
+    val hasWrite = PermissionHelper.checkPermission(ctx, PermissionType.WRITE_SETTINGS) || systemLimitedWrite
+
+    val allGranted = hasStorage && hasNotif && hasInstall && hasUsage
 
     val firstFocusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { delay(400); runCatching { firstFocusRequester.requestFocus() } }
@@ -91,50 +111,42 @@ fun OnboardingPermissionDialog(
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(
-                Modifier
-                    .fillMaxWidth(0.9f).fillMaxHeight(0.9f)
-                    .clip(RoundedCornerShape(20.dp)).background(GlassColors.DeepBackground)
-                    .border(2.dp, GlassColors.AccentGlow, RoundedCornerShape(20.dp))
-                    .padding(20.dp).verticalScroll(rememberScrollState()),
+                Modifier.fillMaxWidth(0.9f).fillMaxHeight(0.9f).clip(RoundedCornerShape(20.dp)).background(GlassColors.DeepBackground)
+                    .border(2.dp, GlassColors.AccentGlow, RoundedCornerShape(20.dp)).padding(20.dp).verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Icon(Icons.Default.Lock, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(48.dp))
                 Spacer(Modifier.height(10.dp))
                 Text("IZIN DIPERLUKAN", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = GlassColors.AccentGlow)
-                Text("HOME.iO butuh izin agar semua fitur berjalan normal", fontSize = 12.sp, color = GlassColors.TextSecondary, textAlign = TextAlign.Center)
+                Text("HOME.iO butuh izin agar fitur berjalan normal", fontSize = 12.sp, color = GlassColors.TextSecondary, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(20.dp))
 
-                PermissionRow(icon = Icons.Default.Folder, title = "Akses File", desc = "Simpan Backup & download Update", granted = hasStorage, modifier = Modifier.focusRequester(firstFocusRequester), onGrant = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        try { ctx.startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply { data = Uri.parse("package:${ctx.packageName}"); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) } 
-                        catch (_: Exception) { ctx.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) }
-                    }
+                PermissionRow(icon = Icons.Default.Folder, title = "Akses File (Wajib)", desc = "Backup & Update", granted = hasStorage, modifier = Modifier.focusRequester(firstFocusRequester), onGrant = {
+                    handlePermission(PermissionType.STORAGE, "Izin Akses File", "1. Pilih menu 'Izin' atau 'Permissions'.\n2. Cari 'Penyimpanan' atau 'Files and media'.\n3. Pilih 'Izinkan'.")
                 })
 
-                PermissionRow(icon = Icons.Default.Notifications, title = "Notifikasi Sistem", desc = "Progress download di status bar", granted = hasNotif, onGrant = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                PermissionRow(icon = Icons.Default.Notifications, title = "Notifikasi Sistem (Wajib)", desc = "Progress download", granted = hasNotif, onGrant = {
+                    handlePermission(PermissionType.NOTIFICATION, "Izin Notifikasi", "1. Cari 'Notifikasi'.\n2. Aktifkan 'Izinkan Notifikasi'.")
                 })
 
-                PermissionRow(icon = Icons.Default.Warning, title = "Install Aplikasi", desc = "Pasang update APK HOME.iO", granted = hasInstall, onGrant = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) try { ctx.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply { data = Uri.parse("package:${ctx.packageName}"); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) } catch (_: Exception) {}
+                PermissionRow(icon = Icons.Default.Warning, title = "Install Aplikasi (Wajib)", desc = "Pasang update APK", granted = hasInstall, onGrant = {
+                    handlePermission(PermissionType.INSTALL_APK, "Izin Install APK", "1. Aktifkan 'Izinkan dari sumber ini'.\n2. Kembali ke aplikasi.")
                 })
 
-                PermissionRow(icon = Icons.Default.CheckCircle, title = "Akses Penggunaan (RAM)", desc = "Fitur RAM Booster & bersihkan cache", granted = hasUsage, onGrant = {
-                    try { ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) } catch (_: Exception) {}
+                PermissionRow(icon = Icons.Default.CheckCircle, title = "Akses RAM (Wajib)", desc = "Fitur RAM Booster", granted = hasUsage, onGrant = {
+                    handlePermission(PermissionType.USAGE_ACCESS, "Izin Akses Penggunaan", "1. Cari 'HOME.iO' di daftar.\n2. Aktifkan izinnya.")
                 })
 
-                PermissionRow(icon = Icons.Default.Notifications, title = "Baca Notifikasi", desc = "Notifikasi HP/sistem di Panel Kiri", granted = hasNotifListener, onGrant = {
-                    try { ctx.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) } catch (_: Exception) {}
+                PermissionRow(icon = Icons.Default.Notifications, title = "Baca Notifikasi (Opsional)", desc = "Notif di Panel Kiri", granted = hasListener, onGrant = {
+                    handlePermission(PermissionType.NOTIF_LISTENER, "Izin Baca Notifikasi", "1. Cari 'HOME.iO'.\n2. Aktifkan izinnya.")
                 })
 
-                PermissionRow(icon = Icons.Default.Settings, title = "Ubah Pengaturan Sistem", desc = "Atur Kecerahan, WiFi, & Volume TV", granted = hasWriteSettings, onGrant = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) try { ctx.startActivity(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply { data = Uri.parse("package:${ctx.packageName}"); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }) } catch (_: Exception) {}
+                PermissionRow(icon = Icons.Default.Settings, title = "Ubah Sistem (Opsional)", desc = "Kecerahan & WiFi", granted = hasWrite, onGrant = {
+                    handlePermission(PermissionType.WRITE_SETTINGS, "Izin Ubah Sistem", "1. Aktifkan 'Izinkan pengaturan sistem'.")
                 })
 
                 Spacer(Modifier.height(20.dp))
-                Text("Izin dicek ulang saat Anda kembali.", fontSize = 11.sp, color = GlassColors.TextSecondary)
-                Spacer(Modifier.height(12.dp))
-
+                
                 var isFocusedBtn by remember { mutableStateOf(false) }
                 NeonFocusBorder(focused = isFocusedBtn, cornerRadius = 12.dp, borderWidth = 4.dp, modifier = Modifier.fillMaxWidth()) {
                     Box(
@@ -154,6 +166,15 @@ fun OnboardingPermissionDialog(
                 }
             }
         }
+    }
+
+    if (showGuideDialog) {
+        PermissionGuideDialog(
+            title = guideTitle,
+            message = guideMessage,
+            onOpenSettings = { guideAction(); showGuideDialog = false },
+            onDismiss = { showGuideDialog = false }
+        )
     }
 }
 
