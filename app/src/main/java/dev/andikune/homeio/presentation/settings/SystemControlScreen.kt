@@ -305,13 +305,48 @@ fun SystemControlScreen(
     }
 }
 
+// FIX: TvSliderCustom sekarang responsif terhadap D-Pad
 @Composable
 fun TvSliderCustom(value: Float, onValueChange: (Float) -> Unit) {
-    Box(Modifier.fillMaxWidth().height(40.dp), contentAlignment = Alignment.CenterStart) {
+    var isFocused by remember { mutableStateOf(false) }
+    
+    Box(Modifier.fillMaxWidth().height(50.dp), contentAlignment = Alignment.CenterStart) {
+        // Track Belakang
         Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(Color(0x33FFFFFF)))
-        Box(Modifier.fillMaxWidth(value / 100f).height(8.dp).clip(RoundedCornerShape(4.dp)).background(GlassColors.AccentGlow))
+        // Track Depan (Aktif)
+        Box(Modifier.fillMaxWidth(value / 100f).height(8.dp).clip(RoundedCornerShape(4.dp)).background(if (isFocused) GlassColors.AccentGlow else GlassColors.AccentGlow.copy(alpha = 0.6f)))
+        // Thumb (Bulatan)
         Row(Modifier.fillMaxWidth(value / 100f), horizontalArrangement = Arrangement.End) {
-            Box(Modifier.size(20.dp).clip(RoundedCornerShape(10.dp)).background(Color.White))
+            Box(Modifier.size(20.dp).clip(RoundedCornerShape(10.dp)).background(if (isFocused) Color.White else Color.Gray))
+        }
+
+        // Layer deteksi fokus dan D-Pad
+        Box(
+            Modifier.fillMaxSize()
+                .onFocusChanged { isFocused = it.isFocused }
+                .focusable()
+                .onPreviewKeyEvent { e ->
+                    if (e.type == KeyEventType.KeyDown) {
+                        when (e.key) {
+                            Key.DirectionLeft -> {
+                                val newValue = (value - 5f).coerceIn(0f, 100f)
+                                if (newValue != value) onValueChange(newValue)
+                                true
+                            }
+                            Key.DirectionRight -> {
+                                val newValue = (value + 5f).coerceIn(0f, 100f)
+                                if (newValue != value) onValueChange(newValue)
+                                true
+                            }
+                            else -> false
+                        }
+                    } else false
+                }
+        )
+        
+        // Garis bawah tanda fokus
+        if (isFocused) {
+            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(2.dp).background(GlassColors.AccentGlow))
         }
     }
 }
