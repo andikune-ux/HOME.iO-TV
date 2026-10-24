@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -127,8 +128,7 @@ class MainActivity : ComponentActivity() {
                 var downloadReady by remember { mutableStateOf(false) }
                 var isError by remember { mutableStateOf(false) }
 
-                // FIX: Single Source of Truth menggunakan localConfig.
-                // Hilangkan LaunchedEffect(flowConfig) yang bikin Race Condition.
+                // STATE SINKRONISASI
                 val flowConfig by appContainer.preferencesManager.settingsFlow.collectAsState(initial = SettingsConfig())
                 var localConfig by remember { mutableStateOf<SettingsConfig?>(null) }
                 val config = localConfig ?: flowConfig
@@ -149,6 +149,17 @@ class MainActivity : ComponentActivity() {
                         val attrs = window.attributes
                         attrs.screenBrightness = brightness
                         window.attributes = attrs
+                    }
+                }
+
+                // TAMBAHAN: KEEP SCREEN ON
+                LaunchedEffect(config.isKeepScreenOnEnabled) {
+                    runOnUiThread {
+                        if (config.isKeepScreenOnEnabled) {
+                            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        } else {
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        }
                     }
                 }
 
