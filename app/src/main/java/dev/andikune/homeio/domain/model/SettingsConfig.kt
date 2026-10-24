@@ -5,15 +5,13 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class SettingsConfig(
     // === WALLPAPER ===
-    val wallpaperMode: String = "SINEMATIK", // SINEMATIK, ESTETIK, OLED, KUSTOM
-    val wallpaperPath: String? = null, // Fallback untuk backward compatibility
+    val wallpaperMode: String = "SINEMATIK",
+    val wallpaperPath: String? = null,
     val customPhotoPath: String? = null,
     val customVideoPath: String? = null,
-    val customActiveType: String = "PHOTO", // PHOTO, VIDEO
-    val wallpaperType: String = "IMAGE", // IMAGE, VIDEO (Fallback lama)
+    val customActiveType: String = "PHOTO",
+    val wallpaperType: String = "IMAGE",
     val wallpaperScaleMode: String = "FILL",
-    
-    // TAMBAHAN BARU KITA
     val forceSoftwareDecoder: Boolean = false,
 
     // === FAVORITES ===
@@ -42,7 +40,10 @@ data class SettingsConfig(
 
     // === TAMPILAN TV ===
     val safeAreaPercent: Float = 2f,
-    val brightnessMode: String = "MANUAL", // MANUAL, AUTO, SCHEDULE
+    val brightnessMode: String = "MANUAL",
     val manualBrightness: Int = 100,
-    val appIconSizeMultiplier: Float = 0.8f
+    val appIconSizeMultiplier: Float = 0.8f,
+    
+    // TAMBAHAN: Layar Tetap Nyala
+    val isKeepScreenOnEnabled: Boolean = false
 )
