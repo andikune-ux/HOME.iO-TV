@@ -36,7 +36,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -377,6 +377,7 @@ fun AllAppsCenterCarousel(
     onEdgeLeftReached: () -> Unit, onEdgeRightOrDownReached: () -> Unit
 ) {
     val initialIndex = remember { if (apps.size > 2) 2 else 0 }
+    var selectedIndex by remember { mutableIntStateOf(initialIndex) }
     val lazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
     val flingBehavior = rememberSnapFlingBehavior(lazyListState = lazyListState)
     val scope = rememberCoroutineScope()
@@ -385,70 +386,104 @@ fun AllAppsCenterCarousel(
     val cardWidth = (baseCardWidth * iconSizeMultiplier).coerceIn(80.dp, 160.dp)
     val horizontalPadding = ((screenWidth - cardWidth) / 2f).coerceAtLeast(0.dp)
 
-    val centeredIndex by remember {
-        derivedStateOf {
+    // Sinkronisasi saat index berubah karena D-Pad
+    LaunchedEffect(selectedIndex) {
+        if (!lazyListState.isScrollInProgress) {
+            lazyListState.animateScrollToItem(selectedIndex)
+        }
+    }
+
+    // Sinkronisasi saat layar digeser manual (swipe)
+    LaunchedEffect(lazyListState.isScrollInProgress) {
+        if (!lazyListState.isScrollInProgress) {
             val layoutInfo = lazyListState.layoutInfo
             val visibleItems = layoutInfo.visibleItemsInfo
-            if (visibleItems.isEmpty()) return@derivedStateOf 0
-            val center = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
-            visibleItems.minByOrNull { abs((it.offset + it.size / 2) - center) }?.index ?: 0
+            if (visibleItems.isNotEmpty()) {
+                val center = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
+                val newCenter = visibleItems.minByOrNull { abs((it.offset + it.size / 2) - center) }?.index
+                if (newCenter != null && newCenter != selectedIndex) {
+                    selectedIndex = newCenter
+                }
+            }
         }
     }
 
     var isProcessingKey by remember { mutableStateOf(false) }
 
-    LaunchedEffect(lazyListState.isScrollInProgress) {
-        if (!lazyListState.isScrollInProgress) { delay(150); isProcessingKey = false }
+    // Reset key lock after short delay
+    LaunchedEffect(selectedIndex) {
+        if (isProcessingKey) {
+            delay(200)
+            isProcessingKey = false
+        }
     }
 
     Box(Modifier.fillMaxWidth().height(140.dp)) {
         LazyRow(
-            state = lazyListState, flingBehavior = flingBehavior,
+            state = lazyListState,
+            flingBehavior = flingBehavior,
             contentPadding = PaddingValues(horizontal = horizontalPadding),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxSize().focusRequester(focusRequester).focusGroup()
+            modifier = Modifier
+                .fillMaxSize()
+                .focusRequester(focusRequester)
+                .focusable() // FIX: LazyRow harus bisa menerima fokus
                 .onPreviewKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown) {
                         when (event.key) {
                             Key.DirectionLeft -> {
                                 if (isProcessingKey || lazyListState.isScrollInProgress) return@onPreviewKeyEvent true
-                                if (centeredIndex == 0) { onEdgeLeftReached(); true } 
-                                else { 
+                                if (selectedIndex == 0) {
+                                    onEdgeLeftReached()
+                                } else {
+                                    selectedIndex--
                                     isProcessingKey = true
-                                    scope.launch { lazyListState.animateScrollToItem(centeredIndex - 1) }
-                                    true 
                                 }
+                                true
                             }
                             Key.DirectionRight -> {
                                 if (isProcessingKey || lazyListState.isScrollInProgress) return@onPreviewKeyEvent true
-                                if (centeredIndex == apps.size - 1) { onEdgeRightOrDownReached(); true } 
-                                else { 
+                                if (selectedIndex == apps.size - 1) {
+                                    onEdgeRightOrDownReached()
+                                } else {
+                                    selectedIndex++
                                     isProcessingKey = true
-                                    scope.launch { lazyListState.animateScrollToItem(centeredIndex + 1) }
-                                    true 
                                 }
+                                true
                             }
-                            Key.DirectionDown -> { onEdgeRightOrDownReached(); true }
+                            Key.DirectionDown -> {
+                                onEdgeRightOrDownReached()
+                                true
+                            }
                             Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
                                 if (!isProcessingKey) {
-                                    val app = apps.getOrNull(centeredIndex)
-                                    if (app != null) { isProcessingKey = true; onAppClick(app) }
+                                    val app = apps.getOrNull(selectedIndex)
+                                    if (app != null) {
+                                        isProcessingKey = true
+                                        onAppClick(app)
+                                    }
                                 }
                                 true
                             }
                             else -> false
                         }
-                    } else if (event.type == KeyEventType.KeyUp) { isProcessingKey = false; false } else false
+                    } else if (event.type == KeyEventType.KeyUp) {
+                        isProcessingKey = false
+                        false
+                    } else false
                 }
         ) {
-            items(apps) { app ->
-                val isCentered = app == apps.getOrNull(centeredIndex)
+            itemsIndexed(apps) { index, app ->
+                val isCentered = index == selectedIndex
                 AppCardItem(
-                    app = app, iconSizeMultiplier = iconSizeMultiplier,
+                    app = app,
+                    iconSizeMultiplier = iconSizeMultiplier,
                     modifier = Modifier.width(cardWidth).height(120.dp),
-                    isCenterFocused = isCentered, useNativeFocus = false,
-                    onClick = { }, onLongClick = { onAppLongClick(app) }
+                    isCenterFocused = isCentered,
+                    useNativeFocus = false,
+                    onClick = { },
+                    onLongClick = { onAppLongClick(app) }
                 )
             }
         }
