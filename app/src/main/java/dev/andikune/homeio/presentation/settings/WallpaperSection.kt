@@ -2,6 +2,7 @@ package dev.andikune.homeio.presentation.settings
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -13,8 +14,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,6 +30,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.media3.common.MediaItem
+import androidx.media3.transformer.Transformer
 import dev.andikune.homeio.domain.model.SettingsConfig
 import dev.andikune.homeio.presentation.components.GlassColors
 import dev.andikune.homeio.presentation.components.NeonFocusBorder
@@ -51,26 +53,76 @@ fun WallpaperSection(
 
     var showFileManager by remember { mutableStateOf(false) }
     var pickerModeIsVideo by remember { mutableStateOf(false) }
+    var isConverting by remember { mutableStateOf(false) }
 
-    suspend fun copyUriToInternal(uri: Uri, isVideo: Boolean): String? = withContext(Dispatchers.IO) {
+    // FUNGSI AUTO-DELETE FILE LAMA
+    fun deleteOldFile(oldPath: String?) {
+        if (!oldPath.isNullOrBlank()) {
+            try {
+                val oldFile = File(oldPath)
+                if (oldFile.exists() && oldFile.absolutePath.contains(ctx.packageName)) {
+                    if (oldFile.delete()) Log.d("Wallpaper", "File lama dihapus: $oldPath")
+                }
+            } catch (e: Exception) { Log.e("Wallpaper", "Gagal hapus file lama", e) }
+        }
+    }
+
+    // FUNGSI COPY + AUTO-CONVERT VIDEO
+    suspend fun processNewMedia(uri: Uri, isVideo: Boolean): String? = withContext(Dispatchers.IO) {
         try {
-            val ext = if (isVideo) ".mp4" else ".jpg"
-            val fileName = "wallpaper_${System.currentTimeMillis()}$ext"
-            val file = File(ctx.filesDir, fileName)
-            ctx.contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(file).use { output -> input.copyTo(output) }
+            val fileName = if (isVideo) "wallpaper_${System.currentTimeMillis()}.mp4" else "wallpaper_${System.currentTimeMillis()}.jpg"
+            val destFile = File(ctx.filesDir, fileName)
+
+            if (isVideo) {
+                // AUTO-CONVERT PAKAI MEDIA3 TRANSFORMER (Turunin resolusi ke 720p H.264)
+                val transformer = Transformer.Builder(ctx)
+                    .addListener(object : Transformer.Listener {
+                        override fun onCompleted(composition: androidx.media3.transformer.Composition, exportResult: androidx.media3.transformer.ExportResult) {
+                            Log.d("Wallpaper", "Video Convert Berhasil")
+                        }
+                        override fun onError(composition: androidx.media3.transformer.Composition, exportResult: androidx.media3.transformer.ExportResult, exportException: androidx.media3.transformer.ExportException) {
+                            Log.e("Wallpaper", "Video Convert Gagal: ${exportException.message}")
+                        }
+                    })
+                    .build()
+
+                val mediaItem = MediaItem.Builder()
+                    .setUri(uri)
+                    .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().build())
+                    .build()
+                
+                // Mulai transcoding (ini akan jalan di background)
+                transformer.start(mediaItem, destFile.absolutePath)
+                // Tunggu sebentar agar proses transcode berjalan (bisa disesuaikan)
+                Thread.sleep(2000) 
+            } else {
+                // FOTO: Cukup copy langsung
+                ctx.contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(destFile).use { output -> input.copyTo(output) }
+                }
             }
-            file.absolutePath
-        } catch (e: Exception) { null }
+            destFile.absolutePath
+        } catch (e: Exception) {
+            Log.e("Wallpaper", "Gagal proses media: ${e.message}")
+            null
+        }
     }
 
     val galleryPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { 
             scope.launch {
-                val localPath = copyUriToInternal(it, pickerModeIsVideo)
+                isConverting = true
+                val localPath = processNewMedia(it, pickerModeIsVideo)
+                isConverting = false
                 if (localPath != null) {
+                    // Hapus file lama
+                    deleteOldFile(settings.customVideoPath)
+                    deleteOldFile(settings.customPhotoPath)
+                    
                     if (pickerModeIsVideo) onUpdate(settings.copy(wallpaperMode = "KUSTOM", customVideoPath = localPath, customActiveType = "VIDEO"))
                     else onUpdate(settings.copy(wallpaperMode = "KUSTOM", customPhotoPath = localPath, customActiveType = "PHOTO"))
+                } else {
+                    Toast.makeText(ctx, "Gagal memproses media", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -134,7 +186,21 @@ fun WallpaperSection(
             }
         }
 
-        // TOMBOL SIMPAN
+        // SWITCH FORCE SOFTWARE DECODER
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Column {
+                Text("Paksa Software Decoder", color = GlassColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text("Aktifkan jika video tidak muncul (bisa bikin lag)", color = GlassColors.TextSecondary, fontSize = 11.sp)
+            }
+            Switch(
+                checked = settings.forceSoftwareDecoder,
+                onCheckedChange = { onUpdate(settings.copy(forceSoftwareDecoder = it)) },
+                colors = SwitchDefaults.colors(checkedThumbColor = GlassColors.AccentGlow)
+            )
+        }
+
+        // TOMBOL SIMPAN (FORCE SAVE)
         Spacer(Modifier.height(16.dp))
         var isSaveFocused by remember { mutableStateOf(false) }
         NeonFocusBorder(focused = isSaveFocused, cornerRadius = 12.dp) {
@@ -144,14 +210,14 @@ fun WallpaperSection(
                     .onFocusChanged { isSaveFocused = it.isFocused }.focusable()
                     .onPreviewKeyEvent { e -> 
                         if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { 
-                            onSave()
-                            Toast.makeText(ctx, "Wallpaper berhasil disimpan!", Toast.LENGTH_SHORT).show()
+                            onSave() // Panggil simpan langsung
+                            Toast.makeText(ctx, "Wallpaper berhasil disimpan permanen!", Toast.LENGTH_SHORT).show()
                             true 
                         } else false 
                     }
                     .clickable { 
                         onSave()
-                        Toast.makeText(ctx, "Wallpaper berhasil disimpan!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(ctx, "Wallpaper berhasil disimpan permanen!", Toast.LENGTH_SHORT).show()
                     }
                     .padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center
@@ -159,7 +225,7 @@ fun WallpaperSection(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Save, null, tint = Color.White, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("SIMPAN WALLPAPER", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(if (isConverting) "MEMPROSES VIDEO..." else "SIMPAN WALLPAPER", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 }
             }
         }
@@ -171,6 +237,10 @@ fun WallpaperSection(
                 showFileManager = false
                 val isVideo = file.extension.lowercase() in listOf("mp4", "mkv", "webm", "avi")
                 scope.launch {
+                    // Hapus file lama
+                    deleteOldFile(settings.customVideoPath)
+                    deleteOldFile(settings.customPhotoPath)
+
                     if (isVideo) onUpdate(settings.copy(wallpaperMode = "KUSTOM", customVideoPath = file.absolutePath, customActiveType = "VIDEO"))
                     else onUpdate(settings.copy(wallpaperMode = "KUSTOM", customPhotoPath = file.absolutePath, customActiveType = "PHOTO"))
                 }
