@@ -177,7 +177,13 @@ fun HomeScreen(
 
     Box(Modifier.fillMaxSize()) {
         WallpaperView(config = config)
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.1f)))
+        
+        // --- FIX: KECERAHAN 0% BIKIN HITAM PEKAT ---
+        if (config.brightnessMode == "MANUAL" && config.manualBrightness == 0) {
+            Box(Modifier.fillMaxSize().background(Color.Black))
+        } else {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.1f)))
+        }
 
         Box(Modifier.fillMaxSize().padding(safePadding)) {
             
@@ -218,6 +224,7 @@ fun HomeScreen(
                 )
                 
                 if (displayApps.isNotEmpty()) {
+                    // Panggil tanpa screenWidth (sesuai buatan Manus AI)
                     AllAppsCenterCarousel(
                         apps = displayApps,
                         iconSizeMultiplier = config.appIconSizeMultiplier,
@@ -385,10 +392,11 @@ fun AllAppsCenterCarousel(
     val carouselApps = apps
     val initialIndex = remember(carouselApps) { if (carouselApps.size > 3) 3 else 0 }
     var selectedIndex by remember(carouselApps) { mutableIntStateOf(initialIndex) }
-    val lazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
+    
+    // FIX: Inisialisasi state dengan +3 karena ada edgeSlots di depan
+    val lazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex + 3)
     val edgeSlots = remember { List(3) { Unit } }
     
-    // Kunci Anti-Spam
     var isProcessingKey by remember { mutableStateOf(false) }
 
     val baseCardWidth = 110.dp
@@ -396,18 +404,18 @@ fun AllAppsCenterCarousel(
     val itemSpacing = 16.dp
     val visibleItemsWidth = (cardWidth * 7) + (itemSpacing * 6)
 
-    // Efek Animasi Geser
+    // FIX: Efek Animasi Geser (+3 buat ngelewatin edgeSlots)
     LaunchedEffect(selectedIndex) {
         if (!isProcessingKey) {
-            lazyListState.animateScrollToItem(selectedIndex)
+            lazyListState.animateScrollToItem(selectedIndex + 3)
         } else {
-            lazyListState.animateScrollToItem(selectedIndex)
-            delay(200) // Jeda buat nunggu animasi selesai
+            lazyListState.animateScrollToItem(selectedIndex + 3)
+            delay(200)
             isProcessingKey = false
         }
     }
 
-    // Sinkronisasi jika digeser manual / klik
+    // FIX: Sinkronisasi kalkulasi tengah (dikurangi 3)
     LaunchedEffect(lazyListState.isScrollInProgress) {
         if (!lazyListState.isScrollInProgress && !isProcessingKey) {
             val layoutInfo = lazyListState.layoutInfo
@@ -415,7 +423,9 @@ fun AllAppsCenterCarousel(
             if (visibleItems.isNotEmpty()) {
                 val center = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
                 val newCenter = visibleItems.minByOrNull { abs((it.offset + it.size / 2) - center) }?.index
-                val centeredAppIndex = newCenter?.minus(edgeSlots.size)?.coerceIn(0, carouselApps.lastIndex)
+                
+                // Kurangi 3 karena ada edgeSlots
+                val centeredAppIndex = newCenter?.minus(3)?.coerceIn(0, carouselApps.lastIndex)
                 if (centeredAppIndex != null && centeredAppIndex != selectedIndex) {
                     selectedIndex = centeredAppIndex
                 }
