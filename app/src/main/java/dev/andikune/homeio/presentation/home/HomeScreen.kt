@@ -63,7 +63,6 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -112,8 +111,6 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val configuration = LocalConfiguration.current
-    val screenWidth = configuration.screenWidthDp.dp
 
     var isPaneOpen by remember { mutableStateOf(false) }
     var showAllAppsOverlay by remember { mutableStateOf(false) }
@@ -224,7 +221,6 @@ fun HomeScreen(
                     AllAppsCenterCarousel(
                         apps = displayApps,
                         iconSizeMultiplier = config.appIconSizeMultiplier,
-                        screenWidth = screenWidth,
                         focusRequester = carouselFocusRequester,
                         onAppClick = { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) },
                         onAppLongClick = { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app },
@@ -382,7 +378,7 @@ fun SystemControlIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, tin
 
 @Composable
 fun AllAppsCenterCarousel(
-    apps: List<AppItem>, iconSizeMultiplier: Float, screenWidth: Dp, focusRequester: FocusRequester,
+    apps: List<AppItem>, iconSizeMultiplier: Float, focusRequester: FocusRequester,
     onAppClick: (AppItem) -> Unit, onAppLongClick: (AppItem) -> Unit,
     onEdgeLeftReached: () -> Unit, onEdgeRightOrDownReached: () -> Unit
 ) {
@@ -390,13 +386,15 @@ fun AllAppsCenterCarousel(
     val initialIndex = remember(carouselApps) { if (carouselApps.size > 3) 3 else 0 }
     var selectedIndex by remember(carouselApps) { mutableIntStateOf(initialIndex) }
     val lazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
+    val edgeSlots = remember { List(3) { Unit } }
     
     // Kunci Anti-Spam
     var isProcessingKey by remember { mutableStateOf(false) }
 
     val baseCardWidth = 110.dp
     val cardWidth = (baseCardWidth * iconSizeMultiplier).coerceIn(80.dp, 160.dp)
-    val horizontalPadding = ((screenWidth - cardWidth) / 2f).coerceAtLeast(0.dp)
+    val itemSpacing = 16.dp
+    val visibleItemsWidth = (cardWidth * 7) + (itemSpacing * 6)
 
     // Efek Animasi Geser
     LaunchedEffect(selectedIndex) {
@@ -417,18 +415,20 @@ fun AllAppsCenterCarousel(
             if (visibleItems.isNotEmpty()) {
                 val center = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
                 val newCenter = visibleItems.minByOrNull { abs((it.offset + it.size / 2) - center) }?.index
-                if (newCenter != null && newCenter != selectedIndex) {
-                    selectedIndex = newCenter
+                val centeredAppIndex = newCenter?.minus(edgeSlots.size)?.coerceIn(0, carouselApps.lastIndex)
+                if (centeredAppIndex != null && centeredAppIndex != selectedIndex) {
+                    selectedIndex = centeredAppIndex
                 }
             }
         }
     }
 
-    Box(Modifier.fillMaxWidth().height(140.dp)) {
+    BoxWithConstraints(Modifier.fillMaxWidth().height(140.dp)) {
+        val horizontalPadding = ((maxWidth - visibleItemsWidth) / 2f).coerceAtLeast(0.dp)
         LazyRow(
             state = lazyListState,
             contentPadding = PaddingValues(horizontal = horizontalPadding),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(itemSpacing),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxSize()
@@ -466,6 +466,9 @@ fun AllAppsCenterCarousel(
                     } else false
                 }
         ) {
+            itemsIndexed(edgeSlots) { _, _ ->
+                Spacer(Modifier.width(cardWidth).height(120.dp))
+            }
             itemsIndexed(carouselApps) { index, app ->
                 val isCentered = index == selectedIndex
                 AppCardItem(
@@ -477,6 +480,9 @@ fun AllAppsCenterCarousel(
                     onClick = { },
                     onLongClick = { onAppLongClick(app) }
                 )
+            }
+            itemsIndexed(edgeSlots) { _, _ ->
+                Spacer(Modifier.width(cardWidth).height(120.dp))
             }
         }
     }
