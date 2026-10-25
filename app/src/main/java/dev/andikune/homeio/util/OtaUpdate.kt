@@ -60,6 +60,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -67,7 +68,12 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 object UpdateManager {
-    private const val GITHUB_API = "https://api.github.com/repos/andikune-ux/HOME.iO-TV/releases/latest"
+    // ENDPOINT BARU: Tanpa /latest, karena kita pakai filter
+    private const val GITHUB_API = "https://api.github.com/repos/andikune-ux/dev.andikune-apps/releases"
+    
+    // AWALAN TAG UNTUK HOME.IO
+    private const val TAG_PREFIX = "homeio-"
+
     data class UpdateInfo(val available: Boolean, val currentVersion: String, val latestVersion: String, val downloadUrl: String?, val releaseNotes: String?, val isForceUpdate: Boolean, val errorType: String? = null)
 
     suspend fun checkForUpdate(): UpdateInfo = withContext(Dispatchers.IO) {
@@ -80,20 +86,42 @@ object UpdateManager {
                 connectTimeout = 15000
                 readTimeout = 15000
             }
+            
             if (conn.responseCode == 403) return@withContext noUpdate(current, "RATE_LIMIT")
             if (conn.responseCode == 404) return@withContext noUpdate(current, "NOT_FOUND")
             if (conn.responseCode != 200) return@withContext noUpdate(current, "HTTP_${conn.responseCode}")
-            val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
-            conn.disconnect()
-            val latest = json.optString("tag_name", "Versi Baru").trim().ifEmpty { "Versi Baru" }
-            val rawNotes = json.optString("body", "").trim()
             
+            val responseStr = conn.inputStream.bufferedReader().use { it.readText() }
+            conn.disconnect()
+
+            // Parse Array JSON
+            val releasesArray = JSONArray(responseStr)
+            var targetRelease: JSONObject? = null
+
+            // Loop cari rilis yang tag-nya depannya "homeio-"
+            for (i in 0 until releasesArray.length()) {
+                val release = releasesArray.getJSONObject(i)
+                val tagName = release.optString("tag_name", "")
+                if (tagName.startsWith(TAG_PREFIX)) {
+                    targetRelease = release
+                    break // Ketemu yang terbaru untuk HOME.iO, langsung stop loop
+                }
+            }
+
+            if (targetRelease == null) {
+                return@withContext noUpdate(current, "NO_TAG_FOUND")
+            }
+
+            // Hapus awalan "homeio-" agar versinya sesuai dengan BuildConfig
+            val latest = targetRelease.optString("tag_name").removePrefix(TAG_PREFIX).trim().ifEmpty { "Versi Baru" }
+            val rawNotes = targetRelease.optString("body", "").trim()
             val cleanNotes = rawNotes.lines().filterNot { it.contains("**Full Changelog**", ignoreCase = true) }.joinToString("\n").trim().ifEmpty { "Tidak ada rincian pembaruan." }
 
             val isNewer = compareVersions(latest, current) > 0
             val isForce = isNewer && cleanNotes.lines().any { it.trim().uppercase().startsWith("FORCE_UPDATE=TRUE") }
+            
             var dlUrl: String? = null
-            json.optJSONArray("assets")?.let { arr ->
+            targetRelease.optJSONArray("assets")?.let { arr ->
                 for (i in 0 until arr.length()) {
                     val name = arr.getJSONObject(i).optString("name", "")
                     if (name.endsWith(".apk", true)) { dlUrl = arr.getJSONObject(i).getString("browser_download_url"); break }
