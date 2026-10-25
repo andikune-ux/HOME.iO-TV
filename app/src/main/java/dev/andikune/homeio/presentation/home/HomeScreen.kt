@@ -386,7 +386,7 @@ fun AllAppsCenterCarousel(
     onAppClick: (AppItem) -> Unit, onAppLongClick: (AppItem) -> Unit,
     onEdgeLeftReached: () -> Unit, onEdgeRightOrDownReached: () -> Unit
 ) {
-    val carouselApps = remember(apps) { apps.take(7) }
+    val carouselApps = apps
     val initialIndex = remember(carouselApps) { if (carouselApps.size > 3) 3 else 0 }
     var selectedIndex by remember(carouselApps) { mutableIntStateOf(initialIndex) }
     val lazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
