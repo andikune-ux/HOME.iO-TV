@@ -187,19 +187,18 @@ fun HomeScreen(
 
         Box(Modifier.fillMaxSize().padding(safePadding)) {
             
+            // --- FIX: TOMBOL KIRI ATAS CUMA 2 (Kiosk & Dashboard) ---
             Row(
                 modifier = Modifier.align(Alignment.TopStart).padding(top = 16.dp, start = 16.dp).focusGroup(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // 1. Tombol Kiosk (Tameng Merah)
                 SystemControlIcon(icon = Icons.Rounded.Shield, tint = GlassColors.AccentRed, onClick = { 
                     val newKiosk = !config.isKioskModeEnabled
                     onSaveConfig(config.copy(isKioskModeEnabled = newKiosk)) 
                 })
-                SystemControlIcon(icon = Icons.Rounded.Wifi, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
-                SystemControlIcon(icon = Icons.Rounded.Bluetooth, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
-                SystemControlIcon(icon = Icons.Rounded.GraphicEq, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
-                SystemControlIcon(icon = Icons.Rounded.WbSunny, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
+                // 2. Tombol Kendali Sistem (Dashboard)
                 SystemControlIcon(icon = Icons.Rounded.Dashboard, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
             }
 
