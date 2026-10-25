@@ -224,7 +224,6 @@ fun HomeScreen(
                 )
                 
                 if (displayApps.isNotEmpty()) {
-                    // Panggil tanpa screenWidth (sesuai buatan Manus AI)
                     AllAppsCenterCarousel(
                         apps = displayApps,
                         iconSizeMultiplier = config.appIconSizeMultiplier,
@@ -393,7 +392,6 @@ fun AllAppsCenterCarousel(
     val initialIndex = remember(carouselApps) { if (carouselApps.size > 3) 3 else 0 }
     var selectedIndex by remember(carouselApps) { mutableIntStateOf(initialIndex) }
     
-    // FIX: Inisialisasi state dengan +3 karena ada edgeSlots di depan
     val lazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex + 3)
     val edgeSlots = remember { List(3) { Unit } }
     
@@ -404,18 +402,18 @@ fun AllAppsCenterCarousel(
     val itemSpacing = 16.dp
     val visibleItemsWidth = (cardWidth * 7) + (itemSpacing * 6)
 
-    // FIX: Efek Animasi Geser (+3 buat ngelewatin edgeSlots)
+    // FIX: Animasi murni pakai scrollToItem
     LaunchedEffect(selectedIndex) {
         if (!isProcessingKey) {
             lazyListState.animateScrollToItem(selectedIndex + 3)
         } else {
             lazyListState.animateScrollToItem(selectedIndex + 3)
-            delay(200)
+            delay(300) // Jeda buat nunggu animasi selesai
             isProcessingKey = false
         }
     }
 
-    // FIX: Sinkronisasi kalkulasi tengah (dikurangi 3)
+    // FIX: Sinkronisasi kalkulasi tengah
     LaunchedEffect(lazyListState.isScrollInProgress) {
         if (!lazyListState.isScrollInProgress && !isProcessingKey) {
             val layoutInfo = lazyListState.layoutInfo
@@ -424,7 +422,6 @@ fun AllAppsCenterCarousel(
                 val center = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
                 val newCenter = visibleItems.minByOrNull { abs((it.offset + it.size / 2) - center) }?.index
                 
-                // Kurangi 3 karena ada edgeSlots
                 val centeredAppIndex = newCenter?.minus(3)?.coerceIn(0, carouselApps.lastIndex)
                 if (centeredAppIndex != null && centeredAppIndex != selectedIndex) {
                     selectedIndex = centeredAppIndex
@@ -433,15 +430,16 @@ fun AllAppsCenterCarousel(
         }
     }
 
-    BoxWithConstraints(Modifier.fillMaxWidth().height(140.dp)) {
-        val horizontalPadding = ((maxWidth - visibleItemsWidth) / 2f).coerceAtLeast(0.dp)
+    BoxWithConstraints(Modifier.fillMaxWidth().height(140.dp), contentAlignment = Alignment.Center) {
+        val horizontalPadding = ((visibleItemsWidth - cardWidth) / 2f).coerceAtLeast(0.dp)
+        
         LazyRow(
             state = lazyListState,
             contentPadding = PaddingValues(horizontal = horizontalPadding),
             horizontalArrangement = Arrangement.spacedBy(itemSpacing),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .fillMaxSize()
+                .width(visibleItemsWidth) // Kunci lebar agar pas 7 ikon
                 .focusRequester(focusRequester)
                 .focusable()
                 .onPreviewKeyEvent { event ->
