@@ -159,7 +159,8 @@ jobs:
       - name: Create and Publish Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.get_version.outputs.VERSION }}
+          # TAMBAHAN: Prefix "homeio-" pada tag
+          tag_name: "homeio-${{ steps.get_version.outputs.VERSION }}"
           name: "HOME.iO TV ${{ steps.get_version.outputs.VERSION }}"
           draft: false
           prerelease: false
@@ -169,5 +170,6 @@ jobs:
             
             ${{ steps.get_version.outputs.CHANGELOG }}
           files: app/build/outputs/apk/debug/*.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # TAMBAHAN: Arahkan ke repo public
+          repository: andikune-ux/dev.andikune-apps
+          token: ${{ secrets.PAT_TOKEN }}
