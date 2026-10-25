@@ -229,6 +229,41 @@ ATURAN FORMAT:
     File   : app/build.gradle.kts
     Fix    : Tambahkan testImplementation JUnit 4.13.2 tanpa mengubah identitas,
              signing, atau konfigurasi release.
+
+38. Temuan: Skala ikon aplikasi default masih 0.8x
+    File   : SettingsConfig.kt, PreferencesManager.kt
+    Fix    : Ubah default dan fallback DataStore menjadi 1.0x.
+
+39. Temuan: Carousel aplikasi terlalu banyak dan fokus tidak berada di tengah
+    File   : HomeScreen.kt
+    Fix    : Tampilkan maksimal tujuh aplikasi pada carousel dengan fokus awal
+             di item keempat, membentuk pola tiga kiri, fokus, tiga kanan.
+
+40. Temuan: Neon focus border kurang terlihat di atas wallpaper putih
+    File   : NeonFocusBorder.kt
+    Fix    : Perjelas inti border putih, jejak biru, alpha, dan radius glow.
+
+41. Temuan: Weather dapat kosong terlalu lama setelah gangguan internet singkat
+    File   : MainActivity.kt
+    Fix    : Gunakan retry 30 detik saat belum ada data dan pertahankan data
+             terakhir saat request berikutnya gagal. Request tetap memakai
+             layanan internet Open-Meteo.
+
+42. Temuan: Fokus pane kiri dapat bocor ke area Home di belakang pane
+    File   : HomeScreen.kt
+    Fix    : D-pad kanan saat pane kiri terbuka menutup pane dan tidak diteruskan
+             ke konten belakang. Membuka Settings juga menutup pane lebih dahulu.
+
+43. Temuan: Slider Safe Area dan pengaturan lain menjebak navigasi kiri/kanan
+    File   : TvSlider.kt
+    Fix    : D-pad kiri/kanan hanya mengubah nilai setelah tombol OK mengaktifkan
+             slider. Tekan OK lagi untuk keluar dari mode slider sehingga arah
+             kiri dapat kembali ke menu utama.
+
+44. Temuan: OLED screensaver tidak benar-benar menerapkan brightness 0%
+    File   : ScreensaverActivity.kt
+    Fix    : Ganti BRIGHTNESS_OVERRIDE_OFF yang berarti tanpa override menjadi
+             screenBrightness = 0.0f secara konsisten.
     """.trimIndent()
 
     val BUILD_ERROR_HISTORY = """
@@ -245,6 +280,8 @@ ATURAN FORMAT:
 10. Unit test gagal karena dependency JUnit belum dideklarasikan.
 11. Setelah dependency JUnit ditambahkan, testDebugUnitTest dan assembleDebug berhasil.
 12. GitHub Actions berhasil pada commit 8795374, run 40117478357.
+13. Setelah perbaikan carousel, D-pad, NeonFocusBorder, weather, slider, dan OLED,
+    testDebugUnitTest serta assembleDebug kembali berhasil secara lokal.
     """.trimIndent()
 
     val BACKUP_INFO = """
@@ -293,5 +330,11 @@ app/src/main/java/dev/andikune/homeio/
 16. Backup unik dengan timestamp lengkap.
 17. File Manager fallback ke Downloads.
 18. Notification listener dengan update state yang lebih aman.
+19. Carousel aplikasi maksimal tujuh item dengan fokus presisi pada item keempat.
+20. Neon focus border putih-biru dengan kontras tinggi di berbagai wallpaper.
+21. Weather internet dengan retry cepat dan data terakhir yang dipertahankan.
+22. Pane kiri mengunci fokus dan menutup saat D-pad kanan ditekan.
+23. Slider settings memakai mode aktivasi OK untuk mencegah fokus terjebak.
+24. OLED screensaver dengan override brightness 0.0f.
     """.trimIndent()
 }

@@ -70,8 +70,8 @@ fun NeonFocusBorder(
                     
                     corePaint.color = if (pressed) {
                         val a = (flashAlpha.value * 255).toInt().coerceIn(0, 255)
-                        (0xFF80C3FF.toInt() and 0x00FFFFFF) or (a shl 24)
-                    } else 0x334DA3FF
+                        (0xFF58A6FF.toInt() and 0x00FFFFFF) or (a shl 24)
+                    } else 0xE6FFFFFF.toInt()
                     native.drawRoundRect(coreRect, cornerRadiusPx, cornerRadiusPx, corePaint)
 
                     val glowOutset = glowRadiusPx * 0.4f
@@ -80,7 +80,7 @@ fun NeonFocusBorder(
                     val pathMeasure = PathMeasure(glowPath, false)
                     val pathLength = pathMeasure.length
                     
-                    val headColors = if (pressed) listOf(0xFF80C3FF.toInt()) else listOf(0xFFFFFFFF.toInt(), 0xFF80C3FF.toInt())
+                    val headColors = if (pressed) listOf(0xFF4DA3FF.toInt()) else listOf(0xFFFFFFFF.toInt(), 0xFF2F80ED.toInt())
                     val tailLenFraction = 0.30f
                     val dotCount = 24
 
@@ -93,9 +93,9 @@ fun NeonFocusBorder(
                             val pos = FloatArray(2)
                             pathMeasure.getPosTan(wrapped * pathLength, pos, null)
                             val linear = 1f - (i.toFloat() / dotCount)
-                            val alphaBase = linear * linear * 0.7f + linear * 0.3f
+                            val alphaBase = (linear * linear * 0.85f + linear * 0.15f).coerceIn(0f, 1f)
                             val alpha = if (pressed) alphaBase * flashAlpha.value else alphaBase
-                            val dotRadius = glowRadiusPx * (0.35f + 0.35f * linear)
+                            val dotRadius = glowRadiusPx * (0.45f + 0.45f * linear)
 
                             glowPaint.shader = RadialGradient(pos[0], pos[1], dotRadius, intArrayOf(
                                 colorWithAlpha(color, alpha * 1.0f), colorWithAlpha(color, alpha * 0.7f), colorWithAlpha(color, alpha * 0.3f), colorWithAlpha(color, 0f)

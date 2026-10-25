@@ -263,7 +263,17 @@ fun HomeScreen(
             exit = slideOutHorizontally(targetOffsetX = { -it }) + fadeOut()
         ) {
             Row(Modifier.fillMaxSize()) {
-                Box(Modifier.fillMaxHeight().width(280.dp).focusGroup().focusRequester(paneFocusRequester)) {
+                Box(
+                    Modifier.fillMaxHeight().width(280.dp)
+                        .focusGroup()
+                        .focusRequester(paneFocusRequester)
+                        .onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
+                                isPaneOpen = false
+                                true
+                            } else false
+                        }
+                ) {
                     LeftNavigationGlassPanel(
                         selectedNav, isSideloadOnly,
                         notifications = notifications,
@@ -279,7 +289,7 @@ fun HomeScreen(
                         onRamBoostClick = { SoundFeedback.playClick(context); memInfo = SystemUtils.boostRam(context); Toast.makeText(context, "RAM Dioptimalkan!", Toast.LENGTH_SHORT).show() },
                         onFileManagerClick = { SoundFeedback.playClick(context); showFileManager = true },
                         onSideloadToggleClick = { SoundFeedback.playClick(context); isSideloadOnly = !isSideloadOnly },
-                        onSettingsClick = { SoundFeedback.playClick(context); onOpenSettings() },
+                        onSettingsClick = { SoundFeedback.playClick(context); isPaneOpen = false; onOpenSettings() },
                         onSystemControlClick = { SoundFeedback.playClick(context); isPaneOpen = false; onOpenSystemControl() },
                         onPaneClose = { isPaneOpen = false }
                     )
@@ -376,8 +386,9 @@ fun AllAppsCenterCarousel(
     onAppClick: (AppItem) -> Unit, onAppLongClick: (AppItem) -> Unit,
     onEdgeLeftReached: () -> Unit, onEdgeRightOrDownReached: () -> Unit
 ) {
-    val initialIndex = remember { if (apps.size > 2) 2 else 0 }
-    var selectedIndex by remember { mutableIntStateOf(initialIndex) }
+    val carouselApps = remember(apps) { apps.take(7) }
+    val initialIndex = remember(carouselApps) { if (carouselApps.size > 3) 3 else 0 }
+    var selectedIndex by remember(carouselApps) { mutableIntStateOf(initialIndex) }
     val lazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
     
     // Kunci Anti-Spam
@@ -437,7 +448,7 @@ fun AllAppsCenterCarousel(
                             }
                             Key.DirectionRight -> {
                                 if (isProcessingKey) return@onPreviewKeyEvent true
-                                if (selectedIndex == apps.size - 1) { onEdgeRightOrDownReached() } 
+                                if (selectedIndex == carouselApps.size - 1) { onEdgeRightOrDownReached() } 
                                 else { 
                                     isProcessingKey = true
                                     selectedIndex++ 
@@ -446,7 +457,7 @@ fun AllAppsCenterCarousel(
                             }
                             Key.DirectionDown -> { onEdgeRightOrDownReached(); true }
                             Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                                val app = apps.getOrNull(selectedIndex)
+                                val app = carouselApps.getOrNull(selectedIndex)
                                 if (app != null) onAppClick(app)
                                 true
                             }
@@ -455,7 +466,7 @@ fun AllAppsCenterCarousel(
                     } else false
                 }
         ) {
-            itemsIndexed(apps) { index, app ->
+            itemsIndexed(carouselApps) { index, app ->
                 val isCentered = index == selectedIndex
                 AppCardItem(
                     app = app,

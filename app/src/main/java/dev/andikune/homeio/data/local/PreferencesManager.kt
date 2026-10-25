@@ -83,7 +83,7 @@ class PreferencesManager(private val context: Context) {
             brightnessMode = prefs[KEY_BRIGHTNESS_MODE] ?: "MANUAL",
             manualBrightness = prefs[KEY_MANUAL_BRIGHTNESS] ?: 100,
             
-            appIconSizeMultiplier = prefs[KEY_APP_ICON_SIZE] ?: 0.8f,
+            appIconSizeMultiplier = prefs[KEY_APP_ICON_SIZE] ?: 1.0f,
             isKeepScreenOnEnabled = prefs[KEY_KEEP_SCREEN_ON] ?: false
         )
     }

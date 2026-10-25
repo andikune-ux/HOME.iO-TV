@@ -42,7 +42,7 @@ data class SettingsConfig(
     val safeAreaPercent: Float = 2f,
     val brightnessMode: String = "MANUAL",
     val manualBrightness: Int = 100,
-    val appIconSizeMultiplier: Float = 0.8f,
+    val appIconSizeMultiplier: Float = 1.0f,
     
     // TAMBAHAN: Layar Tetap Nyala
     val isKeepScreenOnEnabled: Boolean = false

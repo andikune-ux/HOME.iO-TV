@@ -234,9 +234,9 @@ class MainActivity : ComponentActivity() {
                                 weatherInfo = WeatherInfo(cw.temperature, cw.weathercode, desc, config.weatherLocation)
                             }
                         } catch (_: Exception) {
-                            weatherInfo = null 
+                            // Pertahankan data terakhir agar tampilan tidak kosong saat jaringan berkedip.
                         }
-                        delay(30 * 60 * 1000L)
+                        delay(if (weatherInfo == null) 30_000L else 30 * 60 * 1000L)
                     }
                 }
 

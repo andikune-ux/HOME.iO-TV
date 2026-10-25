@@ -19,11 +19,7 @@ class ScreensaverActivity : ComponentActivity() {
         
         // FIX: Paksa layar menjadi 0% (Hitam Pekat)
         val layoutParams = window.attributes
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            layoutParams.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_OFF
-        } else {
-            layoutParams.screenBrightness = 0.0f
-        }
+        layoutParams.screenBrightness = 0.0f
         window.attributes = layoutParams
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 

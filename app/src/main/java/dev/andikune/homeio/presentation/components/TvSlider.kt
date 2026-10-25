@@ -114,14 +114,10 @@ fun TvSlider(
                             true
                         }
                         event.key == Key.DirectionLeft || keyCode == AndroidKeyEvent.KEYCODE_DPAD_LEFT -> {
-                            isSliderActive = true
-                            slideLeft()
-                            true
+                            if (isSliderActive) { slideLeft(); true } else false
                         }
                         event.key == Key.DirectionRight || keyCode == AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> {
-                            isSliderActive = true
-                            slideRight()
-                            true
+                            if (isSliderActive) { slideRight(); true } else false
                         }
                         else -> false
                     }
