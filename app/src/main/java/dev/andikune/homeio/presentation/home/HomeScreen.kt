@@ -394,44 +394,37 @@ fun AllAppsCenterCarousel(
     
     val lazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex + 3)
     val edgeSlots = remember { List(3) { Unit } }
+    val scope = rememberCoroutineScope()
     
-    var isProcessingKey by remember { mutableStateOf(false) }
+    var isCarouselFocused by remember { mutableStateOf(false) }
 
     val baseCardWidth = 110.dp
     val cardWidth = (baseCardWidth * iconSizeMultiplier).coerceIn(80.dp, 160.dp)
     val itemSpacing = 16.dp
     val visibleItemsWidth = (cardWidth * 7) + (itemSpacing * 6)
 
-    // FIX: Animasi murni pakai scrollToItem
-    LaunchedEffect(selectedIndex) {
-        if (!isProcessingKey) {
-            lazyListState.animateScrollToItem(selectedIndex + 3)
-        } else {
-            lazyListState.animateScrollToItem(selectedIndex + 3)
-            delay(300) // Jeda buat nunggu animasi selesai
-            isProcessingKey = false
-        }
-    }
-
-    // FIX: Sinkronisasi kalkulasi tengah
-    LaunchedEffect(lazyListState.isScrollInProgress) {
-        if (!lazyListState.isScrollInProgress && !isProcessingKey) {
-            val layoutInfo = lazyListState.layoutInfo
-            val visibleItems = layoutInfo.visibleItemsInfo
-            if (visibleItems.isNotEmpty()) {
-                val center = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
-                val newCenter = visibleItems.minByOrNull { abs((it.offset + it.size / 2) - center) }?.index
-                
-                val centeredAppIndex = newCenter?.minus(3)?.coerceIn(0, carouselApps.lastIndex)
-                if (centeredAppIndex != null && centeredAppIndex != selectedIndex) {
-                    selectedIndex = centeredAppIndex
+    // FIX: Sinkronisasi kalkulasi tengah HANYA ketika scroll (swipe) berhenti.
+    // Ini mencegah infinite loop yang bikin geser sendiri.
+    LaunchedEffect(lazyListState) {
+        snapshotFlow { lazyListState.isScrollInProgress }
+            .collect { isScrolling ->
+                if (!isScrolling) {
+                    val layoutInfo = lazyListState.layoutInfo
+                    val visibleItems = layoutInfo.visibleItemsInfo
+                    if (visibleItems.isNotEmpty()) {
+                        val center = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
+                        val newCenter = visibleItems.minByOrNull { abs((it.offset + it.size / 2) - center) }?.index
+                        val centeredAppIndex = newCenter?.minus(3)?.coerceIn(0, carouselApps.lastIndex)
+                        if (centeredAppIndex != null && centeredAppIndex != selectedIndex) {
+                            selectedIndex = centeredAppIndex
+                        }
+                    }
                 }
             }
-        }
     }
 
     BoxWithConstraints(Modifier.fillMaxWidth().height(140.dp), contentAlignment = Alignment.Center) {
-        val horizontalPadding = ((visibleItemsWidth - cardWidth) / 2f).coerceAtLeast(0.dp)
+        val horizontalPadding = ((maxWidth - visibleItemsWidth) / 2f).coerceAtLeast(0.dp)
         
         LazyRow(
             state = lazyListState,
@@ -439,27 +432,26 @@ fun AllAppsCenterCarousel(
             horizontalArrangement = Arrangement.spacedBy(itemSpacing),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .width(visibleItemsWidth) // Kunci lebar agar pas 7 ikon
+                .width(visibleItemsWidth)
                 .focusRequester(focusRequester)
+                .onFocusChanged { isCarouselFocused = it.isFocused } // FIX: Deteksi fokus
                 .focusable()
                 .onPreviewKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown) {
                         when (event.key) {
                             Key.DirectionLeft -> {
-                                if (isProcessingKey) return@onPreviewKeyEvent true
                                 if (selectedIndex == 0) { onEdgeLeftReached() } 
                                 else { 
-                                    isProcessingKey = true
                                     selectedIndex-- 
+                                    scope.launch { lazyListState.animateScrollToItem(selectedIndex + 3) }
                                 }
                                 true
                             }
                             Key.DirectionRight -> {
-                                if (isProcessingKey) return@onPreviewKeyEvent true
                                 if (selectedIndex == carouselApps.size - 1) { onEdgeRightOrDownReached() } 
                                 else { 
-                                    isProcessingKey = true
                                     selectedIndex++ 
+                                    scope.launch { lazyListState.animateScrollToItem(selectedIndex + 3) }
                                 }
                                 true
                             }
@@ -478,14 +470,23 @@ fun AllAppsCenterCarousel(
                 Spacer(Modifier.width(cardWidth).height(120.dp))
             }
             itemsIndexed(carouselApps) { index, app ->
-                val isCentered = index == selectedIndex
+                val isCentered = (index == selectedIndex) && isCarouselFocused
                 AppCardItem(
                     app = app,
                     iconSizeMultiplier = iconSizeMultiplier,
                     modifier = Modifier.width(cardWidth).height(120.dp),
                     isCenterFocused = isCentered,
                     useNativeFocus = false,
-                    onClick = { },
+                    onClick = {
+                        // FIX TOUCH: Jika disentuh dan bukan ditengah, geser ke tengah.
+                        // Jika sudah di tengah, buka aplikasi.
+                        if (index == selectedIndex) {
+                            onAppClick(app)
+                        } else {
+                            selectedIndex = index
+                            scope.launch { lazyListState.animateScrollToItem(index + 3) }
+                        }
+                    },
                     onLongClick = { onAppLongClick(app) }
                 )
             }
@@ -563,7 +564,7 @@ fun AppCardItem(
                             }
                     } else Modifier
                 )
-                .combinedClickable(interactionSource = interactionSource, indication = null, onClick = { if (useNativeFocus) onClick() }, onLongClick = onLongClick)
+                .combinedClickable(interactionSource = interactionSource, indication = null, onClick = { onClick() }, onLongClick = onLongClick)
                 .padding(8.dp),
             contentAlignment = Alignment.Center
         ) {
