@@ -79,7 +79,6 @@ fun TvSlider(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            // Warna berubah kalau sedang AKTIF (Hijau) atau FOKUS (Biru)
             .background(if (isSliderActive) Color(0x33A5D6A7) else Color(0x22000000))
             .border(
                 width = if (isSliderActive || isFocused) 2.dp else 1.dp,
@@ -92,14 +91,12 @@ fun TvSlider(
             )
             .onFocusChanged {
                 isFocused = it.isFocused
-                // Kalau fokus hilang (misal pindah ke Sidebar), matikan mode aktif
                 if (!it.isFocused) isSliderActive = false
             }
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
                     val keyCode = event.key.nativeKeyCode
                     when {
-                        // Tombol OK/Enter: Toggle Mode Aktif
                         event.key == Key.DirectionCenter ||
                         event.key == Key.Enter ||
                         event.key == Key.NumPadEnter ||
@@ -108,14 +105,12 @@ fun TvSlider(
                             isSliderActive = !isSliderActive
                             true
                         }
-                        // Tombol Kiri/Kanan: Geser nilai HANYA kalau Mode Aktif
                         event.key == Key.DirectionLeft || keyCode == AndroidKeyEvent.KEYCODE_DPAD_LEFT -> {
                             if (isSliderActive) { updateValue(value - stepSize); true } else false
                         }
                         event.key == Key.DirectionRight || keyCode == AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> {
                             if (isSliderActive) { updateValue(value + stepSize); true } else false
                         }
-                        // Tombol Back: Matikan Mode Aktif (biar bisa balik ke Sidebar)
                         event.key == Key.Back -> {
                             if (isSliderActive) { isSliderActive = false; true } else false
                         }
@@ -158,7 +153,6 @@ fun TvSlider(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Area Slider (bisa digeser pakai sentuhan juga)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -166,7 +160,7 @@ fun TvSlider(
                 .pointerInput(valueRange) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
-                        isSliderActive = true // Kalau disentuh, otomatis aktif
+                        isSliderActive = true
                         val initialFraction = (down.position.x / size.width).coerceIn(0f, 1f)
                         updateValue(valueRange.start + initialFraction * (valueRange.endInclusive - valueRange.start))
                         down.consume()
@@ -230,7 +224,6 @@ fun TvSlider(
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        // Info Teks Navigasi
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -255,7 +248,6 @@ fun TvSlider(
                 }
                 Spacer(modifier = Modifier.width(6.dp))
                 
-                // Teks dinamis menyesuaikan status
                 Text(
                     text = if (isSliderActive)
                         "KIRI/KANAN untuk geser, OK/Back untuk keluar"
@@ -284,7 +276,6 @@ fun TvSlider(
                 }
             }
             
-            // Badge "AKTIF"
             if (isSliderActive) {
                 Box(
                     modifier = Modifier
