@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -35,7 +36,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import dev.andikune.homeio.domain.model.SettingsConfig
-import dev.andikune.homeio.presentation.components.AutoFocusPane
 import dev.andikune.homeio.presentation.components.GlassColors
 import dev.andikune.homeio.presentation.components.NeonFocusBorder
 import dev.andikune.homeio.presentation.components.liquidGlass
@@ -64,7 +64,7 @@ fun SettingsScreen(
     var draftConfig by remember { mutableStateOf(currentConfig) }
     val scope = rememberCoroutineScope()
     
-    // Requester buat konten kanan dan sidebar kiri
+    // Requester untuk konten kanan dan sidebar kiri
     val contentFocusRequester = remember { FocusRequester() }
     val sidebarFirstItemFocusRequester = remember { FocusRequester() }
 
@@ -148,36 +148,37 @@ fun SettingsScreen(
             // ============================================================
             // PANE KANAN (KONTEN)
             // ============================================================
-            Box(Modifier.weight(0.72f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp).padding(24.dp)) {
-                AutoFocusPane(paneKey = selectedCategory, modifier = Modifier.fillMaxSize()) {
-                    LazyColumn(
-                        Modifier.fillMaxSize()
-                            .focusRequester(contentFocusRequester)
-                            .onPreviewKeyEvent { event ->
-                                // FIX: Kalau tombol Kiri ditekan, balikin fokus ke Sidebar
-                                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionLeft) {
-                                    scope.launch {
-                                        sidebarFirstItemFocusRequester.requestFocus()
-                                    }
-                                    true
-                                } else false
-                            }
-                    ) {
-                        item {
-                            when (selectedCategory) {
-                                SettingsCategory.WALLPAPER -> WallpaperSection(
-                                    settings = draftConfig, 
-                                    onUpdate = { draftConfig = it },
-                                    onSave = { onSaveConfig(draftConfig) }
-                                )
-                                SettingsCategory.SCREENSAVER -> ScreensaverSection(draftConfig) { draftConfig = it }
-                                SettingsCategory.PERFORMANCE -> PerformanceSection(draftConfig) { draftConfig = it }
-                                SettingsCategory.LANGUAGE -> LanguageSection(draftConfig) { draftConfig = it }
-                                SettingsCategory.TV_DISPLAY -> TvDisplaySection(draftConfig) { draftConfig = it }
-                                SettingsCategory.UPDATER -> ApkFileListSection()
-                                SettingsCategory.BACKUP -> BackupBiasaSection(draftConfig) { draftConfig = it }
-                                SettingsCategory.INFO -> InfoAppSection()
-                            }
+            Box(
+                Modifier
+                    .weight(0.72f)
+                    .fillMaxHeight()
+                    .liquidGlass(cornerRadius = 24.dp)
+                    .padding(24.dp)
+                    // FIX: Jika fokus ada di dalam Box ini dan tombol Kiri ditekan,
+                    // maka fokus akan otomatis lompat ke Sidebar Kiri (sidebarFirstItemFocusRequester).
+                    .focusProperties {
+                        left = sidebarFirstItemFocusRequester
+                    }
+            ) {
+                LazyColumn(
+                    Modifier
+                        .fillMaxSize()
+                        .focusRequester(contentFocusRequester)
+                ) {
+                    item {
+                        when (selectedCategory) {
+                            SettingsCategory.WALLPAPER -> WallpaperSection(
+                                settings = draftConfig, 
+                                onUpdate = { draftConfig = it },
+                                onSave = { onSaveConfig(draftConfig) }
+                            )
+                            SettingsCategory.SCREENSAVER -> ScreensaverSection(draftConfig) { draftConfig = it }
+                            SettingsCategory.PERFORMANCE -> PerformanceSection(draftConfig) { draftConfig = it }
+                            SettingsCategory.LANGUAGE -> LanguageSection(draftConfig) { draftConfig = it }
+                            SettingsCategory.TV_DISPLAY -> TvDisplaySection(draftConfig) { draftConfig = it }
+                            SettingsCategory.UPDATER -> ApkFileListSection()
+                            SettingsCategory.BACKUP -> BackupBiasaSection(draftConfig) { draftConfig = it }
+                            SettingsCategory.INFO -> InfoAppSection()
                         }
                     }
                 }
@@ -185,7 +186,7 @@ fun SettingsScreen(
         }
     }
 
-    // Dialog Konfirmasi (Sama kayak sebelumnya)
+    // Dialog Konfirmasi
     if (showSaveDialog) {
         Dialog(
             onDismissRequest = { showSaveDialog = false; pendingAction = null },
