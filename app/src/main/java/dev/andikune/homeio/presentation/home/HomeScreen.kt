@@ -90,6 +90,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.collect
 import java.util.Date
 import kotlin.math.abs
 
@@ -391,39 +392,46 @@ fun AllAppsCenterCarousel(
     val initialIndex = remember(carouselApps) { if (carouselApps.size > 3) 3 else 0 }
     var selectedIndex by remember(carouselApps) { mutableIntStateOf(initialIndex) }
     
-    val lazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex + 3)
-    val edgeSlots = remember { List(3) { Unit } }
+    // Inisialisasi state tanpa edgeSlots
+    val lazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
     val scope = rememberCoroutineScope()
     
     var isCarouselFocused by remember { mutableStateOf(false) }
+    var isProcessingKey by remember { mutableStateOf(false) }
 
     val baseCardWidth = 110.dp
     val cardWidth = (baseCardWidth * iconSizeMultiplier).coerceIn(80.dp, 160.dp)
     val itemSpacing = 16.dp
-    val visibleItemsWidth = (cardWidth * 7) + (itemSpacing * 6)
 
-    // FIX: Sinkronisasi kalkulasi tengah HANYA ketika scroll (swipe) berhenti.
-    // Ini mencegah infinite loop yang bikin geser sendiri.
+    // FIX 1: Sinkronisasi kalkulasi tengah HANYA ketika swipe berhenti (tidak memicu loop)
     LaunchedEffect(lazyListState) {
         snapshotFlow { lazyListState.isScrollInProgress }
             .collect { isScrolling ->
-                if (!isScrolling) {
+                if (!isScrolling && !isProcessingKey) {
                     val layoutInfo = lazyListState.layoutInfo
                     val visibleItems = layoutInfo.visibleItemsInfo
                     if (visibleItems.isNotEmpty()) {
                         val center = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
                         val newCenter = visibleItems.minByOrNull { abs((it.offset + it.size / 2) - center) }?.index
-                        val centeredAppIndex = newCenter?.minus(3)?.coerceIn(0, carouselApps.lastIndex)
-                        if (centeredAppIndex != null && centeredAppIndex != selectedIndex) {
-                            selectedIndex = centeredAppIndex
+                        if (newCenter != null && newCenter != selectedIndex) {
+                            selectedIndex = newCenter
                         }
                     }
                 }
             }
     }
 
+    // FIX 2: Kunci pemrosesan key selama scroll
+    LaunchedEffect(lazyListState.isScrollInProgress) {
+        if (!lazyListState.isScrollInProgress) {
+            delay(150)
+            isProcessingKey = false
+        }
+    }
+
     BoxWithConstraints(Modifier.fillMaxWidth().height(140.dp), contentAlignment = Alignment.Center) {
-        val horizontalPadding = ((maxWidth - visibleItemsWidth) / 2f).coerceAtLeast(0.dp)
+        // FIX 3: Padding HANYA mengambil lebar 1 kartu agar item pasti mati di tengah
+        val horizontalPadding = ((maxWidth - cardWidth) / 2f).coerceAtLeast(0.dp)
         
         LazyRow(
             state = lazyListState,
@@ -431,43 +439,54 @@ fun AllAppsCenterCarousel(
             horizontalArrangement = Arrangement.spacedBy(itemSpacing),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .width(visibleItemsWidth)
+                .fillMaxSize()
                 .focusRequester(focusRequester)
-                .onFocusChanged { isCarouselFocused = it.isFocused } // FIX: Deteksi fokus
+                .onFocusChanged { isCarouselFocused = it.isFocused }
                 .focusable()
                 .onPreviewKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown) {
                         when (event.key) {
                             Key.DirectionLeft -> {
-                                if (selectedIndex == 0) { onEdgeLeftReached() } 
-                                else { 
+                                if (isProcessingKey || lazyListState.isScrollInProgress) return@onPreviewKeyEvent true
+                                if (selectedIndex == 0) { 
+                                    onEdgeLeftReached() 
+                                } else { 
+                                    isProcessingKey = true
                                     selectedIndex-- 
-                                    scope.launch { lazyListState.animateScrollToItem(selectedIndex + 3) }
+                                    scope.launch { lazyListState.animateScrollToItem(selectedIndex) }
                                 }
                                 true
                             }
                             Key.DirectionRight -> {
-                                if (selectedIndex == carouselApps.size - 1) { onEdgeRightOrDownReached() } 
-                                else { 
+                                if (isProcessingKey || lazyListState.isScrollInProgress) return@onPreviewKeyEvent true
+                                if (selectedIndex == carouselApps.size - 1) { 
+                                    onEdgeRightOrDownReached() 
+                                } else { 
+                                    isProcessingKey = true
                                     selectedIndex++ 
-                                    scope.launch { lazyListState.animateScrollToItem(selectedIndex + 3) }
+                                    scope.launch { lazyListState.animateScrollToItem(selectedIndex) }
                                 }
                                 true
                             }
                             Key.DirectionDown -> { onEdgeRightOrDownReached(); true }
                             Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                                val app = carouselApps.getOrNull(selectedIndex)
-                                if (app != null) onAppClick(app)
+                                if (!isProcessingKey) {
+                                    val app = carouselApps.getOrNull(selectedIndex)
+                                    if (app != null) {
+                                        isProcessingKey = true
+                                        onAppClick(app)
+                                    }
+                                }
                                 true
                             }
                             else -> false
                         }
+                    } else if (event.type == KeyEventType.KeyUp) {
+                        isProcessingKey = false
+                        false
                     } else false
                 }
         ) {
-            itemsIndexed(edgeSlots) { _, _ ->
-                Spacer(Modifier.width(cardWidth).height(120.dp))
-            }
             itemsIndexed(carouselApps) { index, app ->
                 val isCentered = (index == selectedIndex) && isCarouselFocused
                 AppCardItem(
@@ -477,20 +496,15 @@ fun AllAppsCenterCarousel(
                     isCenterFocused = isCentered,
                     useNativeFocus = false,
                     onClick = {
-                        // FIX TOUCH: Jika disentuh dan bukan ditengah, geser ke tengah.
-                        // Jika sudah di tengah, buka aplikasi.
                         if (index == selectedIndex) {
                             onAppClick(app)
                         } else {
                             selectedIndex = index
-                            scope.launch { lazyListState.animateScrollToItem(index + 3) }
+                            scope.launch { lazyListState.animateScrollToItem(index) }
                         }
                     },
                     onLongClick = { onAppLongClick(app) }
                 )
-            }
-            itemsIndexed(edgeSlots) { _, _ ->
-                Spacer(Modifier.width(cardWidth).height(120.dp))
             }
         }
     }
