@@ -68,10 +68,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 object UpdateManager {
-    // ENDPOINT BARU: Tanpa /latest, karena kita pakai filter
     private const val GITHUB_API = "https://api.github.com/repos/andikune-ux/dev.andikune-apps/releases"
-    
-    // AWALAN TAG UNTUK HOME.IO
     private const val TAG_PREFIX = "homeio-"
 
     data class UpdateInfo(val available: Boolean, val currentVersion: String, val latestVersion: String, val downloadUrl: String?, val releaseNotes: String?, val isForceUpdate: Boolean, val errorType: String? = null)
@@ -94,17 +91,15 @@ object UpdateManager {
             val responseStr = conn.inputStream.bufferedReader().use { it.readText() }
             conn.disconnect()
 
-            // Parse Array JSON
             val releasesArray = JSONArray(responseStr)
             var targetRelease: JSONObject? = null
 
-            // Loop cari rilis yang tag-nya depannya "homeio-"
             for (i in 0 until releasesArray.length()) {
                 val release = releasesArray.getJSONObject(i)
                 val tagName = release.optString("tag_name", "")
                 if (tagName.startsWith(TAG_PREFIX)) {
                     targetRelease = release
-                    break // Ketemu yang terbaru untuk HOME.iO, langsung stop loop
+                    break
                 }
             }
 
@@ -112,7 +107,6 @@ object UpdateManager {
                 return@withContext noUpdate(current, "NO_TAG_FOUND")
             }
 
-            // Hapus awalan "homeio-" agar versinya sesuai dengan BuildConfig
             val latest = targetRelease.optString("tag_name").removePrefix(TAG_PREFIX).trim().ifEmpty { "Versi Baru" }
             val rawNotes = targetRelease.optString("body", "").trim()
             val cleanNotes = rawNotes.lines().filterNot { it.contains("**Full Changelog**", ignoreCase = true) }.joinToString("\n").trim().ifEmpty { "Tidak ada rincian pembaruan." }
@@ -431,11 +425,32 @@ fun ApkFileListSection() {
         if (list.isEmpty()) { Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) { Text("Belum ada file APK yang diunduh.", color = GlassColors.TextSecondary, fontSize = 12.sp) } } 
         else {
             list.forEach { file ->
-                Row(Modifier.fillMaxWidth().background(GlassColors.GlassTint, RoundedCornerShape(8.dp)).border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(8.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Folder, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) { Text(file.name, color = GlassColors.TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold); Text("${file.length() / 1024} KB", color = GlassColors.TextSecondary, fontSize = 10.sp) }
-                    Text("PASANG", color = GlassColors.AccentGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp, modifier = Modifier.clickable { if (!ApkDownloader.install(ctx, file.absolutePath)) Toast.makeText(ctx, "Gagal install", Toast.LENGTH_SHORT).show() }.padding(8.dp))
-                    Text("HAPUS", color = GlassColors.AccentRed, fontWeight = FontWeight.Bold, fontSize = 12.sp, modifier = Modifier.clickable { ApkDownloader.delete(file.absolutePath); refreshKey++ }.padding(8.dp))
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(GlassColors.GlassTint, RoundedCornerShape(8.dp))
+                        .border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(8.dp))
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Folder, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(file.name, color = GlassColors.TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("${file.length() / 1024} KB", color = GlassColors.TextSecondary, fontSize = 10.sp)
+                    }
+                    // FIX: Mengganti Text biasa dengan FocusableActionText biar support D-pad
+                    FocusableActionText(
+                        text = "PASANG",
+                        color = GlassColors.AccentGreen,
+                        onClick = { if (!ApkDownloader.install(ctx, file.absolutePath)) Toast.makeText(ctx, "Gagal install", Toast.LENGTH_SHORT).show() }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    FocusableActionText(
+                        text = "HAPUS",
+                        color = GlassColors.AccentRed,
+                        onClick = { ApkDownloader.delete(file.absolutePath); refreshKey++ }
+                    )
                 }
             }
         }
@@ -457,5 +472,33 @@ fun ApkFileListSection() {
                     localUpdateInfo!!.downloadUrl?.let { isDownloading = true; downloadProgress = 0f; downloadReady = false; isError = false; val cleanVer = localUpdateInfo!!.latestVersion.replace("[^a-zA-Z0-9._-]".toRegex(), "_"); UpdateDownloadService.start(ctx, it, "HomeIO_${cleanVer}.apk", localUpdateInfo!!.latestVersion) }
                 }
             }, onLater = { showUpdateDialog = false }, onSkip = { UpdatePrefs.setSkipped(ctx, localUpdateInfo!!.latestVersion); showUpdateDialog = false })
+    }
+}
+
+@Composable
+private fun FocusableActionText(
+    text: String,
+    color: Color,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (isFocused) color.copy(alpha = 0.2f) else Color.Transparent)
+            .border(if (isFocused) 1.dp else 0.dp, color, RoundedCornerShape(6.dp))
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) {
+                    onClick()
+                    true
+                } else false
+            }
+            .clickable { onClick() }
+            .padding(8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text, color = color, fontWeight = FontWeight.Bold, fontSize = 12.sp)
     }
 }
