@@ -1,0 +1,56 @@
+name: Cleanup Artifacts (Keep Last 3)
+
+on:
+  workflow_dispatch: # Jalan hanya saat kamu klik manual
+
+jobs:
+  delete-old-artifacts:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Hapus Artifact Lama, Sisakan 3 Terbaru
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const repo = context.repo;
+            const KEEP_COUNT = 3; // Jumlah build yang mau disisain
+
+            // 1. Ambil semua workflow run (yang punya artifact)
+            const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+              owner: repo.owner,
+              repo: repo.repo,
+              per_page: 100
+            });
+
+            console.log(`Total workflow runs ditemukan: ${runs.length}`);
+
+            // 2. Urutkan dari paling baru, lalu skip 3 teratas
+            // (Skip 3 terbaru karena kita mau simpan artifact-nya)
+            const runsToClean = runs.slice(KEEP_COUNT);
+
+            console.log(`Akan dihapus artifact dari ${runsToClean.length} runs lama.`);
+
+            let totalDeleted = 0;
+
+            // 3. Loop setiap run lama, hapus artifact-nya
+            for (const run of runsToClean) {
+              const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+                owner: repo.owner,
+                repo: repo.repo,
+                run_id: run.id,
+                per_page: 100
+              });
+
+              for (const artifact of artifacts) {
+                await github.rest.actions.deleteArtifact({
+                  owner: repo.owner,
+                  repo: repo.repo,
+                  artifact_id: artifact.id
+                });
+                console.log(`🗑️ Dihapus: ${artifact.name} (dari run #${run.run_number})`);
+                totalDeleted++;
+              }
+            }
+
+            console.log(`✅ Selesai! Total ${totalDeleted} artifact dihapus.`);
