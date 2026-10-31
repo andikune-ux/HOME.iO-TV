@@ -64,7 +64,9 @@ fun SettingsScreen(
     var draftConfig by remember { mutableStateOf(currentConfig) }
     val scope = rememberCoroutineScope()
     
+    // Requester buat konten kanan dan sidebar kiri
     val contentFocusRequester = remember { FocusRequester() }
+    val sidebarFirstItemFocusRequester = remember { FocusRequester() }
 
     // STATE UNTUK DIALOG KONFIRMASI
     var showSaveDialog by remember { mutableStateOf(false) }
@@ -93,6 +95,9 @@ fun SettingsScreen(
     Box(Modifier.fillMaxSize().background(GlassColors.DeepBackgroundGradient)) {
         Row(Modifier.fillMaxSize().padding(16.dp)) {
             
+            // ============================================================
+            // PANE KIRI (SIDEBAR)
+            // ============================================================
             Column(
                 Modifier.weight(0.28f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp)
                     .padding(16.dp).verticalScroll(rememberScrollState()).focusGroup(),
@@ -120,10 +125,11 @@ fun SettingsScreen(
                 Spacer(Modifier.height(8.dp))
                 Text("PENGATURAN", color = GlassColors.TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, modifier = Modifier.padding(start = 8.dp))
 
-                SettingsCategory.entries.forEach { cat ->
+                SettingsCategory.entries.forEachIndexed { index, cat ->
                     SidebarItem(
                         category = cat,
                         isSelected = selectedCategory == cat,
+                        focusRequester = if (index == 0) sidebarFirstItemFocusRequester else null,
                         onClick = {
                             requestNavigation {
                                 selectedCategory = cat
@@ -139,9 +145,24 @@ fun SettingsScreen(
 
             Spacer(Modifier.width(24.dp))
 
+            // ============================================================
+            // PANE KANAN (KONTEN)
+            // ============================================================
             Box(Modifier.weight(0.72f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp).padding(24.dp)) {
                 AutoFocusPane(paneKey = selectedCategory, modifier = Modifier.fillMaxSize()) {
-                    LazyColumn(Modifier.fillMaxSize().focusRequester(contentFocusRequester)) {
+                    LazyColumn(
+                        Modifier.fillMaxSize()
+                            .focusRequester(contentFocusRequester)
+                            .onPreviewKeyEvent { event ->
+                                // FIX: Kalau tombol Kiri ditekan, balikin fokus ke Sidebar
+                                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionLeft) {
+                                    scope.launch {
+                                        sidebarFirstItemFocusRequester.requestFocus()
+                                    }
+                                    true
+                                } else false
+                            }
+                    ) {
                         item {
                             when (selectedCategory) {
                                 SettingsCategory.WALLPAPER -> WallpaperSection(
@@ -164,6 +185,7 @@ fun SettingsScreen(
         }
     }
 
+    // Dialog Konfirmasi (Sama kayak sebelumnya)
     if (showSaveDialog) {
         Dialog(
             onDismissRequest = { showSaveDialog = false; pendingAction = null },
@@ -210,12 +232,19 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SidebarItem(category: SettingsCategory, isSelected: Boolean, onClick: () -> Unit) {
+private fun SidebarItem(
+    category: SettingsCategory,
+    isSelected: Boolean,
+    focusRequester: FocusRequester? = null,
+    onClick: () -> Unit
+) {
     var isFocused by remember { mutableStateOf(false) }
     
     NeonFocusBorder(focused = isFocused, cornerRadius = 14.dp) {
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
                 .background(
                     when {
                         isSelected -> GlassColors.AccentGlow.copy(alpha = 0.15f)
@@ -229,13 +258,15 @@ private fun SidebarItem(category: SettingsCategory, isSelected: Boolean, onClick
                     shape = RoundedCornerShape(14.dp)
                 )
                 .onFocusChanged { isFocused = it.isFocused }
+                .let { if (focusRequester != null) it.focusRequester(focusRequester) else it }
                 .focusable()
                 .onPreviewKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) {
                         onClick(); true
                     } else false
                 }
-                .clickable { onClick() }.padding(14.dp),
+                .clickable { onClick() }
+                .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -243,7 +274,7 @@ private fun SidebarItem(category: SettingsCategory, isSelected: Boolean, onClick
                 tint = if (isSelected || isFocused) GlassColors.AccentGlow else GlassColors.TextSecondary,
                 modifier = Modifier.size(22.dp)
             )
-            Spacer(Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(12.dp))
             Text(
                 category.title,
                 color = if (isSelected || isFocused) Color.White else GlassColors.TextSecondary,
