@@ -3,8 +3,15 @@ package dev.andikune.homeio.data
 object AppKnowledge {
     const val APP_NAME = "HOME.iO TV"
     const val APP_DESCRIPTION = "Launcher Android TV & STB dengan UI iOS 26 Liquid Glass"
+    
+    // Repo Private (Source Code)
     const val REPO_URL = "https://github.com/andikune-ux/HOME.iO-TV"
     const val GITHUB_REPO = "https://github.com/andikune-ux/HOME.iO-TV"
+    
+    // Repo Public (Release APK)
+    const val PUBLIC_REPO_URL = "https://github.com/andikune-ux/dev.andikune-apps"
+    const val GITHUB_PUBLIC_REPO = "https://github.com/andikune-ux/dev.andikune-apps"
+    
     const val GITHUB_TREE_API = "https://api.github.com/repos/andikune-ux/HOME.iO-TV/git/trees/main?recursive=1"
     const val GITHUB_RAW_BASE = "https://raw.githubusercontent.com/andikune-ux/HOME.iO-TV/main/"
     const val GITHUB_BLOB_BASE = "https://github.com/andikune-ux/HOME.iO-TV/blob/main/"
@@ -22,7 +29,8 @@ Setelah paham, konfirmasi ke saya, baru kita mulai kerja.
 === IDENTITAS PROYEK ===
 - Nama Aplikasi : HOME.iO TV
 - Platform      : Android TV / STB (Jetpack Compose)
-- Repo          : https://github.com/andikune-ux/HOME.iO-TV
+- Repo Private  : https://github.com/andikune-ux/HOME.iO-TV
+- Repo Public   : https://github.com/andikune-ux/dev.andikune-apps
 - Package       : dev.andikune.homeio
 - Versi Saat Ini: (Cek BuildConfig.VERSION_NAME)
 - User          : Andi (HP Android, GitHub Mobile)
@@ -47,12 +55,14 @@ KETENTUAN:
 3. JANGAN hapus fitur lama tanpa izin.
 4. Lihat kode asli dulu sebelum timpa.
 5. Kerjakan per file (bukan per fitur).
+6. JANGAN kirim kode sebelum saya minta (tunggu aba-aba).
 
 === ATURAN KERAS ===
 - JANGAN PERNAH ubah debug.keystore.
 - JANGAN PERNAH ubah signingConfigs.
 - JANGAN PERNAH ubah build.yml (bagian signing).
 - Build HANYA via GitHub Actions. JANGAN install APK dari AI Studio.
+- OTA Update mengambil data dari repo public (dev.andikune-apps) dengan filter tag "homeio-".
 
 (Tulis tugas di sini)
     """.trimIndent()
@@ -188,22 +198,19 @@ ATURAN FORMAT:
 
 28. Temuan: Toggle Auto-Start saat TV menyala tidak dihormati
     File   : receiver/BootReceiver.kt
-    Fix    : BootReceiver membaca isAutoStartOnBoot sebelum menjalankan
-             AutoStartService.
+    Fix    : BootReceiver membaca isAutoStartOnBoot sebelum menjalankan AutoStartService.
 
 29. Temuan: AutoStartService dapat gagal pada Android modern
     File   : AndroidManifest.xml
     Fix    : Tambahkan permission FOREGROUND_SERVICE_SPECIAL_USE untuk service.
 
-30. Temuan: Konversi video wallpaper menggunakan Thread.sleep tetap berjalan
-             walaupun Transformer belum selesai
+30. Temuan: Konversi video wallpaper menggunakan Thread.sleep tetap berjalan walaupun Transformer belum selesai
     File   : WallpaperSection.kt
     Fix    : Tunggu callback resmi Transformer dan validasi file hasil sebelum dipakai.
 
 31. Temuan: Format tanggal bahasa Inggris salah karena Calendar.MONTH zero-based
     File   : DateTimeFormatter.kt
-    Fix    : Gunakan nilai tanggal sebenarnya sehingga Januari tidak tampil sebagai
-             "0 January".
+    Fix    : Gunakan nilai tanggal sebenarnya sehingga Januari tidak tampil sebagai "0 January".
 
 32. Temuan: Backup pada hari yang sama dapat saling menimpa
     File   : BackupManager.kt
@@ -227,8 +234,7 @@ ATURAN FORMAT:
 
 37. Temuan: Unit test gagal karena dependency JUnit tidak tersedia
     File   : app/build.gradle.kts
-    Fix    : Tambahkan testImplementation JUnit 4.13.2 tanpa mengubah identitas,
-             signing, atau konfigurasi release.
+    Fix    : Tambahkan testImplementation JUnit 4.13.2 tanpa mengubah identitas, signing, atau konfigurasi release.
 
 38. Temuan: Skala ikon aplikasi default masih 0.8x
     File   : SettingsConfig.kt, PreferencesManager.kt
@@ -236,8 +242,7 @@ ATURAN FORMAT:
 
 39. Temuan: Carousel aplikasi terlalu banyak dan fokus tidak berada di tengah
     File   : HomeScreen.kt
-    Fix    : Tampilkan maksimal tujuh aplikasi pada carousel dengan fokus awal
-             di item keempat, membentuk pola tiga kiri, fokus, tiga kanan.
+    Fix    : Tampilkan maksimal tujuh aplikasi pada carousel dengan fokus awal di item keempat, membentuk pola tiga kiri, fokus, tiga kanan.
 
 40. Temuan: Neon focus border kurang terlihat di atas wallpaper putih
     File   : NeonFocusBorder.kt
@@ -245,25 +250,51 @@ ATURAN FORMAT:
 
 41. Temuan: Weather dapat kosong terlalu lama setelah gangguan internet singkat
     File   : MainActivity.kt
-    Fix    : Gunakan retry 30 detik saat belum ada data dan pertahankan data
-             terakhir saat request berikutnya gagal. Request tetap memakai
-             layanan internet Open-Meteo.
+    Fix    : Gunakan retry 30 detik saat belum ada data dan pertahankan data terakhir saat request berikutnya gagal.
 
 42. Temuan: Fokus pane kiri dapat bocor ke area Home di belakang pane
     File   : HomeScreen.kt
-    Fix    : D-pad kanan saat pane kiri terbuka menutup pane dan tidak diteruskan
-             ke konten belakang. Membuka Settings juga menutup pane lebih dahulu.
+    Fix    : D-pad kanan saat pane kiri terbuka menutup pane dan tidak diteruskan ke konten belakang.
 
 43. Temuan: Slider Safe Area dan pengaturan lain menjebak navigasi kiri/kanan
     File   : TvSlider.kt
-    Fix    : D-pad kiri/kanan hanya mengubah nilai setelah tombol OK mengaktifkan
-             slider. Tekan OK lagi untuk keluar dari mode slider sehingga arah
-             kiri dapat kembali ke menu utama.
+    Fix    : D-pad kiri/kanan hanya mengubah nilai setelah tombol OK mengaktifkan slider. Tekan OK lagi untuk keluar dari mode slider.
 
 44. Temuan: OLED screensaver tidak benar-benar menerapkan brightness 0%
     File   : ScreensaverActivity.kt
-    Fix    : Ganti BRIGHTNESS_OVERRIDE_OFF yang berarti tanpa override menjadi
-             screenBrightness = 0.0f secara konsisten.
+    Fix    : Ganti BRIGHTNESS_OVERRIDE_OFF menjadi screenBrightness = 0.0f secara konsisten. (Butuh izin WRITE_SETTINGS / ADB untuk maksimal).
+
+45. Temuan: D-Pad Carousel infinite scroll (geser sendiri tanpa henti)
+    File   : HomeScreen.kt
+    Fix    : Hapus intersepsi LazyRow dan LaunchedEffect(selectedIndex) yang memicu animateScrollToItem. Gunakan snapshotFlow isScrollInProgress.
+
+46. Temuan: Double border fokus (Carousel bawah dan menu atas nyala bersamaan)
+    File   : HomeScreen.kt
+    Fix    : Tambahkan state isCarouselFocused, border bawah hanya nyala jika isCarouselFocused == true.
+
+47. Temuan: Slider gak bisa digeser (mentok KIRI/KANAN)
+    File   : SettingsScreen.kt, TvSlider.kt
+    Fix    : Hapus intersepsi tombol Kiri di LazyColumn. Tambahkan mode AKTIF (Tekan OK) di TvSlider.
+
+48. Temuan: Tombol Hapus di Pembaruan App loncat ke Sidebar
+    File   : OtaUpdate.kt
+    Fix    : Buat composable FocusableActionText untuk tombol PASANG/HAPUS agar bisa fokus D-Pad.
+
+49. Temuan: Kecerahan 0% tidak membuat layar hitam pekat
+    File   : HomeScreen.kt
+    Fix    : Tambahkan overlay Box(Color.Black) jika manualBrightness == 0.
+
+50. Temuan: OTA Update mengambil semua rilis aplikasi lain
+    File   : OtaUpdate.kt
+    Fix    : Ubah endpoint ke /releases, filter tag dengan prefix "homeio-".
+
+51. Temuan: OTA Workflow error 'Detached HEAD'
+    File   : .github/workflows/update-changelog.yml
+    Fix    : Tambahkan 'ref: main' pada actions/checkout dan 'git push origin main'.
+
+52. Temuan: Kuota Artifact GitHub Actions penuh
+    File   : build.yml
+    Fix    : Hapus step Upload Artifact, andalkan rilis ke repo public.
     """.trimIndent()
 
     val BUILD_ERROR_HISTORY = """
@@ -280,8 +311,8 @@ ATURAN FORMAT:
 10. Unit test gagal karena dependency JUnit belum dideklarasikan.
 11. Setelah dependency JUnit ditambahkan, testDebugUnitTest dan assembleDebug berhasil.
 12. GitHub Actions berhasil pada commit 8795374, run 40117478357.
-13. Setelah perbaikan carousel, D-pad, NeonFocusBorder, weather, slider, dan OLED,
-    testDebugUnitTest serta assembleDebug kembali berhasil secara lokal.
+13. Unresolved reference 'toPx' di NeonFocusBorder -> gunakan LocalDensity.
+14. Unresolved 'removeNotification' -> buat companion object di LauncherNotificationService.
     """.trimIndent()
 
     val BACKUP_INFO = """
@@ -303,6 +334,9 @@ app/src/main/java/dev/andikune/homeio/
 ├── presentation/settings/WallpaperSection.kt
 ├── presentation/wallpaper/FileManagerDialog.kt
 ├── presentation/wallpaper/WallpaperView.kt
+├── presentation/components/TvSlider.kt
+├── presentation/components/AutoFocusPane.kt
+├── presentation/components/NeonFocusBorder.kt
 ├── data/local/PreferencesManager.kt
 ├── receiver/BootReceiver.kt
 ├── service/LauncherNotificationService.kt
@@ -319,7 +353,7 @@ app/src/main/java/dev/andikune/homeio/
 5. 3 Wallpaper Default (Sinematik, Estetik, OLED, Kustom).
 6. Pengaturan 2-Pane (UI Premium, D-Pad OK 1x).
 7. Notifikasi Premium (Ikon Asli, Hapus Satu/Semua).
-8. OTA Update GitHub (Tombol Darurat Batal).
+8. OTA Update GitHub (Multi-App support via repo public).
 9. Screensaver (Pause saat Pop-up).
 10. Dialog Pop-up (QRIS, Launcher, Context Menu).
 11. Persistence wallpaper, decoder, dan layar tetap menyala.
@@ -330,11 +364,12 @@ app/src/main/java/dev/andikune/homeio/
 16. Backup unik dengan timestamp lengkap.
 17. File Manager fallback ke Downloads.
 18. Notification listener dengan update state yang lebih aman.
-19. Carousel aplikasi maksimal tujuh item dengan fokus presisi pada item keempat.
-20. Neon focus border putih-biru dengan kontras tinggi di berbagai wallpaper.
-21. Weather internet dengan retry cepat dan data terakhir yang dipertahankan.
+19. Carousel aplikasi maksimal tujuh item dengan fokus presisi.
+20. Neon focus border putih-biru dengan kontras tinggi.
+21. Weather internet dengan retry dan data terakhir.
 22. Pane kiri mengunci fokus dan menutup saat D-pad kanan ditekan.
-23. Slider settings memakai mode aktivasi OK untuk mencegah fokus terjebak.
-24. OLED screensaver dengan override brightness 0.0f.
+23. Slider settings memakai mode aktivasi OK.
+24. OLED screensaver dengan override brightness.
+25. Tombol PASANG & HAPUS di Pembaruan App support D-Pad.
     """.trimIndent()
 }
