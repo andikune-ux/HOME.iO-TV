@@ -98,13 +98,7 @@ jobs:
           echo "🔍 Mencari file APK yang dihasilkan..."
           find app/build/outputs/apk/debug -name "*.apk" -exec ls -lh {} \;
 
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: HomeIO-TV-Debug-APK
-          path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-          retention-days: 14
+      # CATATAN: STEP UPLOAD ARTIFACT DIHAPUS DARI SINI BIAR GAK KENA KUOTA
 
       - name: Generate Version Tag & Friendly Changelog
         id: get_version
@@ -159,7 +153,7 @@ jobs:
       - name: Create and Publish Release
         uses: softprops/action-gh-release@v2
         with:
-          # TAMBAHAN: Prefix "homeio-" pada tag
+          # Prefix "homeio-" pada tag
           tag_name: "homeio-${{ steps.get_version.outputs.VERSION }}"
           name: "HOME.iO TV ${{ steps.get_version.outputs.VERSION }}"
           draft: false
@@ -170,6 +164,6 @@ jobs:
             
             ${{ steps.get_version.outputs.CHANGELOG }}
           files: app/build/outputs/apk/debug/*.apk
-          # TAMBAHAN: Arahkan ke repo public
+          # Arahkan ke repo public
           repository: andikune-ux/dev.andikune-apps
           token: ${{ secrets.PAT_TOKEN }}
