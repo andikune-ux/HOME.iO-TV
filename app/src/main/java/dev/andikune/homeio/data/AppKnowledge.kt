@@ -21,52 +21,6 @@ object AppKnowledge {
     const val SOCIAL_TIKTOK = "https://www.tiktok.com/@nayyra.une"
     const val SOCIAL_IG = "https://www.instagram.com/nayyra.une"
 
-    val AI_PROMPT = """
-Halo AI. Saya pakai aplikasi HOME.iO TV (Android TV, Jetpack Compose).
-Tolong baca konteks di bawah ini dulu sebelum saya kasih tugas.
-Setelah paham, konfirmasi ke saya, baru kita mulai kerja.
-
-=== IDENTITAS PROYEK ===
-- Nama Aplikasi : HOME.iO TV
-- Platform      : Android TV / STB (Jetpack Compose)
-- Repo Private  : https://github.com/andikune-ux/HOME.iO-TV
-- Repo Public   : https://github.com/andikune-ux/dev.andikune-apps
-- Package       : dev.andikune.homeio
-- Versi Saat Ini: (Cek BuildConfig.VERSION_NAME)
-- User          : Andi (HP Android, GitHub Mobile)
-
-=== ATURAN FORMAT RESPON (WAJIB) ===
-Setiap respon harus ada 6 elemen:
-1. Visualisasi folder (emoji + indentasi)
-2. Path lengkap file
-3. Nama file
-4. URL Edit (file lama) / URL New (file baru)
-5. Kode TIMPA FULL (JANGAN SURUH EDIT MANUAL, SEPANJANG APAPUN ITU)
-6. Pesan commit
-
-KETENTUAN:
-- Pakai code block (3 backtick) untuk path/URL/nama file.
-- Batas aman copy-paste: 400-600 baris. Jika > 600, bagi menjadi beberapa BAGIAN di dalam 1 bubble.
-- JANGAN potong di tengah fungsi.
-
-=== ATURAN KERJA ===
-1. Konfirmasi dulu sebelum eksekusi (TUNGGU aba-aba EKSEKUSI).
-2. Jujur kalau belum tahu, jangan menebak.
-3. JANGAN hapus fitur lama tanpa izin.
-4. Lihat kode asli dulu sebelum timpa.
-5. Kerjakan per file (bukan per fitur).
-6. JANGAN kirim kode sebelum saya minta (tunggu aba-aba).
-
-=== ATURAN KERAS ===
-- JANGAN PERNAH ubah debug.keystore.
-- JANGAN PERNAH ubah signingConfigs.
-- JANGAN PERNAH ubah build.yml (bagian signing).
-- Build HANYA via GitHub Actions. JANGAN install APK dari AI Studio.
-- OTA Update mengambil data dari repo public (dev.andikune-apps) dengan filter tag "homeio-".
-
-(Tulis tugas di sini)
-    """.trimIndent()
-
     val WORKFLOW_RULES = """
 PRINSIP UTAMA:
 - KERJAKAN PER FILE
@@ -413,5 +367,68 @@ app/src/main/java/dev/andikune/homeio/
 30. Dukungan tombol fisik Remote Settings (176) & Input (178) di level Activity.
 31. Fallback otomatis ke Info Aplikasi jika TV membatasi halaman izin sistem.
 32. Launcher Tie-Break diatasi dengan priority 100.
+    """.trimIndent()
+
+    // AI_PROMPT DIPINDAHKAN KE PALING BAWAH AGAR BISA MEMANGGIL VARIABEL DI ATASNYA
+    val AI_PROMPT = """
+Halo AI. Saya pakai aplikasi ${APP_NAME} (Android TV, Jetpack Compose).
+Tolong baca konteks di bawah ini dulu sebelum saya kasih tugas.
+Setelah paham, konfirmasi ke saya, baru kita mulai kerja.
+
+=== IDENTITAS PROYEK ===
+- Nama Aplikasi : ${APP_NAME}
+- Deskripsi     : ${APP_DESCRIPTION}
+- Platform      : Android TV / STB (Jetpack Compose)
+- Repo Private  : ${REPO_URL}
+- Repo Public   : ${PUBLIC_REPO_URL}
+- Package       : dev.andikune.homeio
+- Versi Saat Ini: (Cek BuildConfig.VERSION_NAME)
+- User          : Andi (HP Android, GitHub Mobile)
+
+=== ATURAN FORMAT RESPON (WAJIB) ===
+Setiap respon harus ada 6 elemen:
+1. Visualisasi folder (emoji + indentasi)
+2. Path lengkap file
+3. Nama file
+4. URL Edit (file lama) / URL New (file baru)
+5. Kode TIMPA FULL (JANGAN SURUH EDIT MANUAL, SEPANJANG APAPUN ITU)
+6. Pesan commit
+
+KETENTUAN:
+- Pakai code block (3 backtick) untuk path/URL/nama file.
+- Batas aman copy-paste: 400-600 baris. Jika > 600, bagi menjadi beberapa BAGIAN di dalam 1 bubble.
+- JANGAN potong di tengah fungsi.
+
+=== ATURAN KERJA ===
+1. Konfirmasi dulu sebelum eksekusi (TUNGGU aba-aba EKSEKUSI).
+2. Jujur kalau belum tahu, jangan menebak.
+3. JANGAN hapus fitur lama tanpa izin.
+4. Lihat kode asli dulu sebelum timpa.
+5. Kerjakan per file (bukan per fitur).
+6. JANGAN kirim kode sebelum saya minta (tunggu aba-aba).
+
+=== ATURAN KERAS ===
+- JANGAN PERNAH ubah debug.keystore.
+- JANGAN PERNAH ubah signingConfigs.
+- JANGAN PERNAH ubah build.yml (bagian signing).
+- Build HANYA via GitHub Actions. JANGAN install APK dari AI Studio.
+- OTA Update mengambil data dari repo public (dev.andikune-apps) dengan filter tag "homeio-".
+
+=== STRUKTUR APLIKASI ===
+${APP_STRUCTURE}
+
+=== FITUR APLIKASI ===
+${APP_FEATURES}
+
+=== LOG TEMUAN MASALAH & PERBAIKAN ===
+${KNOWN_ISSUES}
+
+=== RIWAYAT BUILD ERROR ===
+${BUILD_ERROR_HISTORY}
+
+=== INFORMASI BACKUP ===
+${BACKUP_INFO}
+
+(Tulis tugas di sini)
     """.trimIndent()
 }
