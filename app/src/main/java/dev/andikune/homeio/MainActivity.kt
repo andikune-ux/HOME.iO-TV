@@ -7,6 +7,7 @@ import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.WindowManager
@@ -401,6 +402,35 @@ class MainActivity : ComponentActivity() {
         }
         return super.dispatchKeyEvent(event)
     }
+
+    // TAMBAHAN: Handle Tombol Remote Xiaomi (Settings 176 & Input 178)
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_SETTINGS) {
+            try {
+                startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (e: Exception) {
+                try {
+                    startActivity(Intent().setComponent(android.content.ComponentName(
+                        "com.android.tv.settings",
+                        "com.android.tv.settings.MainSettings"
+                    )))
+                } catch (e2: Exception) {
+                    Toast.makeText(this, "Pengaturan sistem tidak ditemukan", Toast.LENGTH_SHORT).show()
+                }
+            }
+            return true
+        }
+        if (keyCode == KeyEvent.KEYCODE_TV_INPUT) {
+            try {
+                startActivity(Intent("com.android.tv.action.VIEW_INPUTS").setPackage("com.mitv.livetv"))
+            } catch (e: Exception) {
+                Toast.makeText(this, "Input TV tidak ditemukan", Toast.LENGTH_SHORT).show()
+            }
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
     override fun dispatchTouchEvent(ev: MotionEvent?): Boolean { lastUserInteractionTime = System.currentTimeMillis(); return super.dispatchTouchEvent(ev) }
 }
 
