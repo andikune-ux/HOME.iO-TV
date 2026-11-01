@@ -63,6 +63,7 @@ fun OnboardingPermissionDialog(
     var systemLimitedUsage by remember { mutableStateOf(prefs.getBoolean("limit_usage", false)) }
     var systemLimitedListener by remember { mutableStateOf(prefs.getBoolean("limit_listener", false)) }
     var systemLimitedWrite by remember { mutableStateOf(prefs.getBoolean("limit_write", false)) }
+    var systemLimitedOverlay by remember { mutableStateOf(prefs.getBoolean("limit_overlay", false)) }
 
     var showGuideDialog by remember { mutableStateOf(false) }
     var guideTitle by remember { mutableStateOf("") }
@@ -96,6 +97,7 @@ fun OnboardingPermissionDialog(
                 PermissionType.USAGE_ACCESS -> { systemLimitedUsage = true; prefs.edit().putBoolean("limit_usage", true).apply() }
                 PermissionType.NOTIF_LISTENER -> { systemLimitedListener = true; prefs.edit().putBoolean("limit_listener", true).apply() }
                 PermissionType.WRITE_SETTINGS -> { systemLimitedWrite = true; prefs.edit().putBoolean("limit_write", true).apply() }
+                PermissionType.OVERLAY -> { systemLimitedOverlay = true; prefs.edit().putBoolean("limit_overlay", true).apply() }
             }
             Toast.makeText(ctx, "Sistem TV tidak mendukung izin ini. Menggunakan mode kompatibilitas.", Toast.LENGTH_LONG).show()
             refresh++
@@ -117,6 +119,7 @@ fun OnboardingPermissionDialog(
     val hasUsage = PermissionHelper.checkPermission(ctx, PermissionType.USAGE_ACCESS) || systemLimitedUsage
     val hasListener = PermissionHelper.checkPermission(ctx, PermissionType.NOTIF_LISTENER) || systemLimitedListener
     val hasWrite = PermissionHelper.checkPermission(ctx, PermissionType.WRITE_SETTINGS) || systemLimitedWrite
+    val hasOverlay = PermissionHelper.checkPermission(ctx, PermissionType.OVERLAY) || systemLimitedOverlay
 
     val allGranted = hasStorage && hasNotif && hasInstall && hasUsage
 
@@ -151,7 +154,7 @@ fun OnboardingPermissionDialog(
                     handlePermission(PermissionType.INSTALL_APK, "Izin Install APK", "1. Aktifkan 'Izinkan dari sumber ini'.\n2. Kembali ke aplikasi.")
                 })
 
-                PermissionRow(icon = Icons.Default.CheckCircle, title = "Akses RAM (Wajib)", desc = "Fitur RAM Booster", granted = hasUsage, onGrant = {
+                PermissionRow(icon = Icons.Default.CheckCircle, title = "Akses Penggunaan (Wajib)", desc = "Fitur RAM Booster", granted = hasUsage, onGrant = {
                     handlePermission(PermissionType.USAGE_ACCESS, "Izin Akses Penggunaan", "1. Cari 'HOME.iO' di daftar.\n2. Aktifkan izinnya.")
                 })
 
@@ -161,6 +164,10 @@ fun OnboardingPermissionDialog(
 
                 PermissionRow(icon = Icons.Default.Settings, title = "Ubah Sistem (Opsional)", desc = "Kecerahan & WiFi", granted = hasWrite, onGrant = {
                     handlePermission(PermissionType.WRITE_SETTINGS, "Izin Ubah Sistem", "1. Aktifkan 'Izinkan pengaturan sistem'.")
+                })
+
+                PermissionRow(icon = Icons.Default.Layers, title = "Gambar di Atas Aplikasi (Opsional)", desc = "Overlay & Pop-up", granted = hasOverlay, onGrant = {
+                    handlePermission(PermissionType.OVERLAY, "Izin Overlay", "1. Aktifkan 'Izinkan menggambar di atas aplikasi lain'.")
                 })
 
                 Spacer(Modifier.height(20.dp))
