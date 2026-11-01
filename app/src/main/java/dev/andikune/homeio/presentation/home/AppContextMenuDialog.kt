@@ -53,7 +53,6 @@ fun AppContextMenuDialog(
     val context = LocalContext.current
     val firstItemFocusRequester = remember { FocusRequester() }
 
-    // FIX BUG #7: BackHandler agar tidak hang
     BackHandler { onDismiss() }
 
     LaunchedEffect(Unit) { delay(100); runCatching { firstItemFocusRequester.requestFocus() } }
@@ -70,7 +69,6 @@ fun AppContextMenuDialog(
                     context.startActivity(intent); onDismiss() 
                 })
                 
-                // TAMBAHAN: PAKSA HENTIKAN APLIKASI
                 if (!app.isSystemApp && app.packageName != context.packageName) {
                     ContextMenuOption(
                         icon = Icons.Default.Stop, 
