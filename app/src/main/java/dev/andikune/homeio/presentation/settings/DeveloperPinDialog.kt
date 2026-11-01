@@ -81,8 +81,9 @@ fun DeveloperPinDialog(
                 val url = URL("https://raw.githubusercontent.com/andikune-ux/dev.andikune-apps/main/system_config.txt")
                 val expectedHash = withContext(Dispatchers.IO) { url.readText().trim() }
                 
+                // FIX: Menggunakan .toInt() and 0xFF untuk mencegah bug signed byte pada hash
                 val digest = MessageDigest.getInstance("SHA-256")
-                val actualHash = digest.digest(pin.toByteArray()).joinToString("") { "%02x".format(it) }
+                val actualHash = digest.digest(pin.trim().toByteArray()).joinToString("") { "%02x".format(it.toInt() and 0xFF) }
 
                 if (actualHash == expectedHash) {
                     val newState = !isCurrentlyDevMode
@@ -111,11 +112,10 @@ fun DeveloperPinDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)), contentAlignment = Alignment.Center) {
-            // MENGGUNAKAN VERTICAL SCROLL & BATAS TINGGI AGAR TIDAK TERPOTONG DI HP
             Column(
                 Modifier
-                    .widthIn(max = 340.dp) // Lebar maksimal
-                    .fillMaxHeight(0.9f) // Tinggi maksimal 90% layar
+                    .widthIn(max = 340.dp)
+                    .fillMaxHeight(0.9f)
                     .liquidGlass(cornerRadius = 24.dp)
                     .verticalScroll(rememberScrollState())
                     .padding(20.dp),
@@ -129,7 +129,6 @@ fun DeveloperPinDialog(
                 
                 Spacer(Modifier.height(16.dp))
 
-                // Indikator PIN (Titik-titik)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     repeat(6) { index ->
                         val isFilled = index < pin.length
@@ -143,7 +142,6 @@ fun DeveloperPinDialog(
 
                 Spacer(Modifier.height(8.dp))
 
-                // Pesan Error / Status
                 Box(Modifier.height(20.dp), contentAlignment = Alignment.Center) {
                     if (errorMessage != null) {
                         Text(errorMessage!!, color = GlassColors.AccentRed, fontSize = 11.sp, textAlign = TextAlign.Center)
@@ -156,7 +154,6 @@ fun DeveloperPinDialog(
 
                 Spacer(Modifier.height(12.dp))
 
-                // Numpad (Tinggi tombol dikurangi jadi 42.dp)
                 val numbers = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "Hapus", "0", "Batal")
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     for (row in 0 until 4) {
@@ -220,7 +217,6 @@ fun DeveloperPinDialog(
 
                 Spacer(Modifier.height(16.dp))
                 
-                // Tombol Hapus Crash Log
                 var isFocusedLog by remember { mutableStateOf(false) }
                 NeonFocusBorder(focused = isFocusedLog, cornerRadius = 10.dp, modifier = Modifier.fillMaxWidth()) {
                     Box(
