@@ -295,6 +295,38 @@ ATURAN FORMAT:
 52. Temuan: Kuota Artifact GitHub Actions penuh
     File   : build.yml
     Fix    : Hapus step Upload Artifact, andalkan rilis ke repo public.
+
+53. Temuan: Tombol fisik Remote Settings (176) & Input (178) tidak berfungsi
+    File   : MainActivity.kt
+    Fix    : Tambahkan override onKeyDown di MainActivity untuk menangkap KEYCODE_SETTINGS dan KEYCODE_TV_INPUT.
+
+54. Temuan: Launcher bawaan mengalahkan HOME.iO saat boot (tie-break)
+    File   : AndroidManifest.xml
+    Fix    : Ubah android:priority pada intent-filter HOME menjadi 100.
+
+55. Temuan: Status izin di Sidebar tidak terupdate setelah kembali dari pengaturan sistem
+    File   : HomeScreen.kt
+    Fix    : Tambahkan LifecycleEventObserver ON_RESUME untuk me-refresh status izin notifikasi.
+
+56. Temuan: Izin Overlay (SYSTEM_ALERT_WINDOW) tidak ada di daftar pengecekan aplikasi
+    File   : PermissionHelper.kt, PermissionSection.kt, OnboardingPermissionDialog.kt
+    Fix    : Tambahkan PermissionType.OVERLAY dan tambahkan UI baris izinnya.
+
+57. Temuan: Fallback izin sistem (Info App) membuat UI kebingungan menandai izin
+    File   : PermissionHelper.kt
+    Fix    : Ubah return value openPermissionSettings menjadi false jika hanya membuka fallback, agar UI memunculkan status "Mode Kompatibilitas".
+
+58. Temuan: Kiosk Mode bisa aktif tidak sengaja tanpa konfirmasi
+    File   : HomeScreen.kt
+    Fix    : Tambahkan Dialog Konfirmasi sebelum mengaktifkan Kiosk Mode.
+
+59. Temuan: Tidak ada cara untuk memaksa hentikan (Force Stop) aplikasi yang nyangkut
+    File   : AppContextMenuDialog.kt, AndroidManifest.xml
+    Fix    : Tambahkan menu "Paksa Hentikan" di Context Menu menggunakan ActivityManager.killBackgroundProcesses.
+
+60. Temuan: Navigasi D-Pad mentok di menu Pengaturan
+    File   : SettingsScreen.kt
+    Fix    : Ganti LazyColumn menjadi Column + verticalScroll pada pane kanan.
     """.trimIndent()
 
     val BUILD_ERROR_HISTORY = """
@@ -329,7 +361,9 @@ Format Biasa: Backup_HomeIO_HHmmss_ddMMyyyy.json
 app/src/main/java/dev/andikune/homeio/
 ├── MainActivity.kt
 ├── presentation/home/HomeScreen.kt
+├── presentation/home/AppContextMenuDialog.kt
 ├── presentation/settings/SettingsScreen.kt
+├── presentation/settings/PermissionSection.kt
 ├── presentation/settings/SystemControlScreen.kt
 ├── presentation/settings/WallpaperSection.kt
 ├── presentation/wallpaper/FileManagerDialog.kt
@@ -341,6 +375,7 @@ app/src/main/java/dev/andikune/homeio/
 ├── receiver/BootReceiver.kt
 ├── service/LauncherNotificationService.kt
 ├── util/OtaUpdate.kt
+├── util/PermissionHelper.kt
 ├── util/SoundFeedback.kt
 └── data/AppKnowledge.kt
     """.trimIndent()
@@ -371,5 +406,12 @@ app/src/main/java/dev/andikune/homeio/
 23. Slider settings memakai mode aktivasi OK.
 24. OLED screensaver dengan override brightness.
 25. Tombol PASANG & HAPUS di Pembaruan App support D-Pad.
+26. Konfirmasi keamanan sebelum mengaktifkan Kiosk Mode.
+27. Tombol darurat Force Stop (Paksa Hentikan) di menu konteks aplikasi.
+28. Halaman Izin Aplikasi terpusat di menu Pengaturan dengan analisa status (Banner).
+29. Deteksi izin notifikasi secara real-time di Sidebar kiri.
+30. Dukungan tombol fisik Remote Settings (176) & Input (178) di level Activity.
+31. Fallback otomatis ke Info Aplikasi jika TV membatasi halaman izin sistem.
+32. Launcher Tie-Break diatasi dengan priority 100.
     """.trimIndent()
 }
