@@ -28,6 +28,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -62,6 +63,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -122,7 +124,7 @@ fun HomeScreen(
     var isPaneOpen by remember { mutableStateOf(false) }
     var showAllAppsOverlay by remember { mutableStateOf(false) }
     var showKioskConfirmDialog by remember { mutableStateOf(false) } 
-    var showManageFavoritesDialog by remember { mutableStateOf(false) } // STATE BARU
+    var showManageFavoritesDialog by remember { mutableStateOf(false) }
     
     val paneFocusRequester = remember { FocusRequester() }
     val firstMenuItemFocusRequester = remember { FocusRequester() }
@@ -196,7 +198,6 @@ fun HomeScreen(
         )
     }
 
-    // DIALOG KELOLA FAVORIT
     if (showManageFavoritesDialog) {
         ManageFavoritesDialog(
             allApps = allApps,
@@ -262,7 +263,7 @@ fun HomeScreen(
                     iconSizeMultiplier = config.appIconSizeMultiplier, 
                     onAppClick = { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) }, 
                     onAppLongClick = { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app },
-                    onOpenManageFavorites = { showManageFavoritesDialog = true }, // PARAMETER BARU
+                    onOpenManageFavorites = { showManageFavoritesDialog = true },
                     modifier = Modifier.focusProperties { down = carouselFocusRequester }
                 )
                 
@@ -355,7 +356,6 @@ fun HomeScreen(
     }
 }
 
-// --- DIALOG KELOLA FAVORIT BARU ---
 @Composable
 fun ManageFavoritesDialog(
     allApps: List<AppItem>,
@@ -363,7 +363,7 @@ fun ManageFavoritesDialog(
     onSave: (List<String>) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val context = LocalContext.current // FIX: Tambahkan deklarasi context
+    val context = LocalContext.current
     var selectedFavs by remember { mutableStateOf(currentFavorites) }
     val firstFocusRequester = remember { FocusRequester() }
 
@@ -727,7 +727,7 @@ fun FavoriteAppsSection(
     iconSizeMultiplier: Float, 
     onAppClick: (AppItem) -> Unit, 
     onAppLongClick: (AppItem) -> Unit,
-    onOpenManageFavorites: () -> Unit, // PARAMETER BARU
+    onOpenManageFavorites: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -735,7 +735,6 @@ fun FavoriteAppsSection(
             Text("${stringResource(R.string.favorite_apps)} (3 Utama)", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(12.dp))
             
-            // TOMBOL KELOLA FAVORIT
             var isEditFocused by remember { mutableStateOf(false) }
             NeonFocusBorder(focused = isEditFocused, cornerRadius = 20.dp) {
                 Box(Modifier.size(28.dp).clip(CircleShape)
@@ -790,12 +789,8 @@ fun AppCardItem(
         }
     }
 
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressedSystem by interactionSource.collectIsPressedAsState()
-    val finalIsPressed = isPressedManual || isPressedSystem
-
     NeonFocusBorder(
-        focused = isEffectivelyFocused, pressed = finalIsPressed, cornerRadius = 16.dp,
+        focused = isEffectivelyFocused, pressed = isPressedManual, cornerRadius = 16.dp,
         borderWidth = 3.dp, glowRadius = 8.dp,
         modifier = modifier.zIndex(if (isEffectivelyFocused) 2f else 0f).scale(scale)
     ) {
@@ -804,7 +799,8 @@ fun AppCardItem(
                 .background(if (isEffectivelyFocused) GlassColors.GlassTintLighter else GlassColors.GlassTint)
                 .then(
                     if (useNativeFocus) {
-                        Modifier.onFocusChanged { isNativeFocused = it.isFocused }.focusable()
+                        Modifier.onFocusChanged { isNativeFocused = it.isFocused }
+                            .focusable()
                             .onPreviewKeyEvent { event ->
                                 val isCenterKey = event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter
                                 if (isCenterKey) {
@@ -831,9 +827,16 @@ fun AppCardItem(
                                     } else false
                                 } else false
                             }
-                    } else Modifier
+                    } else {
+                        // UNTUK TOUCH / MOUSE (TANPA MENGGANGGU D-PAD)
+                        Modifier.pointerInput(Unit) {
+                            detectTapGestures(
+                                onTap = { onClick() },
+                                onLongPress = { onLongClick() }
+                            )
+                        }
+                    }
                 )
-                .combinedClickable(interactionSource = interactionSource, indication = null, onClick = { onClick() }, onLongClick = onLongClick)
                 .padding(8.dp),
             contentAlignment = Alignment.Center
         ) {
