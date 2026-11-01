@@ -1,23 +1,13 @@
 package dev.andikune.homeio.presentation.settings
 
-import android.Manifest
-import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
-import android.content.BroadcastReceiver
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
-import android.content.pm.PackageManager
 import android.media.AudioManager
-import android.net.Uri
-import android.net.wifi.WifiManager
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.provider.Settings
+import android.view.WindowManager
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,18 +30,16 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import dev.andikune.homeio.domain.model.SettingsConfig
 import dev.andikune.homeio.presentation.components.GlassColors
 import dev.andikune.homeio.presentation.components.NeonFocusBorder
 import dev.andikune.homeio.presentation.components.liquidGlass
 import dev.andikune.homeio.util.PermissionHelper
 import dev.andikune.homeio.util.PermissionHelper.PermissionType
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @Composable
 fun SystemControlScreen(
@@ -60,21 +48,14 @@ fun SystemControlScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val view = LocalView.current
+    val activity = context as? Activity
 
     val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
-    val wifiManager = remember { context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager }
-    val bluetoothAdapter = remember { BluetoothAdapter.getDefaultAdapter() }
 
     var brightness by remember { mutableFloatStateOf(config.manualBrightness.toFloat()) }
     var volume by remember { mutableFloatStateOf(50f) }
     var hasWriteSettings by remember { mutableStateOf(PermissionHelper.checkPermission(context, PermissionType.WRITE_SETTINGS)) }
-
-    var wifiList by remember { mutableStateOf<List<String>>(emptyList()) }
-    var isScanningWifi by remember { mutableStateOf(false) }
-
-    var btList by remember { mutableStateOf<List<String>>(emptyList()) }
-    var isScanningBt by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         try {
@@ -82,95 +63,6 @@ fun SystemControlScreen(
             val currentVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
             volume = (currentVol.toFloat() / maxVol.toFloat()) * 100f
         } catch (_: Exception) {}
-    }
-
-    val locationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (!granted) Toast.makeText(context, "Izin lokasi dibutuhkan untuk scan WiFi", Toast.LENGTH_SHORT).show()
-    }
-    val btPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { perms ->
-        if (perms.values.any { !it }) Toast.makeText(context, "Izin Bluetooth ditolak", Toast.LENGTH_SHORT).show()
-    }
-
-    fun startWifiScan() {
-        if (wifiManager == null) {
-            Toast.makeText(context, "TV ini tidak mendukung WiFi", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-            return
-        }
-        if (!wifiManager.isWifiEnabled) {
-            @Suppress("DEPRECATION") wifiManager.isWifiEnabled = true
-            Toast.makeText(context, "Menyalakan WiFi...", Toast.LENGTH_SHORT).show()
-        }
-        
-        isScanningWifi = true
-        @Suppress("DEPRECATION") val success = wifiManager.startScan()
-        if (!success) {
-            Toast.makeText(context, "Gagal scan. Coba lagi.", Toast.LENGTH_SHORT).show()
-            isScanningWifi = false
-        } else {
-            Handler(Looper.getMainLooper()).postDelayed({
-                try {
-                    val results = wifiManager.scanResults.map { it.SSID }.filter { it.isNotBlank() }.distinct()
-                    wifiList = results.ifEmpty { listOf("(Tidak ada WiFi ditemukan)") }
-                } catch (_: Exception) {
-                    wifiList = listOf("(Gagal membaca hasil scan)")
-                }
-                isScanningWifi = false
-            }, 2000)
-        }
-    }
-
-    fun startBtScan() {
-        if (bluetoothAdapter == null) {
-            Toast.makeText(context, "TV ini tidak mendukung Bluetooth", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
-            btPermissionLauncher.launch(arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT))
-            return
-        }
-        if (!bluetoothAdapter.isEnabled) {
-            @Suppress("DEPRECATION") bluetoothAdapter.enable()
-            Toast.makeText(context, "Menyalakan Bluetooth...", Toast.LENGTH_SHORT).show()
-        }
-
-        isScanningBt = true
-        btList = emptyList()
-
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(ctx: Context?, intent: Intent?) {
-                if (BluetoothDevice.ACTION_FOUND == intent?.action) {
-                    val device: BluetoothDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-                    } else {
-                        @Suppress("DEPRECATION") intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-                    }
-                    val name = try { device?.name } catch (e: SecurityException) { null } ?: "Perangkat Tanpa Nama"
-                    if (!btList.contains(name)) btList = btList + name
-                } else if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED == intent?.action) {
-                    isScanningBt = false
-                    if (btList.isEmpty()) btList = listOf("(Tidak ada perangkat ditemukan)")
-                    try { context.unregisterReceiver(this) } catch (_: Exception) {}
-                }
-            }
-        }
-        
-        context.registerReceiver(receiver, IntentFilter().apply {
-            addAction(BluetoothDevice.ACTION_FOUND)
-            addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
-        })
-        @Suppress("DEPRECATION") bluetoothAdapter.startDiscovery()
-        
-        Handler(Looper.getMainLooper()).postDelayed({
-            if (isScanningBt) {
-                @Suppress("DEPRECATION") bluetoothAdapter.cancelDiscovery()
-                isScanningBt = false
-                try { context.unregisterReceiver(receiver) } catch (_: Exception) {}
-            }
-        }, 10000)
     }
 
     Box(Modifier.fillMaxSize().background(GlassColors.DeepBackgroundGradient)) {
@@ -183,44 +75,42 @@ fun SystemControlScreen(
                 }
             }
 
+            // --- WIFI & BLUETOOTH (PANEL NATIVE) ---
             item {
-                Column(Modifier.fillMaxWidth().liquidGlass(cornerRadius = 16.dp).padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Wifi, null, tint = GlassColors.AccentGlow)
-                            Spacer(Modifier.width(12.dp))
-                            Text("WiFi", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        }
-                        SystemButton(text = if (isScanningWifi) "Scanning..." else "Scan", onClick = { startWifiScan() })
-                    }
-                    if (wifiList.isNotEmpty()) {
-                        Spacer(Modifier.height(12.dp))
-                        wifiList.forEach { ssid ->
-                            Text(ssid, color = GlassColors.TextSecondary, fontSize = 14.sp, modifier = Modifier.padding(vertical = 4.dp))
+                SystemPanel(
+                    title = "Pengaturan Wi-Fi",
+                    icon = Icons.Default.Wifi,
+                    description = "Hubungkan ke jaringan Wi-Fi dan masukkan sandi",
+                    onClick = {
+                        try {
+                            // Memanggil panel Wi-Fi bawaan Android TV
+                            val intent = Intent(Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Fitur Wi-Fi tidak tersedia di TV ini", Toast.LENGTH_SHORT).show()
                         }
                     }
-                }
+                )
             }
 
             item {
-                Column(Modifier.fillMaxWidth().liquidGlass(cornerRadius = 16.dp).padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Bluetooth, null, tint = GlassColors.AccentGlow)
-                            Spacer(Modifier.width(12.dp))
-                            Text("Bluetooth", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        }
-                        SystemButton(text = if (isScanningBt) "Scanning..." else "Scan", onClick = { startBtScan() })
-                    }
-                    if (btList.isNotEmpty()) {
-                        Spacer(Modifier.height(12.dp))
-                        btList.forEach { name ->
-                            Text(name, color = GlassColors.TextSecondary, fontSize = 14.sp, modifier = Modifier.padding(vertical = 4.dp))
+                SystemPanel(
+                    title = "Pengaturan Bluetooth",
+                    icon = Icons.Default.Bluetooth,
+                    description = "Lakukan pairing perangkat Bluetooth (Remote, Speaker, dll)",
+                    onClick = {
+                        try {
+                            // Memanggil panel Bluetooth bawaan Android TV
+                            val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Fitur Bluetooth tidak tersedia di TV ini", Toast.LENGTH_SHORT).show()
                         }
                     }
-                }
+                )
             }
 
+            // --- VOLUME ---
             item {
                 Column(Modifier.fillMaxWidth().liquidGlass(cornerRadius = 16.dp).padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -243,6 +133,7 @@ fun SystemControlScreen(
                 }
             }
 
+            // --- KECERAHAN (BRIGHTNESS) ---
             item {
                 Column(Modifier.fillMaxWidth().liquidGlass(cornerRadius = 16.dp).padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -255,8 +146,18 @@ fun SystemControlScreen(
                         value = brightness,
                         onValueChange = { newVal ->
                             brightness = newVal
-                            // FIX: Update config agar tersimpan permanen
                             onUpdateConfig(config.copy(manualBrightness = newVal.toInt()))
+                            
+                            // FIX: Ubah Window Attributes agar berefek instan ke layar
+                            if (activity != null) {
+                                try {
+                                    val layoutParams = activity.window.attributes
+                                    layoutParams.screenBrightness = (newVal / 100f).coerceIn(0.01f, 1f)
+                                    activity.window.attributes = layoutParams
+                                } catch (_: Exception) {}
+                            }
+                            
+                            // Simpan juga ke system settings jika punya izin
                             if (hasWriteSettings) {
                                 try {
                                     val targetBrightness = ((newVal / 100f) * 255).toInt()
@@ -278,6 +179,7 @@ fun SystemControlScreen(
                 }
             }
 
+            // --- PANEL TAMBAHAN ---
             item {
                 SystemPanel(
                     title = "Buka Pengaturan Android TV",
@@ -354,19 +256,6 @@ private fun BackButton(onClick: () -> Unit) {
             .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onClick(); true } else false }
             .clickable { onClick() }, contentAlignment = Alignment.Center) {
             Icon(Icons.Default.ArrowBack, "Kembali", tint = if (isFocused) GlassColors.AccentGlow else Color.White)
-        }
-    }
-}
-
-@Composable
-private fun SystemButton(text: String, onClick: () -> Unit) {
-    var isFocused by remember { mutableStateOf(false) }
-    NeonFocusBorder(focused = isFocused, cornerRadius = 8.dp) {
-        Box(Modifier.clip(RoundedCornerShape(8.dp)).background(if (isFocused) GlassColors.AccentGlow else GlassColors.GlassTint)
-            .onFocusChanged { isFocused = it.isFocused }.focusable()
-            .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onClick(); true } else false }
-            .clickable { onClick() }.padding(horizontal = 16.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
-            Text(text, color = if (isFocused) GlassColors.DeepBackground else Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
         }
     }
 }
