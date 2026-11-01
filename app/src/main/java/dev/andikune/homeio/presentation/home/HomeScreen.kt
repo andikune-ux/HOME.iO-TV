@@ -28,7 +28,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -62,6 +62,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -91,7 +92,6 @@ import dev.andikune.homeio.util.PermissionHelper.PermissionType
 import dev.andikune.homeio.util.SoundFeedback
 import dev.andikune.homeio.util.SystemUtils
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -101,7 +101,7 @@ import kotlin.math.abs
 
 // OPTIMASI CACHE MEMORI
 private val maxMemory = (Runtime.getRuntime().maxMemory() / 1024).toInt()
-private val cacheSize = maxMemory / 8
+private val cacheSize = maxMemory / 16
 private val iconCache = LruCache<String, Bitmap>(cacheSize)
 
 @Composable
@@ -291,11 +291,11 @@ fun HomeScreen(
                     if (isPaneOpen) scope.launch { delay(350); runCatching { firstMenuItemFocusRequester.requestFocus() } }
                     true
                 } else false }
-                .combinedClickable(onClick = {
+                .clickable {
                     SoundFeedback.playClick(context)
                     isPaneOpen = !isPaneOpen
                     if (isPaneOpen) scope.launch { delay(350); runCatching { firstMenuItemFocusRequester.requestFocus() } }
-                }),
+                },
             contentAlignment = Alignment.Center
         ) {
             Icon(Icons.Rounded.Menu, "Menu", tint = if (isTriggerFocused) GlassColors.AccentGlow else Color.White)
@@ -589,10 +589,6 @@ fun AllAppsCenterCarousel(
     
     var isCarouselFocused by remember { mutableStateOf(false) }
     var isProcessingKey by remember { mutableStateOf(false) }
-    
-    // STATE UNTUK LONG PRESS
-    var centerKeyJob by remember { mutableStateOf<Job?>(null) }
-    var isCenterLongPressed by remember { mutableStateOf(false) }
 
     val baseCardWidth = 110.dp
     val cardWidth = (baseCardWidth * iconSizeMultiplier).coerceIn(80.dp, 160.dp)
@@ -636,34 +632,7 @@ fun AllAppsCenterCarousel(
                 .onFocusChanged { isCarouselFocused = it.isFocused }
                 .focusable()
                 .onPreviewKeyEvent { event ->
-                    val isCenterKey = event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter
-
-                    if (isCenterKey) {
-                        if (event.type == KeyEventType.KeyDown) {
-                            if (!isProcessingKey && centerKeyJob == null) {
-                                isCenterLongPressed = false
-                                centerKeyJob = scope.launch {
-                                    delay(600)
-                                    isCenterLongPressed = true
-                                    val app = carouselApps.getOrNull(selectedIndex)
-                                    if (app != null) onAppLongClick(app)
-                                }
-                            }
-                            true
-                        } else if (event.type == KeyEventType.KeyUp) {
-                            centerKeyJob?.cancel()
-                            centerKeyJob = null
-                            if (!isCenterLongPressed) {
-                                val app = carouselApps.getOrNull(selectedIndex)
-                                if (app != null && !isProcessingKey) {
-                                    isProcessingKey = true
-                                    onAppClick(app)
-                                }
-                            }
-                            isCenterLongPressed = false
-                            true
-                        } else false
-                    } else if (event.type == KeyEventType.KeyDown) {
+                    if (event.type == KeyEventType.KeyDown) {
                         when (event.key) {
                             Key.DirectionLeft -> {
                                 if (isProcessingKey || lazyListState.isScrollInProgress) return@onPreviewKeyEvent true
@@ -688,6 +657,16 @@ fun AllAppsCenterCarousel(
                                 true
                             }
                             Key.DirectionDown -> { onEdgeRightOrDownReached(); true }
+                            Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+                                if (!isProcessingKey) {
+                                    val app = carouselApps.getOrNull(selectedIndex)
+                                    if (app != null) {
+                                        isProcessingKey = true
+                                        onAppClick(app)
+                                    }
+                                }
+                                true
+                            }
                             else -> false
                         }
                     } else if (event.type == KeyEventType.KeyUp) {
@@ -763,7 +742,9 @@ fun FavoriteAppsSection(
 @Composable
 fun AppCardItem(
     app: AppItem, iconSizeMultiplier: Float, modifier: Modifier = Modifier,
-    isCenterFocused: Boolean, useNativeFocus: Boolean = false, onClick: () -> Unit, onLongClick: () -> Unit
+    isCenterFocused: Boolean, useNativeFocus: Boolean = false, 
+    focusRequester: FocusRequester? = null, 
+    onClick: () -> Unit, onLongClick: () -> Unit
 ) {
     var isNativeFocused by remember { mutableStateOf(false) }
     val isEffectivelyFocused = if (useNativeFocus) isNativeFocused else isCenterFocused
@@ -781,25 +762,37 @@ fun AppCardItem(
         }
     }
 
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-
     NeonFocusBorder(
-        focused = isEffectivelyFocused, pressed = isPressed, cornerRadius = 16.dp,
+        focused = isEffectivelyFocused, pressed = false, cornerRadius = 16.dp,
         borderWidth = 3.dp, glowRadius = 8.dp,
         modifier = modifier.zIndex(if (isEffectivelyFocused) 2f else 0f).scale(scale)
     ) {
         Box(
             modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp))
                 .background(if (isEffectivelyFocused) GlassColors.GlassTintLighter else GlassColors.GlassTint)
-                .combinedClickable(
-                    interactionSource = interactionSource,
-                    indication = null,
-                    onClick = { onClick() },
-                    onLongClick = { onLongClick() }
-                )
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                 .onFocusChanged { isNativeFocused = it.isFocused }
-                .focusable(useNativeFocus)
+                .then(
+                    if (useNativeFocus) {
+                        Modifier
+                            .focusable() // Kunci utama agar fokus D-pad jalan
+                            .onPreviewKeyEvent { event ->
+                                val isCenterKey = event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter
+                                if (isCenterKey) {
+                                    if (event.type == KeyEventType.KeyUp) {
+                                        onClick() // Remote: Langsung buka tanpa long press
+                                    }
+                                    true
+                                } else false
+                            }
+                            .pointerInput(Unit) { // HP: Long press tetap berfungsi di sentuhan
+                                detectTapGestures(
+                                    onTap = { onClick() },
+                                    onLongPress = { onLongClick() }
+                                )
+                            }
+                    } else Modifier
+                )
                 .padding(8.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -839,9 +832,16 @@ fun AllAppsGridOverlay(apps: List<AppItem>, iconSizeMultiplier: Float, onDismiss
                 ) {
                     items(apps, key = { it.packageName }) { app ->
                         var isFirst by remember { mutableStateOf(app == apps.firstOrNull()) }
-                        Box(modifier = if (isFirst) Modifier.focusRequester(firstFocusRequester) else Modifier) {
-                            AppCardItem(app = app, iconSizeMultiplier = iconSizeMultiplier, modifier = Modifier.height(120.dp), isCenterFocused = false, useNativeFocus = true, onClick = { onAppClick(app) }, onLongClick = { onAppLongClick(app) })
-                        }
+                        AppCardItem(
+                            app = app, 
+                            iconSizeMultiplier = iconSizeMultiplier, 
+                            modifier = Modifier.height(120.dp), 
+                            isCenterFocused = false, 
+                            useNativeFocus = true, 
+                            focusRequester = if (isFirst) firstFocusRequester else null,
+                            onClick = { onAppClick(app) }, 
+                            onLongClick = { onAppLongClick(app) }
+                        )
                     }
                 }
             }
@@ -911,7 +911,7 @@ fun LeftNavigationGlassPanel(
         GlassNavButton(Icons.Default.Settings, stringResource(R.string.settings_title), false, onSettingsClick)
         
         Spacer(modifier = Modifier.height(8.dp))
-        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0x33FF5252)).focusable().onPreviewKeyEvent { event -> if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) { onPaneClose(); true } else false }.combinedClickable(onClick = onPaneClose).padding(12.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0x33FF5252)).focusable().onPreviewKeyEvent { event -> if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) { onPaneClose(); true } else false }.clickable { onPaneClose() }.padding(12.dp), contentAlignment = Alignment.Center) {
             Text("TUTUP MENU", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
     }
@@ -935,7 +935,7 @@ fun NotificationItem(sbn: android.service.notification.StatusBarNotification, on
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().liquidGlass(cornerRadius = 14.dp, isFocused = isFocused)
         .onFocusChanged { isFocused = it.isFocused }.focusable()
         .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onClick(); true } else false }
-        .combinedClickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 8.dp)) {
+        .clickable { onClick() }.padding(horizontal = 10.dp, vertical = 8.dp)) {
         if (appIcon != null) {
             Image(bitmap = appIcon!!.asImageBitmap(), contentDescription = null, modifier = Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)))
         } else {
@@ -962,7 +962,7 @@ fun GlassNavButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label:
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().liquidGlass(cornerRadius = 14.dp, isFocused = isFocused || isSelected)
         .onFocusChanged { isFocused = it.isFocused }.focusable()
         .onPreviewKeyEvent { event -> if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) { onClick(); true } else false }
-        .combinedClickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 10.dp)) {
+        .clickable { onClick() }.padding(horizontal = 12.dp, vertical = 10.dp)) {
         Icon(icon, label, tint = if (isFocused || isSelected) GlassColors.AccentGlow else GlassColors.TextSecondary, modifier = Modifier.size(18.dp))
         Spacer(modifier = Modifier.width(10.dp))
         Text(label, color = if (isFocused || isSelected) Color.White else GlassColors.TextSecondary, fontSize = 13.sp, fontWeight = if (isFocused || isSelected) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1)
