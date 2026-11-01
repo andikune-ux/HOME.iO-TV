@@ -44,12 +44,15 @@ fun TermsAndConditionsDialog(onAgree: () -> Unit) {
     val context = LocalContext.current
     var isChecked by remember { mutableStateOf(false) }
     
+    val scrollState = rememberScrollState()
+    val scrollFocusRequester = remember { FocusRequester() }
     val checkboxFocusRequester = remember { FocusRequester() }
     val buttonFocusRequester = remember { FocusRequester() }
 
+    // Fokus awal diarahkan ke area teks agar pengguna bisa langsung scroll
     LaunchedEffect(Unit) {
         delay(300)
-        runCatching { checkboxFocusRequester.requestFocus() }
+        runCatching { scrollFocusRequester.requestFocus() }
     }
 
     Dialog(
@@ -70,7 +73,7 @@ fun TermsAndConditionsDialog(onAgree: () -> Unit) {
                 Text("SYARAT & KETENTUAN", color = GlassColors.AccentGlow, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
                 Spacer(Modifier.height(16.dp))
 
-                // Area Teks Scrollable
+                // Area Teks Scrollable (SEKARANG BISA DI-FOKUS DAN DI-SCROLL DENGAN D-PAD)
                 Box(
                     Modifier
                         .weight(1f)
@@ -78,8 +81,25 @@ fun TermsAndConditionsDialog(onAgree: () -> Unit) {
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color.Black.copy(alpha = 0.3f))
                         .border(1.dp, GlassColors.GlassBorder, RoundedCornerShape(12.dp))
+                        .focusRequester(scrollFocusRequester)
+                        .focusable()
+                        .onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyDown) {
+                                if (event.key == Key.DirectionDown) {
+                                    if (!scrollState.canScrollForward) {
+                                        // Jika scroll sudah mentok bawah, pindah fokus ke Checkbox
+                                        checkboxFocusRequester.requestFocus()
+                                        true
+                                    } else false // Biarkan scroll berjalan
+                                } else if (event.key == Key.DirectionUp) {
+                                    if (!scrollState.canScrollBackward) {
+                                        true // Tahan fokus di atas
+                                    } else false // Biarkan scroll berjalan
+                                } else false
+                            } else false
+                        }
                         .padding(16.dp)
-                        .verticalScroll(rememberScrollState())
+                        .verticalScroll(scrollState)
                 ) {
                     Text(
                         text = """
@@ -127,7 +147,8 @@ fun TermsAndConditionsDialog(onAgree: () -> Unit) {
                                     }
                                     true
                                 } else if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionUp) {
-                                    false
+                                    scrollFocusRequester.requestFocus()
+                                    true
                                 } else false
                             }
                             .clickable {
@@ -150,7 +171,7 @@ fun TermsAndConditionsDialog(onAgree: () -> Unit) {
                                 Icon(Icons.Default.Check, null, tint = GlassColors.DeepBackground, modifier = Modifier.size(16.dp))
                             }
                         }
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
                         Text(
                             "Saya telah membaca dan menyetujui Syarat & Ketentuan.",
                             color = if (isCheckboxFocused || isChecked) Color.White else GlassColors.TextPrimary,
