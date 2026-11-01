@@ -434,7 +434,7 @@ class MainActivity : ComponentActivity() {
         SoundFeedback.release()
     }
 
-    // FIX: PINDAHKAN HANDLER KE DISPATCHKEYEVENT AGAR TIDAK DITELAN COMPOSE
+    // FIX UTAMA: Menggunakan dispatchKeyEvent untuk mencegat SEBELUM Compose
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         lastUserInteractionTime = System.currentTimeMillis()
         
@@ -444,15 +444,15 @@ class MainActivity : ComponentActivity() {
                 KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> SoundFeedback.playClick(this)
             }
             
-            // JIKA TIDAK ADA POP-UP, INTERSEP TOMBOL SETTINGS & INPUT
+            // HANDLE TOMBOL REMOTE (JIKA TIDAK ADA POPUP)
             if (!isPopupBlockingKey) {
                 if (event.keyCode == KeyEvent.KEYCODE_SETTINGS) {
                     openSystemSettings(this)
-                    return true // TELAN EVENT, JANGAN DITERUSKAN KE COMPOSE
+                    return true // Telan event, jangan diteruskan ke Compose
                 }
                 if (event.keyCode == KeyEvent.KEYCODE_TV_INPUT) {
                     openInputSelector(this)
-                    return true // TELAN EVENT
+                    return true // Telan event
                 }
             }
         }
