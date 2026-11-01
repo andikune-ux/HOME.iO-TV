@@ -1,9 +1,11 @@
 package dev.andikune.homeio.presentation.home
 
+import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -67,6 +69,26 @@ fun AppContextMenuDialog(
                     val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply { data = Uri.parse("package:${app.packageName}"); flags = Intent.FLAG_ACTIVITY_NEW_TASK }
                     context.startActivity(intent); onDismiss() 
                 })
+                
+                // TAMBAHAN: PAKSA HENTIKAN APLIKASI
+                if (!app.isSystemApp && app.packageName != context.packageName) {
+                    ContextMenuOption(
+                        icon = Icons.Default.Stop, 
+                        title = "Paksa Hentikan", 
+                        tint = GlassColors.AccentRed, 
+                        onClick = { 
+                            try {
+                                val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                                am.killBackgroundProcesses(app.packageName)
+                                Toast.makeText(context, "Aplikasi ${app.label} dihentikan", Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Gagal menghentikan aplikasi", Toast.LENGTH_SHORT).show()
+                            }
+                            onDismiss() 
+                        }
+                    )
+                }
+
                 if (!app.isSystemApp) {
                     ContextMenuOption(icon = Icons.Default.Delete, title = stringResource(R.string.action_uninstall), tint = GlassColors.AccentRed, onClick = { 
                         try { val intent = Intent(Intent.ACTION_DELETE).apply { data = Uri.parse("package:${app.packageName}"); flags = Intent.FLAG_ACTIVITY_NEW_TASK }; context.startActivity(intent) } catch (_: Exception) {}
