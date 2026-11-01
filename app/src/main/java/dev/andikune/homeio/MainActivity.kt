@@ -87,6 +87,9 @@ class MainActivity : ComponentActivity() {
     private var lastUserInteractionTime = System.currentTimeMillis()
     private var screensaverTimeoutMs = 5 * 60 * 1000L
     private var pendingFileManagerTrigger by mutableStateOf(false)
+    
+    // TAMBAHAN: Blokir tombol remote saat pop-up terbuka
+    private var isPopupBlockingKey by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -161,6 +164,11 @@ class MainActivity : ComponentActivity() {
                 var downloadReady by remember { mutableStateOf(false) }
                 var isError by remember { mutableStateOf(false) }
 
+                // SINKRONISASI STATE POP-UP KE ACTIVITY LEVEL
+                LaunchedEffect(showQrisPopup, showOnboarding, showLauncherPrompt, showUpdateDialog) {
+                    isPopupBlockingKey = showQrisPopup || showOnboarding || showLauncherPrompt || showUpdateDialog
+                }
+
                 // STATE SINKRONISASI
                 val flowConfig by appContainer.preferencesManager.settingsFlow.collectAsState(initial = SettingsConfig())
                 var localConfig by remember { mutableStateOf<SettingsConfig?>(null) }
@@ -185,7 +193,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // TAMBAHAN: KEEP SCREEN ON
                 LaunchedEffect(config.isKeepScreenOnEnabled) {
                     runOnUiThread {
                         if (config.isKeepScreenOnEnabled) {
@@ -403,8 +410,13 @@ class MainActivity : ComponentActivity() {
         return super.dispatchKeyEvent(event)
     }
 
-    // TAMBAHAN: Handle Tombol Remote Xiaomi (Settings 176 & Input 178)
+    // TAMBAHAN: Handle Tombol Remote (Settings 176 & Input 178) dengan Fallback & Popup Blocker
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        // JIKA ADA POP-UP TERBUKA, JANGAN PROSES TOMBOL SETTINGS/INPUT DI SINI
+        if (isPopupBlockingKey) {
+            return super.onKeyDown(keyCode, event)
+        }
+
         if (keyCode == KeyEvent.KEYCODE_SETTINGS) {
             try {
                 startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -421,10 +433,21 @@ class MainActivity : ComponentActivity() {
             return true
         }
         if (keyCode == KeyEvent.KEYCODE_TV_INPUT) {
+            // Coba Package Spesifik Xiaomi dulu
             try {
                 startActivity(Intent("com.android.tv.action.VIEW_INPUTS").setPackage("com.mitv.livetv"))
             } catch (e: Exception) {
-                Toast.makeText(this, "Input TV tidak ditemukan", Toast.LENGTH_SHORT).show()
+                // Fallback 1: Intent VIEW_INPUTS umum
+                try {
+                    startActivity(Intent("com.android.tv.action.VIEW_INPUTS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (e2: Exception) {
+                    // Fallback 2: Pengaturan Input sistem
+                    try {
+                        startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    } catch (e3: Exception) {
+                        Toast.makeText(this, "Input TV tidak ditemukan", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
             return true
         }
