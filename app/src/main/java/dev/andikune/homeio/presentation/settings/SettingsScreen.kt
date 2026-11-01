@@ -6,7 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -159,27 +158,27 @@ fun SettingsScreen(
                         left = sidebarFirstItemFocusRequester
                     }
             ) {
-                LazyColumn(
+                // FIX: Mengganti LazyColumn dengan Column + verticalScroll agar fokus D-Pad bisa scroll mulus
+                Column(
                     Modifier
                         .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
                         .focusRequester(contentFocusRequester)
                 ) {
-                    item {
-                        when (selectedCategory) {
-                            SettingsCategory.WALLPAPER -> WallpaperSection(
-                                settings = draftConfig, 
-                                onUpdate = { draftConfig = it },
-                                onSave = { onSaveConfig(draftConfig) }
-                            )
-                            SettingsCategory.SCREENSAVER -> ScreensaverSection(draftConfig) { draftConfig = it }
-                            SettingsCategory.PERFORMANCE -> PerformanceSection(draftConfig) { draftConfig = it }
-                            SettingsCategory.LANGUAGE -> LanguageSection(draftConfig) { draftConfig = it }
-                            SettingsCategory.TV_DISPLAY -> TvDisplaySection(draftConfig) { draftConfig = it }
-                            SettingsCategory.UPDATER -> ApkFileListSection()
-                            SettingsCategory.BACKUP -> BackupBiasaSection(draftConfig) { draftConfig = it }
-                            SettingsCategory.PERMISSIONS -> PermissionSection()
-                            SettingsCategory.INFO -> InfoAppSection()
-                        }
+                    when (selectedCategory) {
+                        SettingsCategory.WALLPAPER -> WallpaperSection(
+                            settings = draftConfig, 
+                            onUpdate = { draftConfig = it },
+                            onSave = { onSaveConfig(draftConfig) }
+                        )
+                        SettingsCategory.SCREENSAVER -> ScreensaverSection(draftConfig) { draftConfig = it }
+                        SettingsCategory.PERFORMANCE -> PerformanceSection(draftConfig) { draftConfig = it }
+                        SettingsCategory.LANGUAGE -> LanguageSection(draftConfig) { draftConfig = it }
+                        SettingsCategory.TV_DISPLAY -> TvDisplaySection(draftConfig) { draftConfig = it }
+                        SettingsCategory.UPDATER -> ApkFileListSection()
+                        SettingsCategory.BACKUP -> BackupBiasaSection(draftConfig) { draftConfig = it }
+                        SettingsCategory.PERMISSIONS -> PermissionSection()
+                        SettingsCategory.INFO -> InfoAppSection()
                     }
                 }
             }
