@@ -363,6 +363,7 @@ fun ManageFavoritesDialog(
     onSave: (List<String>) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current // FIX: Tambahkan deklarasi context
     var selectedFavs by remember { mutableStateOf(currentFavorites) }
     val firstFocusRequester = remember { FocusRequester() }
 
