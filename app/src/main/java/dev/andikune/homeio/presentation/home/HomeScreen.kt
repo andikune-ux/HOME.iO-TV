@@ -73,6 +73,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.andikune.homeio.R
 import dev.andikune.homeio.domain.model.AppItem
 import dev.andikune.homeio.domain.model.SettingsConfig
@@ -112,6 +115,7 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     var isPaneOpen by remember { mutableStateOf(false) }
     var showAllAppsOverlay by remember { mutableStateOf(false) }
@@ -126,6 +130,19 @@ fun HomeScreen(
     var showFileManager by remember { mutableStateOf(false) }
     var selectedAppForContextMenu by remember { mutableStateOf<AppItem?>(null) }
     var isSideloadOnly by remember { mutableStateOf(false) }
+
+    // STATE BARU: Deteksi izin notifikasi secara real-time
+    var hasNotifPermission by remember { mutableStateOf(PermissionHelper.checkPermission(context, PermissionType.NOTIF_LISTENER)) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasNotifPermission = PermissionHelper.checkPermission(context, PermissionType.NOTIF_LISTENER)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val notifications by LauncherNotificationService.notifications.collectAsState()
 
@@ -279,6 +296,7 @@ fun HomeScreen(
                     LeftNavigationGlassPanel(
                         selectedNav, isSideloadOnly,
                         notifications = notifications,
+                        hasNotifPermission = hasNotifPermission, // PARAMETER BARU
                         firstItemFocusRequester = firstMenuItemFocusRequester,
                         onSearchClick = { SoundFeedback.playClick(context); showSearchDialog = true },
                         onNotificationPermissionClick = { 
@@ -629,12 +647,23 @@ fun AllAppsGridOverlay(apps: List<AppItem>, iconSizeMultiplier: Float, onDismiss
 
 @Composable
 fun LeftNavigationGlassPanel(
-    selectedNav: String, isSideloadActive: Boolean, notifications: List<android.service.notification.StatusBarNotification>,
-    firstItemFocusRequester: FocusRequester, onSearchClick: () -> Unit, onNotificationPermissionClick: () -> Unit,
+    selectedNav: String, 
+    isSideloadActive: Boolean, 
+    notifications: List<android.service.notification.StatusBarNotification>,
+    hasNotifPermission: Boolean, // PARAMETER BARU
+    firstItemFocusRequester: FocusRequester, 
+    onSearchClick: () -> Unit, 
+    onNotificationPermissionClick: () -> Unit,
     onNotificationClick: (android.service.notification.StatusBarNotification) -> Unit,
-    onClearNotification: (android.service.notification.StatusBarNotification) -> Unit, onClearAllNotifications: () -> Unit,
-    onHomeClick: () -> Unit, onRamBoostClick: () -> Unit, onFileManagerClick: () -> Unit,
-    onSideloadToggleClick: () -> Unit, onSettingsClick: () -> Unit, onSystemControlClick: () -> Unit, onPaneClose: () -> Unit
+    onClearNotification: (android.service.notification.StatusBarNotification) -> Unit, 
+    onClearAllNotifications: () -> Unit,
+    onHomeClick: () -> Unit, 
+    onRamBoostClick: () -> Unit, 
+    onFileManagerClick: () -> Unit,
+    onSideloadToggleClick: () -> Unit, 
+    onSettingsClick: () -> Unit, 
+    onSystemControlClick: () -> Unit, 
+    onPaneClose: () -> Unit
 ) {
     Column(Modifier.fillMaxHeight().liquidGlass(cornerRadius = 0.dp, borderWidth = 0.dp).padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp, top = 4.dp)) {
@@ -645,7 +674,8 @@ fun LeftNavigationGlassPanel(
         
         Box(Modifier.focusRequester(firstItemFocusRequester)) { GlassNavButton(Icons.Default.Search, stringResource(R.string.nav_search), false, onSearchClick) }
 
-        if (notifications.isEmpty()) {
+        // PERBAIKAN LOGIKA NOTIFIKASI
+        if (!hasNotifPermission) {
             var isFocusedBtn by remember { mutableStateOf(false) }
             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (isFocusedBtn) GlassColors.AccentAmber.copy(alpha = 0.3f) else GlassColors.AccentAmber.copy(alpha = 0.15f)).border(1.dp, GlassColors.AccentAmber, RoundedCornerShape(14.dp))
                 .onFocusChanged { isFocusedBtn = it.isFocused }.focusable().onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onNotificationPermissionClick(); true } else false }
@@ -653,13 +683,17 @@ fun LeftNavigationGlassPanel(
                 Column { Text("Izin Notifikasi Belum Aktif", color = GlassColors.AccentAmber, fontWeight = FontWeight.Bold, fontSize = 12.sp); Text("Klik untuk mengaktifkan", color = GlassColors.TextSecondary, fontSize = 10.sp) }
             }
         } else {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("NOTIFIKASI", color = GlassColors.TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Box(Modifier.clip(RoundedCornerShape(6.dp)).background(Color(0x33FF5252)).clickable { onClearAllNotifications() }.padding(horizontal = 8.dp, vertical = 2.dp)) {
-                    Text("Hapus Semua", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            if (notifications.isEmpty()) {
+                Text("Tidak ada notifikasi", color = GlassColors.TextSecondary, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp))
+            } else {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("NOTIFIKASI", color = GlassColors.TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Box(Modifier.clip(RoundedCornerShape(6.dp)).background(Color(0x33FF5252)).clickable { onClearAllNotifications() }.padding(horizontal = 8.dp, vertical = 2.dp)) {
+                        Text("Hapus Semua", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
+                notifications.take(3).forEach { sbn -> NotificationItem(sbn = sbn, onClick = { onNotificationClick(sbn) }, onDeleteClick = { onClearNotification(sbn) }) }
             }
-            notifications.take(3).forEach { sbn -> NotificationItem(sbn = sbn, onClick = { onNotificationClick(sbn) }, onDeleteClick = { onClearNotification(sbn) }) }
         }
 
         GlassNavButton(Icons.Default.Home, stringResource(R.string.nav_home), selectedNav == "home" && !isSideloadActive, onHomeClick)
