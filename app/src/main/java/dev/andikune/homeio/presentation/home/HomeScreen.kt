@@ -29,7 +29,6 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -768,16 +767,10 @@ fun AppCardItem(
     isCenterFocused: Boolean, useNativeFocus: Boolean = false, onClick: () -> Unit, onLongClick: () -> Unit
 ) {
     var isNativeFocused by remember { mutableStateOf(false) }
-    var isPressedManual by remember { mutableStateOf(false) }
     val isEffectivelyFocused = if (useNativeFocus) isNativeFocused else isCenterFocused
 
     val scale by animateFloatAsState(targetValue = if (isEffectivelyFocused) 1.15f else 0.9f, label = "carousel_scale")
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-
-    // STATE UNTUK LONG PRESS DI D-PAD
-    var keyDownJob by remember { mutableStateOf<Job?>(null) }
-    var isLongPressed by remember { mutableStateOf(false) }
 
     val baseIconSize = 48.dp
     val currentIconSize = (baseIconSize * iconSizeMultiplier).coerceIn(24.dp, 80.dp)
@@ -789,54 +782,25 @@ fun AppCardItem(
         }
     }
 
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
     NeonFocusBorder(
-        focused = isEffectivelyFocused, pressed = isPressedManual, cornerRadius = 16.dp,
+        focused = isEffectivelyFocused, pressed = isPressed, cornerRadius = 16.dp,
         borderWidth = 3.dp, glowRadius = 8.dp,
         modifier = modifier.zIndex(if (isEffectivelyFocused) 2f else 0f).scale(scale)
     ) {
         Box(
             modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp))
                 .background(if (isEffectivelyFocused) GlassColors.GlassTintLighter else GlassColors.GlassTint)
-                .then(
-                    if (useNativeFocus) {
-                        Modifier.onFocusChanged { isNativeFocused = it.isFocused }
-                            .focusable()
-                            .onPreviewKeyEvent { event ->
-                                val isCenterKey = event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter
-                                if (isCenterKey) {
-                                    if (event.type == KeyEventType.KeyDown) {
-                                        if (!isPressedManual) {
-                                            isPressedManual = true
-                                            isLongPressed = false
-                                            keyDownJob = scope.launch {
-                                                delay(600)
-                                                isLongPressed = true
-                                                onLongClick()
-                                            }
-                                        }
-                                        true
-                                    } else if (event.type == KeyEventType.KeyUp) {
-                                        isPressedManual = false
-                                        keyDownJob?.cancel()
-                                        keyDownJob = null
-                                        if (!isLongPressed) {
-                                            onClick()
-                                        }
-                                        isLongPressed = false
-                                        true
-                                    } else false
-                                } else false
-                            }
-                    } else {
-                        // UNTUK TOUCH / MOUSE (TANPA MENGGANGGU D-PAD)
-                        Modifier.pointerInput(Unit) {
-                            detectTapGestures(
-                                onTap = { onClick() },
-                                onLongPress = { onLongClick() }
-                            )
-                        }
-                    }
+                .combinedClickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = { onClick() },
+                    onLongClick = { onLongClick() }
                 )
+                .onFocusChanged { isNativeFocused = it.isFocused }
+                .focusable(useNativeFocus)
                 .padding(8.dp),
             contentAlignment = Alignment.Center
         ) {
