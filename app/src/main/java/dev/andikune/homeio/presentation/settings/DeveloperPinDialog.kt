@@ -5,7 +5,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
@@ -14,8 +16,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -78,22 +78,18 @@ fun DeveloperPinDialog(
         errorMessage = null
         scope.launch {
             try {
-                // Ambil hash dari GitHub (Trik 1: system_config.txt)
                 val url = URL("https://raw.githubusercontent.com/andikune-ux/dev.andikune-apps/main/system_config.txt")
                 val expectedHash = withContext(Dispatchers.IO) { url.readText().trim() }
                 
-                // Hitung hash dari PIN yang diketik (Trik 2: SHA-256)
                 val digest = MessageDigest.getInstance("SHA-256")
                 val actualHash = digest.digest(pin.toByteArray()).joinToString("") { "%02x".format(it) }
 
                 if (actualHash == expectedHash) {
-                    // PIN BENAR
                     val newState = !isCurrentlyDevMode
                     DeveloperPrefs.setDevModeActive(context, newState)
                     onSuccess(newState)
                     onDismiss()
                 } else {
-                    // PIN SALAH
                     failedAttempts++
                     if (failedAttempts >= 3) {
                         isLocked = true
@@ -103,7 +99,7 @@ fun DeveloperPinDialog(
                     pin = ""
                 }
             } catch (e: Exception) {
-                errorMessage = "Gagal verifikasi. Cek internet TV Anda."
+                errorMessage = "Gagal verifikasi. Cek internet TV/HP Anda."
             } finally {
                 isLoading = false
             }
@@ -115,43 +111,52 @@ fun DeveloperPinDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)), contentAlignment = Alignment.Center) {
+            // MENGGUNAKAN VERTICAL SCROLL & BATAS TINGGI AGAR TIDAK TERPOTONG DI HP
             Column(
-                Modifier.width(320.dp).liquidGlass(cornerRadius = 24.dp).padding(24.dp),
+                Modifier
+                    .widthIn(max = 340.dp) // Lebar maksimal
+                    .fillMaxHeight(0.9f) // Tinggi maksimal 90% layar
+                    .liquidGlass(cornerRadius = 24.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Icon(Icons.Default.Lock, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(40.dp))
-                Spacer(Modifier.height(12.dp))
-                Text("MASUKKAN PIN DEVELOPER", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Icon(Icons.Default.Lock, null, tint = GlassColors.AccentGlow, modifier = Modifier.size(36.dp))
                 Spacer(Modifier.height(8.dp))
-                Text(if (isCurrentlyDevMode) "Masukkan PIN untuk MEMATIKAN Dev Mode" else "Masukkan PIN untuk MENGAKTIFKAN Dev Mode", color = GlassColors.TextSecondary, fontSize = 12.sp, textAlign = TextAlign.Center)
+                Text("MASUKKAN PIN DEVELOPER", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(4.dp))
+                Text(if (isCurrentlyDevMode) "Masukkan PIN untuk MEMATIKAN Dev Mode" else "Masukkan PIN untuk MENGAKTIFKAN Dev Mode", color = GlassColors.TextSecondary, fontSize = 11.sp, textAlign = TextAlign.Center)
                 
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(16.dp))
 
                 // Indikator PIN (Titik-titik)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     repeat(6) { index ->
                         val isFilled = index < pin.length
                         Box(
-                            Modifier.size(16.dp).clip(RoundedCornerShape(4.dp))
+                            Modifier.size(14.dp).clip(RoundedCornerShape(4.dp))
                                 .background(if (isFilled) GlassColors.AccentGlow else Color.Transparent)
                                 .border(1.dp, if (isFilled) GlassColors.AccentGlow else GlassColors.TextSecondary, RoundedCornerShape(4.dp))
                         )
                     }
                 }
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(8.dp))
 
-                if (errorMessage != null) {
-                    Text(errorMessage!!, color = GlassColors.AccentRed, fontSize = 12.sp, textAlign = TextAlign.Center)
-                } else if (isLocked) {
-                    Text("Terkunci! Tunggu $lockTimer detik...", color = GlassColors.AccentAmber, fontSize = 12.sp, textAlign = TextAlign.Center)
-                } else if (isLoading) {
-                    Text("Memverifikasi PIN...", color = GlassColors.AccentGlow, fontSize = 12.sp, textAlign = TextAlign.Center)
+                // Pesan Error / Status
+                Box(Modifier.height(20.dp), contentAlignment = Alignment.Center) {
+                    if (errorMessage != null) {
+                        Text(errorMessage!!, color = GlassColors.AccentRed, fontSize = 11.sp, textAlign = TextAlign.Center)
+                    } else if (isLocked) {
+                        Text("Terkunci! Tunggu $lockTimer detik...", color = GlassColors.AccentAmber, fontSize = 11.sp, textAlign = TextAlign.Center)
+                    } else if (isLoading) {
+                        Text("Memverifikasi PIN...", color = GlassColors.AccentGlow, fontSize = 11.sp, textAlign = TextAlign.Center)
+                    }
                 }
 
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(12.dp))
 
-                // Numpad
+                // Numpad (Tinggi tombol dikurangi jadi 42.dp)
                 val numbers = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "Hapus", "0", "Batal")
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     for (row in 0 until 4) {
@@ -163,7 +168,7 @@ fun DeveloperPinDialog(
                                 
                                 NeonFocusBorder(focused = isFocused, cornerRadius = 8.dp, modifier = Modifier.weight(1f)) {
                                     Box(
-                                        Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(8.dp))
+                                        Modifier.fillMaxWidth().height(42.dp).clip(RoundedCornerShape(8.dp))
                                             .background(
                                                 when {
                                                     isSpecial -> Color(0x33FF5252)
@@ -204,7 +209,7 @@ fun DeveloperPinDialog(
                                             item, 
                                             color = if (isFocused && !isSpecial) GlassColors.DeepBackground else Color.White, 
                                             fontWeight = FontWeight.Bold, 
-                                            fontSize = if (isSpecial) 12.sp else 18.sp
+                                            fontSize = if (isSpecial) 11.sp else 16.sp
                                         )
                                     }
                                 }
@@ -213,7 +218,7 @@ fun DeveloperPinDialog(
                     }
                 }
 
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(16.dp))
                 
                 // Tombol Hapus Crash Log
                 var isFocusedLog by remember { mutableStateOf(false) }
@@ -229,13 +234,13 @@ fun DeveloperPinDialog(
                             .clickable { 
                                 CrashHandler.clearCrashLog(context)
                                 android.widget.Toast.makeText(context, "Crash log dibersihkan", android.widget.Toast.LENGTH_SHORT).show()
-                            }.padding(12.dp),
+                            }.padding(10.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Delete, null, tint = if (isFocusedLog) GlassColors.DeepBackground else GlassColors.AccentAmber, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Hapus Crash Log", color = if (isFocusedLog) GlassColors.DeepBackground else GlassColors.AccentAmber, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Icon(Icons.Default.Delete, null, tint = if (isFocusedLog) GlassColors.DeepBackground else GlassColors.AccentAmber, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Hapus Crash Log", color = if (isFocusedLog) GlassColors.DeepBackground else GlassColors.AccentAmber, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                         }
                     }
                 }
