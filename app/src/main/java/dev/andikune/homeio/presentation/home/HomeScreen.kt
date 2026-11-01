@@ -91,6 +91,7 @@ import dev.andikune.homeio.util.PermissionHelper.PermissionType
 import dev.andikune.homeio.util.SoundFeedback
 import dev.andikune.homeio.util.SystemUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -120,7 +121,8 @@ fun HomeScreen(
 
     var isPaneOpen by remember { mutableStateOf(false) }
     var showAllAppsOverlay by remember { mutableStateOf(false) }
-    var showKioskConfirmDialog by remember { mutableStateOf(false) } // STATE DIALOG KIOSK
+    var showKioskConfirmDialog by remember { mutableStateOf(false) } 
+    var showManageFavoritesDialog by remember { mutableStateOf(false) } // STATE BARU
     
     val paneFocusRequester = remember { FocusRequester() }
     val firstMenuItemFocusRequester = remember { FocusRequester() }
@@ -133,7 +135,6 @@ fun HomeScreen(
     var selectedAppForContextMenu by remember { mutableStateOf<AppItem?>(null) }
     var isSideloadOnly by remember { mutableStateOf(false) }
 
-    // STATE BARU: Deteksi izin notifikasi secara real-time
     var hasNotifPermission by remember { mutableStateOf(PermissionHelper.checkPermission(context, PermissionType.NOTIF_LISTENER)) }
 
     DisposableEffect(lifecycleOwner) {
@@ -185,7 +186,6 @@ fun HomeScreen(
         )
     }
 
-    // DIALOG KONFIRMASI KIOSK
     if (showKioskConfirmDialog) {
         KioskConfirmDialog(
             onConfirm = {
@@ -193,6 +193,19 @@ fun HomeScreen(
                 showKioskConfirmDialog = false
             },
             onDismiss = { showKioskConfirmDialog = false }
+        )
+    }
+
+    // DIALOG KELOLA FAVORIT
+    if (showManageFavoritesDialog) {
+        ManageFavoritesDialog(
+            allApps = allApps,
+            currentFavorites = config.favoritePackages,
+            onSave = { newFavs ->
+                onSaveConfig(config.copy(favoritePackages = newFavs))
+                showManageFavoritesDialog = false
+            },
+            onDismiss = { showManageFavoritesDialog = false }
         )
     }
 
@@ -209,7 +222,6 @@ fun HomeScreen(
     Box(Modifier.fillMaxSize()) {
         WallpaperView(config = config)
         
-        // --- FIX: KECERAHAN 0% BIKIN HITAM PEKAT ---
         if (config.brightnessMode == "MANUAL" && config.manualBrightness == 0) {
             Box(Modifier.fillMaxSize().background(Color.Black))
         } else {
@@ -218,23 +230,18 @@ fun HomeScreen(
 
         Box(Modifier.fillMaxSize().padding(safePadding)) {
             
-            // --- FIX: TOMBOL KIRI ATAS CUMA 2 (Kiosk & Dashboard) ---
             Row(
                 modifier = Modifier.align(Alignment.TopStart).padding(top = 16.dp, start = 16.dp).focusGroup(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 1. Tombol Kiosk (Tameng Merah) - DENGAN KONFIRMASI
                 SystemControlIcon(icon = Icons.Rounded.Shield, tint = GlassColors.AccentRed, onClick = { 
                     if (config.isKioskModeEnabled) {
-                        // Langsung matikan jika sedang aktif
                         onSaveConfig(config.copy(isKioskModeEnabled = false))
                     } else {
-                        // Tampilkan konfirmasi jika ingin mengaktifkan
                         showKioskConfirmDialog = true
                     }
                 })
-                // 2. Tombol Kendali Sistem (Dashboard)
                 SystemControlIcon(icon = Icons.Rounded.Dashboard, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
             }
 
@@ -255,6 +262,7 @@ fun HomeScreen(
                     iconSizeMultiplier = config.appIconSizeMultiplier, 
                     onAppClick = { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) }, 
                     onAppLongClick = { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app },
+                    onOpenManageFavorites = { showManageFavoritesDialog = true }, // PARAMETER BARU
                     modifier = Modifier.focusProperties { down = carouselFocusRequester }
                 )
                 
@@ -314,7 +322,7 @@ fun HomeScreen(
                     LeftNavigationGlassPanel(
                         selectedNav, isSideloadOnly,
                         notifications = notifications,
-                        hasNotifPermission = hasNotifPermission, // PARAMETER BARU
+                        hasNotifPermission = hasNotifPermission,
                         firstItemFocusRequester = firstMenuItemFocusRequester,
                         onSearchClick = { SoundFeedback.playClick(context); showSearchDialog = true },
                         onNotificationPermissionClick = { 
@@ -347,6 +355,112 @@ fun HomeScreen(
     }
 }
 
+// --- DIALOG KELOLA FAVORIT BARU ---
+@Composable
+fun ManageFavoritesDialog(
+    allApps: List<AppItem>,
+    currentFavorites: List<String>,
+    onSave: (List<String>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedFavs by remember { mutableStateOf(currentFavorites) }
+    val firstFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) { delay(150); runCatching { firstFocusRequester.requestFocus() } }
+
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().background(Color(0xE60A0E1A)).padding(32.dp)) {
+            Column(Modifier.fillMaxSize()) {
+                Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column {
+                        Text("KELOLA APLIKASI FAVORIT", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        Text("Pilih maksimal 3 aplikasi untuk tampil di Home", color = GlassColors.TextSecondary, fontSize = 13.sp)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(Modifier.size(40.dp).clip(CircleShape).background(GlassColors.AccentGreen).focusable()
+                            .onPreviewKeyEvent { event -> if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) { onSave(selectedFavs); true } else false }
+                            .clickable { onSave(selectedFavs) }, contentAlignment = Alignment.Center) { Icon(Icons.Default.Check, "Simpan", tint = Color.White) }
+                        Box(Modifier.size(40.dp).clip(CircleShape).background(GlassColors.GlassTint).focusable()
+                            .onPreviewKeyEvent { event -> if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) { onDismiss(); true } else false }
+                            .clickable { onDismiss() }, contentAlignment = Alignment.Center) { Icon(Icons.Default.Close, "Batal", tint = Color.White) }
+                    }
+                }
+                
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 100.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxSize().focusGroup()
+                ) {
+                    items(allApps, key = { it.packageName }) { app ->
+                        val isSelected = selectedFavs.contains(app.packageName)
+                        var isFocused by remember { mutableStateOf(false) }
+                        
+                        Box(modifier = Modifier.height(120.dp)) {
+                            NeonFocusBorder(focused = isFocused, cornerRadius = 16.dp, modifier = Modifier.fillMaxSize()) {
+                                Box(
+                                    Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp))
+                                        .background(if (isSelected) GlassColors.AccentGlow.copy(alpha = 0.2f) else GlassColors.GlassTint)
+                                        .border(if (isSelected) 2.dp else 0.dp, if (isSelected) GlassColors.AccentGlow else Color.Transparent, RoundedCornerShape(16.dp))
+                                        .onFocusChanged { isFocused = it.isFocused }.focusable()
+                                        .onPreviewKeyEvent { e -> 
+                                            if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) {
+                                                if (isSelected) {
+                                                    selectedFavs = selectedFavs - app.packageName
+                                                } else if (selectedFavs.size < 3) {
+                                                    selectedFavs = selectedFavs + app.packageName
+                                                } else {
+                                                    Toast.makeText(context, "Maksimal 3 favorit!", Toast.LENGTH_SHORT).show()
+                                                }
+                                                true
+                                            } else false 
+                                        }
+                                        .clickable {
+                                            if (isSelected) {
+                                                selectedFavs = selectedFavs - app.packageName
+                                            } else if (selectedFavs.size < 3) {
+                                                selectedFavs = selectedFavs + app.packageName
+                                            } else {
+                                                Toast.makeText(context, "Maksimal 3 favorit!", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }.padding(8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        AppIcon(app.packageName, app.label, Modifier.size(48.dp))
+                                        Spacer(Modifier.height(8.dp))
+                                        Text(app.label, color = Color.White, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        if (isSelected) {
+                                            Icon(Icons.Default.CheckCircle, null, tint = GlassColors.AccentGreen, modifier = Modifier.size(16.dp).align(Alignment.End))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AppIcon(packageName: String, label: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val bitmap by produceState<Bitmap?>(initialValue = iconCache.get(packageName), packageName) {
+        if (value == null) {
+            val loaded = withContext(Dispatchers.IO) { try { drawableToBitmap(context.packageManager.getApplicationIcon(packageName)) } catch (e: Exception) { null } }
+            if (loaded != null) { iconCache.put(packageName, loaded); value = loaded }
+        }
+    }
+    if (bitmap != null) {
+        Image(bitmap = bitmap!!.asImageBitmap(), contentDescription = label, modifier = modifier.clip(RoundedCornerShape(12.dp)))
+    } else {
+        Box(modifier.background(Color(0x33FFFFFF), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+            Text(label.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 24.sp)
+        }
+    }
+}
+
 @Composable
 fun KioskConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val focusReq = remember { FocusRequester() }
@@ -366,7 +480,6 @@ fun KioskConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
                 Spacer(Modifier.height(24.dp))
                 
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    // Tombol Batal
                     NeonFocusBorder(focused = isCancelFocused, cornerRadius = 12.dp, modifier = Modifier.weight(1f)) {
                         Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (isCancelFocused) Color(0x33FFFFFF) else Color.Transparent)
                             .onFocusChanged { isCancelFocused = it.isFocused }.focusable()
@@ -376,7 +489,6 @@ fun KioskConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
                         }
                     }
 
-                    // Tombol Konfirmasi
                     NeonFocusBorder(focused = isConfirmFocused, cornerRadius = 12.dp, modifier = Modifier.weight(1f)) {
                         Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (isConfirmFocused) GlassColors.AccentRed else GlassColors.AccentRed.copy(alpha = 0.8f))
                             .focusRequester(focusReq)
@@ -473,18 +585,20 @@ fun AllAppsCenterCarousel(
     val initialIndex = remember(carouselApps) { if (carouselApps.size > 3) 3 else 0 }
     var selectedIndex by remember(carouselApps) { mutableIntStateOf(initialIndex) }
     
-    // Inisialisasi state tanpa edgeSlots
     val lazyListState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
     val scope = rememberCoroutineScope()
     
     var isCarouselFocused by remember { mutableStateOf(false) }
     var isProcessingKey by remember { mutableStateOf(false) }
+    
+    // STATE UNTUK LONG PRESS
+    var centerKeyJob by remember { mutableStateOf<Job?>(null) }
+    var isCenterLongPressed by remember { mutableStateOf(false) }
 
     val baseCardWidth = 110.dp
     val cardWidth = (baseCardWidth * iconSizeMultiplier).coerceIn(80.dp, 160.dp)
     val itemSpacing = 16.dp
 
-    // FIX 1: Sinkronisasi kalkulasi tengah HANYA ketika swipe berhenti (tidak memicu loop)
     LaunchedEffect(lazyListState) {
         snapshotFlow { lazyListState.isScrollInProgress }
             .collect { isScrolling ->
@@ -502,7 +616,6 @@ fun AllAppsCenterCarousel(
             }
     }
 
-    // FIX 2: Kunci pemrosesan key selama scroll
     LaunchedEffect(lazyListState.isScrollInProgress) {
         if (!lazyListState.isScrollInProgress) {
             delay(150)
@@ -511,7 +624,6 @@ fun AllAppsCenterCarousel(
     }
 
     BoxWithConstraints(Modifier.fillMaxWidth().height(140.dp), contentAlignment = Alignment.Center) {
-        // FIX 3: Padding HANYA mengambil lebar 1 kartu agar item pasti mati di tengah
         val horizontalPadding = ((maxWidth - cardWidth) / 2f).coerceAtLeast(0.dp)
         
         LazyRow(
@@ -525,7 +637,34 @@ fun AllAppsCenterCarousel(
                 .onFocusChanged { isCarouselFocused = it.isFocused }
                 .focusable()
                 .onPreviewKeyEvent { event ->
-                    if (event.type == KeyEventType.KeyDown) {
+                    val isCenterKey = event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter
+
+                    if (isCenterKey) {
+                        if (event.type == KeyEventType.KeyDown) {
+                            if (!isProcessingKey && centerKeyJob == null) {
+                                isCenterLongPressed = false
+                                centerKeyJob = scope.launch {
+                                    delay(600)
+                                    isCenterLongPressed = true
+                                    val app = carouselApps.getOrNull(selectedIndex)
+                                    if (app != null) onAppLongClick(app)
+                                }
+                            }
+                            true
+                        } else if (event.type == KeyEventType.KeyUp) {
+                            centerKeyJob?.cancel()
+                            centerKeyJob = null
+                            if (!isCenterLongPressed) {
+                                val app = carouselApps.getOrNull(selectedIndex)
+                                if (app != null && !isProcessingKey) {
+                                    isProcessingKey = true
+                                    onAppClick(app)
+                                }
+                            }
+                            isCenterLongPressed = false
+                            true
+                        } else false
+                    } else if (event.type == KeyEventType.KeyDown) {
                         when (event.key) {
                             Key.DirectionLeft -> {
                                 if (isProcessingKey || lazyListState.isScrollInProgress) return@onPreviewKeyEvent true
@@ -550,16 +689,6 @@ fun AllAppsCenterCarousel(
                                 true
                             }
                             Key.DirectionDown -> { onEdgeRightOrDownReached(); true }
-                            Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                                if (!isProcessingKey) {
-                                    val app = carouselApps.getOrNull(selectedIndex)
-                                    if (app != null) {
-                                        isProcessingKey = true
-                                        onAppClick(app)
-                                    }
-                                }
-                                true
-                            }
                             else -> false
                         }
                     } else if (event.type == KeyEventType.KeyUp) {
@@ -597,10 +726,29 @@ fun FavoriteAppsSection(
     iconSizeMultiplier: Float, 
     onAppClick: (AppItem) -> Unit, 
     onAppLongClick: (AppItem) -> Unit,
+    onOpenManageFavorites: () -> Unit, // PARAMETER BARU
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
-        Text("${stringResource(R.string.favorite_apps)} (3 Utama)", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
+            Text("${stringResource(R.string.favorite_apps)} (3 Utama)", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.width(12.dp))
+            
+            // TOMBOL KELOLA FAVORIT
+            var isEditFocused by remember { mutableStateOf(false) }
+            NeonFocusBorder(focused = isEditFocused, cornerRadius = 20.dp) {
+                Box(Modifier.size(28.dp).clip(CircleShape)
+                    .background(if (isEditFocused) GlassColors.AccentGlow else GlassColors.GlassTint)
+                    .border(1.dp, GlassColors.GlassBorder, CircleShape)
+                    .onFocusChanged { isEditFocused = it.isFocused }.focusable()
+                    .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onOpenManageFavorites(); true } else false }
+                    .clickable { onOpenManageFavorites() }, contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Edit, "Kelola", tint = if (isEditFocused) GlassColors.DeepBackground else Color.White, modifier = Modifier.size(14.dp))
+                }
+            }
+        }
+        
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth().focusGroup(), verticalAlignment = Alignment.CenterVertically) {
             favoriteApps.forEach { app -> 
                 AppCardItem(
@@ -625,6 +773,11 @@ fun AppCardItem(
 
     val scale by animateFloatAsState(targetValue = if (isEffectivelyFocused) 1.15f else 0.9f, label = "carousel_scale")
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // STATE UNTUK LONG PRESS DI D-PAD
+    var keyDownJob by remember { mutableStateOf<Job?>(null) }
+    var isLongPressed by remember { mutableStateOf(false) }
 
     val baseIconSize = 48.dp
     val currentIconSize = (baseIconSize * iconSizeMultiplier).coerceIn(24.dp, 80.dp)
@@ -652,9 +805,30 @@ fun AppCardItem(
                     if (useNativeFocus) {
                         Modifier.onFocusChanged { isNativeFocused = it.isFocused }.focusable()
                             .onPreviewKeyEvent { event ->
-                                if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)) {
-                                    isPressedManual = true; onClick(); true
-                                } else if (event.type == KeyEventType.KeyUp) { isPressedManual = false; false } else false
+                                val isCenterKey = event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter
+                                if (isCenterKey) {
+                                    if (event.type == KeyEventType.KeyDown) {
+                                        if (!isPressedManual) {
+                                            isPressedManual = true
+                                            isLongPressed = false
+                                            keyDownJob = scope.launch {
+                                                delay(600)
+                                                isLongPressed = true
+                                                onLongClick()
+                                            }
+                                        }
+                                        true
+                                    } else if (event.type == KeyEventType.KeyUp) {
+                                        isPressedManual = false
+                                        keyDownJob?.cancel()
+                                        keyDownJob = null
+                                        if (!isLongPressed) {
+                                            onClick()
+                                        }
+                                        isLongPressed = false
+                                        true
+                                    } else false
+                                } else false
                             }
                     } else Modifier
                 )
@@ -713,7 +887,7 @@ fun LeftNavigationGlassPanel(
     selectedNav: String, 
     isSideloadActive: Boolean, 
     notifications: List<android.service.notification.StatusBarNotification>,
-    hasNotifPermission: Boolean, // PARAMETER BARU
+    hasNotifPermission: Boolean,
     firstItemFocusRequester: FocusRequester, 
     onSearchClick: () -> Unit, 
     onNotificationPermissionClick: () -> Unit,
@@ -737,7 +911,6 @@ fun LeftNavigationGlassPanel(
         
         Box(Modifier.focusRequester(firstItemFocusRequester)) { GlassNavButton(Icons.Default.Search, stringResource(R.string.nav_search), false, onSearchClick) }
 
-        // PERBAIKAN LOGIKA NOTIFIKASI
         if (!hasNotifPermission) {
             var isFocusedBtn by remember { mutableStateOf(false) }
             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (isFocusedBtn) GlassColors.AccentAmber.copy(alpha = 0.3f) else GlassColors.AccentAmber.copy(alpha = 0.15f)).border(1.dp, GlassColors.AccentAmber, RoundedCornerShape(14.dp))
