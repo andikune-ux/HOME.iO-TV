@@ -1,5 +1,6 @@
 package dev.andikune.homeio.presentation.settings
 
+import android.util.Base64
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,7 +42,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.URL
-import java.security.MessageDigest
 
 @Composable
 fun DeveloperPinDialog(
@@ -79,13 +79,12 @@ fun DeveloperPinDialog(
         scope.launch {
             try {
                 val url = URL("https://raw.githubusercontent.com/andikune-ux/dev.andikune-apps/main/system_config.txt")
-                val expectedHash = withContext(Dispatchers.IO) { url.readText().trim() }
+                val expectedBase64 = withContext(Dispatchers.IO) { url.readText().trim() }
                 
-                // FIX: Menggunakan .toInt() and 0xFF untuk mencegah bug signed byte pada hash
-                val digest = MessageDigest.getInstance("SHA-256")
-                val actualHash = digest.digest(pin.trim().toByteArray()).joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+                // LOGIKA BASE64: Ubah PIN yang diketik menjadi Base64
+                val actualBase64 = Base64.encodeToString(pin.toByteArray(), Base64.NO_WRAP)
 
-                if (actualHash == expectedHash) {
+                if (actualBase64 == expectedBase64) {
                     val newState = !isCurrentlyDevMode
                     DeveloperPrefs.setDevModeActive(context, newState)
                     onSuccess(newState)
