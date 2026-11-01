@@ -1,6 +1,7 @@
 package dev.andikune.homeio
 
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -8,6 +9,7 @@ import android.content.pm.ActivityInfo
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.WindowManager
@@ -90,7 +92,6 @@ class MainActivity : ComponentActivity() {
     private var screensaverTimeoutMs = 5 * 60 * 1000L
     private var pendingFileManagerTrigger by mutableStateOf(false)
     
-    // TAMBAHAN: Blokir tombol remote saat pop-up terbuka
     private var isPopupBlockingKey by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -109,7 +110,6 @@ class MainActivity : ComponentActivity() {
                 var crashLog by remember { mutableStateOf<String?>(null) }
                 var isSplashFinished by remember { mutableStateOf(false) }
                 
-                // STATE UNTUK T&C DAN ONBOARDING
                 var showTerms by remember { mutableStateOf(!TermsPrefs.isAgreed(context)) }
                 var showOnboarding by remember { mutableStateOf(false) }
                 
@@ -169,12 +169,10 @@ class MainActivity : ComponentActivity() {
                 var downloadReady by remember { mutableStateOf(false) }
                 var isError by remember { mutableStateOf(false) }
 
-                // SINKRONISASI STATE POP-UP KE ACTIVITY LEVEL
                 LaunchedEffect(showTerms, showQrisPopup, showOnboarding, showLauncherPrompt, showUpdateDialog) {
                     isPopupBlockingKey = showTerms || showQrisPopup || showOnboarding || showLauncherPrompt || showUpdateDialog
                 }
 
-                // STATE SINKRONISASI
                 val flowConfig by appContainer.preferencesManager.settingsFlow.collectAsState(initial = SettingsConfig())
                 var localConfig by remember { mutableStateOf<SettingsConfig?>(null) }
                 val config = localConfig ?: flowConfig
@@ -246,9 +244,7 @@ class MainActivity : ComponentActivity() {
                                 }
                                 weatherInfo = WeatherInfo(cw.temperature, cw.weathercode, desc, config.weatherLocation)
                             }
-                        } catch (_: Exception) {
-                            // Pertahankan data terakhir agar tampilan tidak kosong saat jaringan berkedip.
-                        }
+                        } catch (_: Exception) {}
                         delay(if (weatherInfo == null) 30_000L else 30 * 60 * 1000L)
                     }
                 }
@@ -420,28 +416,17 @@ class MainActivity : ComponentActivity() {
         return super.dispatchKeyEvent(event)
     }
 
-    // TAMBAHAN: Handle Tombol Remote (Settings 176 & Input 178) dengan Fallback & Popup Blocker
+    // HANDLER TOMBOL REMOTE DENGAN PENCARIAN OTOMATIS (FOOLPROOF)
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        // JIKA ADA POP-UP TERBUKA, JANGAN PROSES TOMBOL SETTINGS/INPUT DI SINI
         if (isPopupBlockingKey) {
             return super.onKeyDown(keyCode, event)
         }
 
         if (keyCode == KeyEvent.KEYCODE_SETTINGS) {
-            try {
-                startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            } catch (e: Exception) {
-                try {
-                    startActivity(Intent().setComponent(android.content.ComponentName(
-                        "com.android.tv.settings",
-                        "com.android.tv.settings.MainSettings"
-                    )))
-                } catch (e2: Exception) {
-                    Toast.makeText(this, "Pengaturan sistem tidak ditemukan", Toast.LENGTH_SHORT).show()
-                }
-            }
+            openSystemSettings(this)
             return true
         }
+        
         if (keyCode == KeyEvent.KEYCODE_TV_INPUT) {
             try {
                 startActivity(Intent("com.android.tv.action.VIEW_INPUTS").setPackage("com.mitv.livetv"))
@@ -459,6 +444,61 @@ class MainActivity : ComponentActivity() {
             return true
         }
         return super.onKeyDown(keyCode, event)
+    }
+
+    // FUNGSI PENCARIAN OTOMATIS SETTINGS SISTEM
+    private fun openSystemSettings(context: Context) {
+        // 1. Coba Intent Standar Android
+        try {
+            val intent = Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            return
+        } catch (e: Exception) { Log.e("MainActivity", "Standard settings failed", e) }
+
+        // 2. Coba Intent Spesifik Android TV
+        try {
+            val intent = Intent("android.settings.SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            return
+        } catch (e: Exception) { Log.e("MainActivity", "TV settings failed", e) }
+
+        // 3. Coba Package Settings TV Umum (Xiaomi/MiTV)
+        val knownSettings = listOf(
+            "com.android.tv.settings/com.android.tv.settings.MainSettings",
+            "com.mitv.settings/com.mitv.settings.MainSettings",
+            "com.xiaomi.tv.settings/com.xiaomi.tv.settings.MainSettings"
+        )
+        for (component in knownSettings) {
+            try {
+                val intent = Intent().apply {
+                    setComponent(ComponentName(component.substringBefore("/"), component.substringAfter("/")))
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                return
+            } catch (e: Exception) { }
+        }
+
+        // 4. Bruteforce Scan: Cari aplikasi yang namanya mengandung "settings"
+        try {
+            val pm = context.packageManager
+            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            val resolveInfos = pm.queryIntentActivities(intent, 0)
+            for (info in resolveInfos) {
+                val pkgName = info.activityInfo.packageName.lowercase()
+                if (pkgName.contains("settings") || pkgName.contains("tvsetting")) {
+                    val launchIntent = pm.getLaunchIntentForPackage(info.activityInfo.packageName)
+                    if (launchIntent != null) {
+                        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(launchIntent)
+                        return
+                    }
+                }
+            }
+        } catch (e: Exception) { Log.e("MainActivity", "Bruteforce failed", e) }
+
+        // Jika semua gagal
+        Toast.makeText(context, "Pengaturan sistem tidak ditemukan di TV ini", Toast.LENGTH_SHORT).show()
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent?): Boolean { lastUserInteractionTime = System.currentTimeMillis(); return super.dispatchTouchEvent(ev) }
