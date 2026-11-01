@@ -66,6 +66,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -119,6 +120,7 @@ fun HomeScreen(
 
     var isPaneOpen by remember { mutableStateOf(false) }
     var showAllAppsOverlay by remember { mutableStateOf(false) }
+    var showKioskConfirmDialog by remember { mutableStateOf(false) } // STATE DIALOG KIOSK
     
     val paneFocusRequester = remember { FocusRequester() }
     val firstMenuItemFocusRequester = remember { FocusRequester() }
@@ -183,6 +185,17 @@ fun HomeScreen(
         )
     }
 
+    // DIALOG KONFIRMASI KIOSK
+    if (showKioskConfirmDialog) {
+        KioskConfirmDialog(
+            onConfirm = {
+                onSaveConfig(config.copy(isKioskModeEnabled = true))
+                showKioskConfirmDialog = false
+            },
+            onDismiss = { showKioskConfirmDialog = false }
+        )
+    }
+
     val favoriteApps = remember(allApps, config.favoritePackages) {
         val favs = allApps.filter { config.favoritePackages.contains(it.packageName) }
         if (favs.isNotEmpty()) favs.take(3) else allApps.take(3)
@@ -211,10 +224,15 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 1. Tombol Kiosk (Tameng Merah)
+                // 1. Tombol Kiosk (Tameng Merah) - DENGAN KONFIRMASI
                 SystemControlIcon(icon = Icons.Rounded.Shield, tint = GlassColors.AccentRed, onClick = { 
-                    val newKiosk = !config.isKioskModeEnabled
-                    onSaveConfig(config.copy(isKioskModeEnabled = newKiosk)) 
+                    if (config.isKioskModeEnabled) {
+                        // Langsung matikan jika sedang aktif
+                        onSaveConfig(config.copy(isKioskModeEnabled = false))
+                    } else {
+                        // Tampilkan konfirmasi jika ingin mengaktifkan
+                        showKioskConfirmDialog = true
+                    }
                 })
                 // 2. Tombol Kendali Sistem (Dashboard)
                 SystemControlIcon(icon = Icons.Rounded.Dashboard, tint = GlassColors.AccentGlow, onClick = onOpenSystemControl)
@@ -325,6 +343,51 @@ fun HomeScreen(
                 onAppClick = { app -> SoundFeedback.playClick(context); safeLaunchApp(context, app) },
                 onAppLongClick = { app -> SoundFeedback.playClick(context); selectedAppForContextMenu = app }
             )
+        }
+    }
+}
+
+@Composable
+fun KioskConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val focusReq = remember { FocusRequester() }
+    var isConfirmFocused by remember { mutableStateOf(false) }
+    var isCancelFocused by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) { delay(200); runCatching { focusReq.requestFocus() } }
+
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = false)) {
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
+            Column(Modifier.fillMaxWidth(0.7f).liquidGlass(cornerRadius = 20.dp).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Rounded.Warning, null, tint = GlassColors.AccentRed, modifier = Modifier.size(48.dp))
+                Spacer(Modifier.height(16.dp))
+                Text("AKTIFKAN KIOSK MODE?", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                Text("Layar akan terkunci dan pengguna tidak bisa keluar dari aplikasi ini tanpa menekan tombol darurat merah di Kendali Sistem.", color = GlassColors.TextSecondary, fontSize = 13.sp, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(24.dp))
+                
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Tombol Batal
+                    NeonFocusBorder(focused = isCancelFocused, cornerRadius = 12.dp, modifier = Modifier.weight(1f)) {
+                        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (isCancelFocused) Color(0x33FFFFFF) else Color.Transparent)
+                            .onFocusChanged { isCancelFocused = it.isFocused }.focusable()
+                            .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onDismiss(); true } else false }
+                            .clickable { onDismiss() }.padding(14.dp), contentAlignment = Alignment.Center) {
+                            Text("Batal", color = if (isCancelFocused) Color.White else GlassColors.TextSecondary, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // Tombol Konfirmasi
+                    NeonFocusBorder(focused = isConfirmFocused, cornerRadius = 12.dp, modifier = Modifier.weight(1f)) {
+                        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (isConfirmFocused) GlassColors.AccentRed else GlassColors.AccentRed.copy(alpha = 0.8f))
+                            .focusRequester(focusReq)
+                            .onFocusChanged { isConfirmFocused = it.isFocused }.focusable()
+                            .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { onConfirm(); true } else false }
+                            .clickable { onConfirm() }.padding(14.dp), contentAlignment = Alignment.Center) {
+                            Text("Ya, Aktifkan", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
         }
     }
 }
