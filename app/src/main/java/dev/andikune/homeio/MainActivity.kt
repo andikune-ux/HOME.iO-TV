@@ -61,6 +61,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import dev.andikune.homeio.data.local.TermsPrefs
 import dev.andikune.homeio.domain.model.SettingsConfig
 import dev.andikune.homeio.domain.model.WeatherInfo
 import dev.andikune.homeio.kiosk.KioskManager
@@ -72,6 +73,7 @@ import dev.andikune.homeio.presentation.components.liquidGlass
 import dev.andikune.homeio.presentation.home.HomeScreen
 import dev.andikune.homeio.presentation.onboarding.OnboardingPermissionDialog
 import dev.andikune.homeio.presentation.onboarding.QrisDonationPopup
+import dev.andikune.homeio.presentation.onboarding.TermsAndConditionsDialog
 import dev.andikune.homeio.presentation.screensaver.ScreensaverActivity
 import dev.andikune.homeio.presentation.settings.SettingsScreen
 import dev.andikune.homeio.presentation.settings.SystemControlScreen
@@ -107,10 +109,13 @@ class MainActivity : ComponentActivity() {
                 var crashLog by remember { mutableStateOf<String?>(null) }
                 var isSplashFinished by remember { mutableStateOf(false) }
                 
+                // STATE UNTUK T&C DAN ONBOARDING
+                var showTerms by remember { mutableStateOf(!TermsPrefs.isAgreed(context)) }
+                var showOnboarding by remember { mutableStateOf(false) }
+                
                 var isSettingsOpen by remember { mutableStateOf(false) }
                 var isSystemControlOpen by remember { mutableStateOf(false) }
                 
-                var showOnboarding by remember { mutableStateOf(false) }
                 var showQrisPopup by remember { mutableStateOf(false) }
                 var isDefaultLauncher by remember { mutableStateOf(LauncherHelper.isDefaultLauncher(context)) }
                 var showLauncherPrompt by remember {
@@ -151,8 +156,8 @@ class MainActivity : ComponentActivity() {
                     if (!OnboardingPrefs.isCompleted(context)) showOnboarding = true
                 }
                 
-                LaunchedEffect(showOnboarding, showLauncherPrompt, isSplashFinished) {
-                    if (!showOnboarding && !showLauncherPrompt && isSplashFinished) {
+                LaunchedEffect(showTerms, showOnboarding, showLauncherPrompt, isSplashFinished) {
+                    if (!showTerms && !showOnboarding && !showLauncherPrompt && isSplashFinished) {
                         showQrisPopup = true
                     }
                 }
@@ -165,8 +170,8 @@ class MainActivity : ComponentActivity() {
                 var isError by remember { mutableStateOf(false) }
 
                 // SINKRONISASI STATE POP-UP KE ACTIVITY LEVEL
-                LaunchedEffect(showQrisPopup, showOnboarding, showLauncherPrompt, showUpdateDialog) {
-                    isPopupBlockingKey = showQrisPopup || showOnboarding || showLauncherPrompt || showUpdateDialog
+                LaunchedEffect(showTerms, showQrisPopup, showOnboarding, showLauncherPrompt, showUpdateDialog) {
+                    isPopupBlockingKey = showTerms || showQrisPopup || showOnboarding || showLauncherPrompt || showUpdateDialog
                 }
 
                 // STATE SINKRONISASI
@@ -204,9 +209,9 @@ class MainActivity : ComponentActivity() {
                 }
 
                 screensaverTimeoutMs = if (!config.screensaverEnabled) 0L else (config.screensaverTimeoutMinutes * 60 * 1000L)
-                LaunchedEffect(screensaverTimeoutMs, showQrisPopup, showOnboarding, showLauncherPrompt, showUpdateDialog) {
+                LaunchedEffect(screensaverTimeoutMs, showTerms, showQrisPopup, showOnboarding, showLauncherPrompt, showUpdateDialog) {
                     if (screensaverTimeoutMs <= 0L) return@LaunchedEffect
-                    if (showQrisPopup || showOnboarding || showLauncherPrompt || showUpdateDialog) return@LaunchedEffect
+                    if (showTerms || showQrisPopup || showOnboarding || showLauncherPrompt || showUpdateDialog) return@LaunchedEffect
                     
                     while (true) {
                         delay(5000)
@@ -248,8 +253,8 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                LaunchedEffect(isSplashFinished, showQrisPopup, showOnboarding, showLauncherPrompt) {
-                    if (!isSplashFinished || showQrisPopup || showOnboarding || showLauncherPrompt) return@LaunchedEffect
+                LaunchedEffect(isSplashFinished, showTerms, showQrisPopup, showOnboarding, showLauncherPrompt) {
+                    if (!isSplashFinished || showTerms || showQrisPopup || showOnboarding || showLauncherPrompt) return@LaunchedEffect
                     if (!UpdatePrefs.shouldCheck(context)) return@LaunchedEffect
                     try {
                         val info = UpdateManager.checkForUpdate()
@@ -296,7 +301,8 @@ class MainActivity : ComponentActivity() {
                     onDispose { context.unregisterReceiver(receiver) }
                 }
 
-                BackHandler(enabled = isSettingsOpen || isSystemControlOpen || showUpdateDialog || showOnboarding || showQrisPopup) { 
+                BackHandler(enabled = showTerms || isSettingsOpen || isSystemControlOpen || showUpdateDialog || showOnboarding || showQrisPopup) { 
+                    if (showTerms) return@BackHandler
                     if (showUpdateDialog && updateInfo?.isForceUpdate == true) return@BackHandler
                     if (showQrisPopup) return@BackHandler 
                     if (showOnboarding) return@BackHandler
@@ -307,8 +313,12 @@ class MainActivity : ComponentActivity() {
 
                 when {
                     crashLog != null -> CrashLogScreen(crashLog!!) { CrashHandler.clearCrashLog(context); crashLog = null }
-                    showOnboarding -> OnboardingPermissionDialog { OnboardingPrefs.markCompleted(context); showOnboarding = false }
                     !isSplashFinished -> SplashScreen { isSplashFinished = true }
+                    showTerms -> TermsAndConditionsDialog { 
+                        TermsPrefs.setAgreed(context, true)
+                        showTerms = false
+                    }
+                    showOnboarding -> OnboardingPermissionDialog { OnboardingPrefs.markCompleted(context); showOnboarding = false }
                     isSystemControlOpen -> SystemControlScreen(config = config, onUpdateConfig = { 
                         localConfig = it 
                         scope.launch { appContainer.preferencesManager.updateSettings(it) } 
@@ -333,7 +343,7 @@ class MainActivity : ComponentActivity() {
                     QrisDonationPopup(onDismiss = { showQrisPopup = false })
                 }
 
-                if (showLauncherPrompt && isSplashFinished && !showOnboarding && !showQrisPopup) {
+                if (showLauncherPrompt && isSplashFinished && !showTerms && !showOnboarding && !showQrisPopup) {
                     DefaultLauncherDialog(
                         onRequestLauncher = {
                             try {
@@ -433,15 +443,12 @@ class MainActivity : ComponentActivity() {
             return true
         }
         if (keyCode == KeyEvent.KEYCODE_TV_INPUT) {
-            // Coba Package Spesifik Xiaomi dulu
             try {
                 startActivity(Intent("com.android.tv.action.VIEW_INPUTS").setPackage("com.mitv.livetv"))
             } catch (e: Exception) {
-                // Fallback 1: Intent VIEW_INPUTS umum
                 try {
                     startActivity(Intent("com.android.tv.action.VIEW_INPUTS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 } catch (e2: Exception) {
-                    // Fallback 2: Pengaturan Input sistem
                     try {
                         startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     } catch (e3: Exception) {
