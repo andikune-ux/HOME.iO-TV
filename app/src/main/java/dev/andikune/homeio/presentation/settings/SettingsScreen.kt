@@ -51,6 +51,7 @@ enum class SettingsCategory(val title: String, val icon: ImageVector) {
     TV_DISPLAY("Tampilan TV & Sistem", Icons.Default.Tv),
     UPDATER("Pembaruan Aplikasi", Icons.Default.SystemUpdate),
     BACKUP("Backup Biasa", Icons.Default.Save),
+    PERMISSIONS("Izin Aplikasi", Icons.Default.Security),
     INFO("Info Aplikasi", Icons.Default.Info)
 }
 
@@ -154,8 +155,6 @@ fun SettingsScreen(
                     .fillMaxHeight()
                     .liquidGlass(cornerRadius = 24.dp)
                     .padding(24.dp)
-                    // FIX: Jika fokus ada di dalam Box ini dan tombol Kiri ditekan,
-                    // maka fokus akan otomatis lompat ke Sidebar Kiri (sidebarFirstItemFocusRequester).
                     .focusProperties {
                         left = sidebarFirstItemFocusRequester
                     }
@@ -178,6 +177,7 @@ fun SettingsScreen(
                             SettingsCategory.TV_DISPLAY -> TvDisplaySection(draftConfig) { draftConfig = it }
                             SettingsCategory.UPDATER -> ApkFileListSection()
                             SettingsCategory.BACKUP -> BackupBiasaSection(draftConfig) { draftConfig = it }
+                            SettingsCategory.PERMISSIONS -> PermissionSection()
                             SettingsCategory.INFO -> InfoAppSection()
                         }
                     }
