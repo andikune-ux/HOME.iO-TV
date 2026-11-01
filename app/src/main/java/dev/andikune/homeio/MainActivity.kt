@@ -111,7 +111,6 @@ class MainActivity : ComponentActivity() {
                 var crashLog by remember { mutableStateOf<String?>(null) }
                 var isSplashFinished by remember { mutableStateOf(false) }
                 
-                // CEK DEVELOPER MODE UNTUK BYPASS
                 var isDevMode by remember { mutableStateOf(DeveloperPrefs.isDevModeActive(context)) }
 
                 var showTerms by remember { mutableStateOf(!TermsPrefs.isAgreed(context)) }
@@ -125,6 +124,9 @@ class MainActivity : ComponentActivity() {
                 var showLauncherPrompt by remember {
                     mutableStateOf(!isDefaultLauncher && !OnboardingPrefs.hasAskedLauncher(context))
                 }
+                
+                var backPressedTime by remember { mutableLongStateOf(0L) }
+
                 val lifecycleOwner = LocalLifecycleOwner.current
                 val launcherRoleRequest = rememberLauncherForActivityResult(
                     ActivityResultContracts.StartActivityForResult()
@@ -160,13 +162,11 @@ class MainActivity : ComponentActivity() {
                     if (!OnboardingPrefs.isCompleted(context)) showOnboarding = true
                 }
                 
-                // BYPASS SPLASH SCREEN
                 LaunchedEffect(Unit) {
                     if (isDevMode) isSplashFinished = true
                 }
                 
                 LaunchedEffect(showTerms, showOnboarding, showLauncherPrompt, isSplashFinished) {
-                    // BYPASS QRIS JIKA DEV MODE AKTIF
                     if (!showTerms && !showOnboarding && !showLauncherPrompt && isSplashFinished && !isDevMode) {
                         showQrisPopup = true
                     }
@@ -307,14 +307,31 @@ class MainActivity : ComponentActivity() {
                     onDispose { context.unregisterReceiver(receiver) }
                 }
 
-                BackHandler(enabled = showTerms || isSettingsOpen || isSystemControlOpen || showUpdateDialog || showOnboarding || showQrisPopup) { 
+                BackHandler(enabled = true) {
                     if (showTerms) return@BackHandler
                     if (showUpdateDialog && updateInfo?.isForceUpdate == true) return@BackHandler
                     if (showQrisPopup) return@BackHandler 
                     if (showOnboarding) return@BackHandler
-                    if (isSettingsOpen) isSettingsOpen = false
-                    else if (isSystemControlOpen) isSystemControlOpen = false
-                    else if (showUpdateDialog) showUpdateDialog = false
+                    
+                    if (isSettingsOpen) {
+                        isSettingsOpen = false
+                        return@BackHandler
+                    }
+                    if (isSystemControlOpen) {
+                        isSystemControlOpen = false
+                        return@BackHandler
+                    }
+                    if (showUpdateDialog) {
+                        showUpdateDialog = false
+                        return@BackHandler
+                    }
+
+                    if (System.currentTimeMillis() - backPressedTime < 2000) {
+                        finish()
+                    } else {
+                        backPressedTime = System.currentTimeMillis()
+                        Toast.makeText(context, "Tekan Back sekali lagi untuk keluar", Toast.LENGTH_SHORT).show()
+                    }
                 }
 
                 when {
@@ -332,7 +349,6 @@ class MainActivity : ComponentActivity() {
                     isSettingsOpen -> SettingsScreen(currentConfig = config, onSaveConfig = { newConfig ->
                         localConfig = newConfig
                         scope.launch { appContainer.preferencesManager.updateSettings(newConfig) }
-                        // REFRESH DEV MODE STATE JIKA BARU DIUBAH DARI SETTINGS
                         isDevMode = DeveloperPrefs.isDevModeActive(context)
                     }, onBack = { isSettingsOpen = false })
                     else -> HomeScreen(
@@ -418,43 +434,29 @@ class MainActivity : ComponentActivity() {
         SoundFeedback.release()
     }
 
+    // FIX: PINDAHKAN HANDLER KE DISPATCHKEYEVENT AGAR TIDAK DITELAN COMPOSE
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         lastUserInteractionTime = System.currentTimeMillis()
+        
         if (event.action == KeyEvent.ACTION_DOWN) {
+            // Suara klik untuk navigasi
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> SoundFeedback.playClick(this)
             }
-        }
-        return super.dispatchKeyEvent(event)
-    }
-
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (isPopupBlockingKey) {
-            return super.onKeyDown(keyCode, event)
-        }
-
-        if (keyCode == KeyEvent.KEYCODE_SETTINGS) {
-            openSystemSettings(this)
-            return true
-        }
-        
-        if (keyCode == KeyEvent.KEYCODE_TV_INPUT) {
-            try {
-                startActivity(Intent("com.android.tv.action.VIEW_INPUTS").setPackage("com.mitv.livetv"))
-            } catch (e: Exception) {
-                try {
-                    startActivity(Intent("com.android.tv.action.VIEW_INPUTS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                } catch (e2: Exception) {
-                    try {
-                        startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    } catch (e3: Exception) {
-                        Toast.makeText(this, "Input TV tidak ditemukan", Toast.LENGTH_SHORT).show()
-                    }
+            
+            // JIKA TIDAK ADA POP-UP, INTERSEP TOMBOL SETTINGS & INPUT
+            if (!isPopupBlockingKey) {
+                if (event.keyCode == KeyEvent.KEYCODE_SETTINGS) {
+                    openSystemSettings(this)
+                    return true // TELAN EVENT, JANGAN DITERUSKAN KE COMPOSE
+                }
+                if (event.keyCode == KeyEvent.KEYCODE_TV_INPUT) {
+                    openInputSelector(this)
+                    return true // TELAN EVENT
                 }
             }
-            return true
         }
-        return super.onKeyDown(keyCode, event)
+        return super.dispatchKeyEvent(event)
     }
 
     private fun openSystemSettings(context: Context) {
@@ -504,6 +506,22 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) { Log.e("MainActivity", "Bruteforce failed", e) }
 
         Toast.makeText(context, "Pengaturan sistem tidak ditemukan di TV ini", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun openInputSelector(context: Context) {
+        try {
+            context.startActivity(Intent("com.android.tv.action.VIEW_INPUTS").setPackage("com.mitv.livetv"))
+        } catch (e: Exception) {
+            try {
+                context.startActivity(Intent("com.android.tv.action.VIEW_INPUTS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (e2: Exception) {
+                try {
+                    context.startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (e3: Exception) {
+                    Toast.makeText(context, "Input TV tidak ditemukan", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent?): Boolean { lastUserInteractionTime = System.currentTimeMillis(); return super.dispatchTouchEvent(ev) }
