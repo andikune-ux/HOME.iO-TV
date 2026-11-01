@@ -63,6 +63,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import dev.andikune.homeio.data.local.DeveloperPrefs
 import dev.andikune.homeio.data.local.TermsPrefs
 import dev.andikune.homeio.domain.model.SettingsConfig
 import dev.andikune.homeio.domain.model.WeatherInfo
@@ -110,6 +111,9 @@ class MainActivity : ComponentActivity() {
                 var crashLog by remember { mutableStateOf<String?>(null) }
                 var isSplashFinished by remember { mutableStateOf(false) }
                 
+                // CEK DEVELOPER MODE UNTUK BYPASS
+                var isDevMode by remember { mutableStateOf(DeveloperPrefs.isDevModeActive(context)) }
+
                 var showTerms by remember { mutableStateOf(!TermsPrefs.isAgreed(context)) }
                 var showOnboarding by remember { mutableStateOf(false) }
                 
@@ -156,8 +160,14 @@ class MainActivity : ComponentActivity() {
                     if (!OnboardingPrefs.isCompleted(context)) showOnboarding = true
                 }
                 
+                // BYPASS SPLASH SCREEN
+                LaunchedEffect(Unit) {
+                    if (isDevMode) isSplashFinished = true
+                }
+                
                 LaunchedEffect(showTerms, showOnboarding, showLauncherPrompt, isSplashFinished) {
-                    if (!showTerms && !showOnboarding && !showLauncherPrompt && isSplashFinished) {
+                    // BYPASS QRIS JIKA DEV MODE AKTIF
+                    if (!showTerms && !showOnboarding && !showLauncherPrompt && isSplashFinished && !isDevMode) {
                         showQrisPopup = true
                     }
                 }
@@ -322,6 +332,8 @@ class MainActivity : ComponentActivity() {
                     isSettingsOpen -> SettingsScreen(currentConfig = config, onSaveConfig = { newConfig ->
                         localConfig = newConfig
                         scope.launch { appContainer.preferencesManager.updateSettings(newConfig) }
+                        // REFRESH DEV MODE STATE JIKA BARU DIUBAH DARI SETTINGS
+                        isDevMode = DeveloperPrefs.isDevModeActive(context)
                     }, onBack = { isSettingsOpen = false })
                     else -> HomeScreen(
                         config = config, allApps = installedApps, weatherInfo = weatherInfo,
@@ -416,7 +428,6 @@ class MainActivity : ComponentActivity() {
         return super.dispatchKeyEvent(event)
     }
 
-    // HANDLER TOMBOL REMOTE DENGAN PENCARIAN OTOMATIS (FOOLPROOF)
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (isPopupBlockingKey) {
             return super.onKeyDown(keyCode, event)
@@ -446,23 +457,19 @@ class MainActivity : ComponentActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
-    // FUNGSI PENCARIAN OTOMATIS SETTINGS SISTEM
     private fun openSystemSettings(context: Context) {
-        // 1. Coba Intent Standar Android
         try {
             val intent = Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
             return
         } catch (e: Exception) { Log.e("MainActivity", "Standard settings failed", e) }
 
-        // 2. Coba Intent Spesifik Android TV
         try {
             val intent = Intent("android.settings.SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
             return
         } catch (e: Exception) { Log.e("MainActivity", "TV settings failed", e) }
 
-        // 3. Coba Package Settings TV Umum (Xiaomi/MiTV)
         val knownSettings = listOf(
             "com.android.tv.settings/com.android.tv.settings.MainSettings",
             "com.mitv.settings/com.mitv.settings.MainSettings",
@@ -479,7 +486,6 @@ class MainActivity : ComponentActivity() {
             } catch (e: Exception) { }
         }
 
-        // 4. Bruteforce Scan: Cari aplikasi yang namanya mengandung "settings"
         try {
             val pm = context.packageManager
             val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
@@ -497,7 +503,6 @@ class MainActivity : ComponentActivity() {
             }
         } catch (e: Exception) { Log.e("MainActivity", "Bruteforce failed", e) }
 
-        // Jika semua gagal
         Toast.makeText(context, "Pengaturan sistem tidak ditemukan di TV ini", Toast.LENGTH_SHORT).show()
     }
 
