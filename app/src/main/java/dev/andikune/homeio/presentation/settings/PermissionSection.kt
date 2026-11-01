@@ -53,6 +53,7 @@ fun PermissionSection() {
     var systemLimitedUsage by remember { mutableStateOf(prefs.getBoolean("limit_usage", false)) }
     var systemLimitedListener by remember { mutableStateOf(prefs.getBoolean("limit_listener", false)) }
     var systemLimitedWrite by remember { mutableStateOf(prefs.getBoolean("limit_write", false)) }
+    var systemLimitedOverlay by remember { mutableStateOf(prefs.getBoolean("limit_overlay", false)) }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -81,6 +82,7 @@ fun PermissionSection() {
                 PermissionType.USAGE_ACCESS -> { systemLimitedUsage = true; prefs.edit().putBoolean("limit_usage", true).apply() }
                 PermissionType.NOTIF_LISTENER -> { systemLimitedListener = true; prefs.edit().putBoolean("limit_listener", true).apply() }
                 PermissionType.WRITE_SETTINGS -> { systemLimitedWrite = true; prefs.edit().putBoolean("limit_write", true).apply() }
+                PermissionType.OVERLAY -> { systemLimitedOverlay = true; prefs.edit().putBoolean("limit_overlay", true).apply() }
             }
             Toast.makeText(ctx, "Sistem TV tidak mendukung izin ini. Menggunakan mode kompatibilitas.", Toast.LENGTH_LONG).show()
             refresh++
@@ -93,6 +95,7 @@ fun PermissionSection() {
     val hasUsage = PermissionHelper.checkPermission(ctx, PermissionType.USAGE_ACCESS) || systemLimitedUsage
     val hasListener = PermissionHelper.checkPermission(ctx, PermissionType.NOTIF_LISTENER) || systemLimitedListener
     val hasWrite = PermissionHelper.checkPermission(ctx, PermissionType.WRITE_SETTINGS) || systemLimitedWrite
+    val hasOverlay = PermissionHelper.checkPermission(ctx, PermissionType.OVERLAY) || systemLimitedOverlay
 
     Column(Modifier.fillMaxWidth()) {
         Text(
@@ -141,8 +144,8 @@ fun PermissionSection() {
 
         PermissionRow(
             icon = Icons.Default.CheckCircle, 
-            title = "Akses RAM (Wajib)", 
-            desc = "Untuk fitur RAM Booster", 
+            title = "Akses Penggunaan (Wajib)", 
+            desc = "Untuk fitur RAM Booster (Usage Stats)", 
             granted = hasUsage, 
             onGrant = { handlePermission(PermissionType.USAGE_ACCESS) }
         )
@@ -165,6 +168,16 @@ fun PermissionSection() {
             desc = "Untuk Kecerahan & WiFi", 
             granted = hasWrite, 
             onGrant = { handlePermission(PermissionType.WRITE_SETTINGS) }
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        PermissionRow(
+            icon = Icons.Default.Layers, 
+            title = "Gambar di Atas Aplikasi (Opsional)", 
+            desc = "Untuk Overlay & Pop-up", 
+            granted = hasOverlay, 
+            onGrant = { handlePermission(PermissionType.OVERLAY) }
         )
         
         Spacer(Modifier.height(24.dp))
