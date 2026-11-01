@@ -97,7 +97,46 @@ fun PermissionSection() {
     val hasWrite = PermissionHelper.checkPermission(ctx, PermissionType.WRITE_SETTINGS) || systemLimitedWrite
     val hasOverlay = PermissionHelper.checkPermission(ctx, PermissionType.OVERLAY) || systemLimitedOverlay
 
+    // ANALISA SISTEM
+    val totalPermissions = 7
+    val grantedPermissions = listOf(hasStorage, hasNotif, hasInstall, hasUsage, hasListener, hasWrite, hasOverlay).count { it }
+    val isAllGranted = grantedPermissions == totalPermissions
+
     Column(Modifier.fillMaxWidth()) {
+        // KOTAK ANALISA (BANNER)
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .padding(bottom = 20.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(if (isAllGranted) GlassColors.AccentGreen.copy(alpha = 0.15f) else GlassColors.AccentAmber.copy(alpha = 0.15f))
+                .border(1.dp, if (isAllGranted) GlassColors.AccentGreen else GlassColors.AccentAmber, RoundedCornerShape(12.dp))
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = if (isAllGranted) Icons.Default.CheckCircle else Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = if (isAllGranted) GlassColors.AccentGreen else GlassColors.AccentAmber,
+                    modifier = Modifier.size(28.dp)
+                )
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = if (isAllGranted) "SEMUA IZIN SUDAH AKTIF" else "HASIL ANALISA SISTEM",
+                        color = if (isAllGranted) GlassColors.AccentGreen else GlassColors.AccentAmber,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        text = if (isAllGranted) "Aplikasi berjalan dengan izin penuh." else "$grantedPermissions dari $totalPermissions izin sudah aktif. Segera lengkapi sisanya.",
+                        color = Color.White,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        }
+
         Text(
             "IZIN APLIKASI",
             color = GlassColors.AccentGlow,
