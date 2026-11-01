@@ -16,7 +16,7 @@ import androidx.core.content.ContextCompat
 object PermissionHelper {
 
     enum class PermissionType {
-        STORAGE, NOTIFICATION, INSTALL_APK, USAGE_ACCESS, NOTIF_LISTENER, WRITE_SETTINGS
+        STORAGE, NOTIFICATION, INSTALL_APK, USAGE_ACCESS, NOTIF_LISTENER, WRITE_SETTINGS, OVERLAY
     }
 
     fun checkPermission(context: Context, type: PermissionType): Boolean {
@@ -43,11 +43,11 @@ object PermissionHelper {
             }
             PermissionType.NOTIF_LISTENER -> NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
             PermissionType.WRITE_SETTINGS -> Settings.System.canWrite(context)
+            PermissionType.OVERLAY -> Settings.canDrawOverlays(context)
         }
     }
 
-    // FIX: Mengembalikan true jika halaman pengaturan berhasil dibuka (termasuk Info App)
-    // Mengembalikan false HANYA jika TV benar-benar tidak punya halaman pengaturan tersebut (System Limit)
+    // FIX: Mengembalikan FALSE jika hanya fallback Info App yang terbuka, agar UI bisa tandai "System Limit"
     fun openPermissionSettings(context: Context, type: PermissionType): Boolean {
         val intent = when (type) {
             PermissionType.STORAGE -> {
@@ -68,6 +68,7 @@ object PermissionHelper {
             PermissionType.USAGE_ACCESS -> Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
             PermissionType.NOTIF_LISTENER -> Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
             PermissionType.WRITE_SETTINGS -> Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply { data = Uri.parse("package:${context.packageName}") }
+            PermissionType.OVERLAY -> Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply { data = Uri.parse("package:${context.packageName}") }
         }
 
         return try {
@@ -75,7 +76,6 @@ object PermissionHelper {
             context.startActivity(intent)
             true
         } catch (e: Exception) {
-            // Fallback ke Info Aplikasi: User masih bisa atur manual di sini, jadi return true
             try {
                 val fallback = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                     data = Uri.parse("package:${context.packageName}")
@@ -83,9 +83,8 @@ object PermissionHelper {
                 }
                 context.startActivity(fallback)
                 Toast.makeText(context, "Halaman izin khusus tidak tersedia. Silakan atur manual di Info Aplikasi.", Toast.LENGTH_LONG).show()
-                true 
+                false // KEMBALIKAN FALSE agar UI mendeteksi ini sebagai "System Limit" (Fallback)
             } catch (_: Exception) {
-                // Benar-benar tidak ada halaman pengaturan (System Limit)
                 Toast.makeText(context, "Sistem TV tidak mendukung pengaturan izin.", Toast.LENGTH_SHORT).show()
                 false
             }
