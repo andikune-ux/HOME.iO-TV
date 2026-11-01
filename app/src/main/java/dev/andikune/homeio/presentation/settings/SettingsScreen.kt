@@ -29,11 +29,13 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import dev.andikune.homeio.data.local.DeveloperPrefs
 import dev.andikune.homeio.domain.model.SettingsConfig
 import dev.andikune.homeio.presentation.components.GlassColors
 import dev.andikune.homeio.presentation.components.NeonFocusBorder
@@ -51,7 +53,8 @@ enum class SettingsCategory(val title: String, val icon: ImageVector) {
     UPDATER("Pembaruan Aplikasi", Icons.Default.SystemUpdate),
     BACKUP("Backup Biasa", Icons.Default.Save),
     PERMISSIONS("Izin Aplikasi", Icons.Default.Security),
-    INFO("Info Aplikasi", Icons.Default.Info)
+    INFO("Info Aplikasi", Icons.Default.Info),
+    HELP("Bantuan & About", Icons.Default.Help)
 }
 
 @Composable
@@ -60,19 +63,19 @@ fun SettingsScreen(
     onSaveConfig: (SettingsConfig) -> Unit,
     onBack: () -> Unit
 ) {
+    val ctx = LocalContext.current
+    val isDevMode = DeveloperPrefs.isDevModeActive(ctx)
+    
     var selectedCategory by remember { mutableStateOf(SettingsCategory.WALLPAPER) }
     var draftConfig by remember { mutableStateOf(currentConfig) }
     val scope = rememberCoroutineScope()
     
-    // Requester untuk konten kanan dan sidebar kiri
     val contentFocusRequester = remember { FocusRequester() }
     val sidebarFirstItemFocusRequester = remember { FocusRequester() }
 
-    // STATE UNTUK DIALOG KONFIRMASI
     var showSaveDialog by remember { mutableStateOf(false) }
     var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
-    // Auto-save HANYA untuk menu selain WALLPAPER
     LaunchedEffect(draftConfig, selectedCategory) {
         if (selectedCategory != SettingsCategory.WALLPAPER) {
             delay(500)
@@ -82,7 +85,6 @@ fun SettingsScreen(
         }
     }
 
-    // Fungsi navigasi dengan intersepsi
     fun requestNavigation(action: () -> Unit) {
         if (selectedCategory == SettingsCategory.WALLPAPER && draftConfig != currentConfig) {
             pendingAction = action
@@ -95,9 +97,7 @@ fun SettingsScreen(
     Box(Modifier.fillMaxSize().background(GlassColors.DeepBackgroundGradient)) {
         Row(Modifier.fillMaxSize().padding(16.dp)) {
             
-            // ============================================================
             // PANE KIRI (SIDEBAR)
-            // ============================================================
             Column(
                 Modifier.weight(0.28f).fillMaxHeight().liquidGlass(cornerRadius = 24.dp)
                     .padding(16.dp).verticalScroll(rememberScrollState()).focusGroup(),
@@ -123,7 +123,17 @@ fun SettingsScreen(
                 }
 
                 Spacer(Modifier.height(8.dp))
-                Text("PENGATURAN", color = GlassColors.TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, modifier = Modifier.padding(start = 8.dp))
+                
+                // HEADER DENGAN INDIKATOR DEV MODE
+                Row(Modifier.fillMaxWidth().padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("PENGATURAN", color = GlassColors.TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    if (isDevMode) {
+                        Spacer(Modifier.width(8.dp))
+                        Box(Modifier.clip(RoundedCornerShape(4.dp)).background(GlassColors.AccentRed).padding(horizontal = 4.dp, vertical = 2.dp)) {
+                            Text("DEV MODE", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
 
                 SettingsCategory.entries.forEachIndexed { index, cat ->
                     SidebarItem(
@@ -145,9 +155,7 @@ fun SettingsScreen(
 
             Spacer(Modifier.width(24.dp))
 
-            // ============================================================
             // PANE KANAN (KONTEN)
-            // ============================================================
             Box(
                 Modifier
                     .weight(0.72f)
@@ -158,7 +166,6 @@ fun SettingsScreen(
                         left = sidebarFirstItemFocusRequester
                     }
             ) {
-                // FIX: Mengganti LazyColumn dengan Column + verticalScroll agar fokus D-Pad bisa scroll mulus
                 Column(
                     Modifier
                         .fillMaxSize()
@@ -179,13 +186,13 @@ fun SettingsScreen(
                         SettingsCategory.BACKUP -> BackupBiasaSection(draftConfig) { draftConfig = it }
                         SettingsCategory.PERMISSIONS -> PermissionSection()
                         SettingsCategory.INFO -> InfoAppSection()
+                        SettingsCategory.HELP -> HelpSection()
                     }
                 }
             }
         }
     }
 
-    // Dialog Konfirmasi
     if (showSaveDialog) {
         Dialog(
             onDismissRequest = { showSaveDialog = false; pendingAction = null },
