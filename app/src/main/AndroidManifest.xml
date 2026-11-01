@@ -21,6 +21,9 @@
     <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" tools:ignore="BatteryLife" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.REORDER_TASKS" />
+    
+    <!-- TAMBAHAN: IZIN OVERLAY -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <!-- IZIN SYSTEM CONTROL CENTER (WIFI, BT, SUARA, TAMPILAN) -->
     <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
@@ -54,7 +57,9 @@
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|uiMode"
             android:launchMode="singleTask"
             android:theme="@style/Theme.HomeIo">
-            <intent-filter android:priority="2">
+            
+            <!-- PERUBAHAN: priority diubah dari 2 menjadi 100 -->
+            <intent-filter android:priority="100">
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.HOME" />
