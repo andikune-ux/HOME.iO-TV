@@ -2,6 +2,8 @@ package dev.andikune.homeio.presentation.settings
 
 import android.content.Context
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -40,10 +42,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 import java.io.File
 import java.io.FileOutputStream
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 @Composable
 fun WallpaperSection(
@@ -70,33 +72,43 @@ fun WallpaperSection(
         }
     }
 
-    // FUNGSI COPY + AUTO-CONVERT VIDEO
+    // FUNGSI COPY + AUTO-CONVERT VIDEO (FIX THREADING)
     suspend fun processNewMedia(uri: Uri, isVideo: Boolean): String? = withContext(Dispatchers.IO) {
         try {
             val fileName = if (isVideo) "wallpaper_${System.currentTimeMillis()}.mp4" else "wallpaper_${System.currentTimeMillis()}.jpg"
             val destFile = File(ctx.filesDir, fileName)
 
             if (isVideo) {
-                // AUTO-CONVERT PAKAI MEDIA3 TRANSFORMER (Turunin resolusi ke 720p H.264)
-                val mediaItem = MediaItem.Builder()
-                    .setUri(uri)
-                    .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().build())
-                    .build()
-
-                suspendCancellableCoroutine<Unit> { continuation ->
-                    val transformer = Transformer.Builder(ctx)
-                        .addListener(object : Transformer.Listener {
-                            override fun onCompleted(composition: androidx.media3.transformer.Composition, exportResult: androidx.media3.transformer.ExportResult) {
-                                if (continuation.isActive) continuation.resume(Unit)
-                            }
-                            override fun onError(composition: androidx.media3.transformer.Composition, exportResult: androidx.media3.transformer.ExportResult, exportException: androidx.media3.transformer.ExportException) {
-                                if (continuation.isActive) continuation.resumeWithException(exportException)
-                            }
-                        })
+                // PINDAH KE MAIN THREAD UNTUK TRANSFORMER
+                withContext(Dispatchers.Main) {
+                    val mediaItem = MediaItem.Builder()
+                        .setUri(uri)
+                        .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().build())
                         .build()
-                    continuation.invokeOnCancellation { transformer.cancel() }
-                    transformer.start(mediaItem, destFile.absolutePath)
+
+                    suspendCancellableCoroutine<Unit> { continuation ->
+                        val transformer = Transformer.Builder(ctx)
+                            .addListener(object : Transformer.Listener {
+                                override fun onCompleted(composition: androidx.media3.transformer.Composition, exportResult: androidx.media3.transformer.ExportResult) {
+                                    if (continuation.isActive) continuation.resume(Unit)
+                                }
+                                override fun onError(composition: androidx.media3.transformer.Composition, exportResult: androidx.media3.transformer.ExportResult, exportException: androidx.media3.transformer.ExportException) {
+                                    if (continuation.isActive) continuation.resumeWithException(exportException)
+                                }
+                            })
+                            .build()
+                        
+                        // Pastikan cancel() berjalan di Main Thread
+                        continuation.invokeOnCancellation { 
+                            Handler(Looper.getMainLooper()).post { 
+                                try { transformer.cancel() } catch (_: Exception) {} 
+                            }
+                        }
+                        
+                        transformer.start(mediaItem, destFile.absolutePath)
+                    }
                 }
+                
                 if (!destFile.isFile || destFile.length() == 0L) throw IllegalStateException("Hasil konversi video kosong")
             } else {
                 // FOTO: Cukup copy langsung
@@ -213,7 +225,7 @@ fun WallpaperSection(
                     .onFocusChanged { isSaveFocused = it.isFocused }.focusable()
                     .onPreviewKeyEvent { e -> 
                         if (e.type == KeyEventType.KeyDown && (e.key == Key.DirectionCenter || e.key == Key.Enter)) { 
-                            onSave() // Panggil simpan langsung
+                            onSave()
                             Toast.makeText(ctx, "Wallpaper berhasil disimpan permanen!", Toast.LENGTH_SHORT).show()
                             true 
                         } else false 
